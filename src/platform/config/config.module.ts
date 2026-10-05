@@ -1,29 +1,45 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule as NestConfigModule } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 
 import { envSchema } from './env.schema';
 
-const nodeEnv = process.env.NODE_ENV ?? 'development';
+type RuntimeEnvironment = 'development' | 'test' | 'production';
+
+function resolveRuntimeEnvironment(
+  value: string | undefined,
+): RuntimeEnvironment {
+  if (value === 'test' || value === 'production') {
+    return value;
+  }
+
+  return 'development';
+}
+
+const runtimeEnvironment = resolveRuntimeEnvironment(process.env.NODE_ENV);
 
 const envFilePath = [
-  `.env.${nodeEnv}.local`,
+  `.env.${runtimeEnvironment}.local`,
   '.env.local',
-  `.env.${nodeEnv}`,
+  `.env.${runtimeEnvironment}`,
   '.env',
 ];
 
+/**
+ * Loads environment files and exposes only validated configuration values.
+ */
 @Module({
   imports: [
-    NestConfigModule.forRoot({
+    ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: envFilePath,
-      validate: (rawConfig) => {
+      envFilePath,
+      skipProcessEnv: true,
+      validate: (rawConfig: Record<string, unknown>) => {
         const result = envSchema.safeParse(rawConfig);
 
         if (!result.success) {
           const details = result.error.issues
             .map((issue) => {
-              const key = issue.path.join('.') || 'environment';
+              const key = issue.path.map(String).join('.') || 'environment';
               return `- ${key}: ${issue.message}`;
             })
             .join('\n');
