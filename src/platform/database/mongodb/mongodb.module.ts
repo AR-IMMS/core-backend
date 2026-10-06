@@ -2,10 +2,11 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 
-import { PlatformConfigModule } from '@platform/config/config.module';
+import { PlatformConfigModule } from '@platform/config';
+import { MongoHealthProbe } from '@platform/health';
 
 /**
- * Provides the shared MongoDB connection used by Core.
+ * Provides the shared MongoDB connection and its infrastructure health probe.
  */
 @Module({
   imports: [
@@ -20,5 +21,7 @@ import { PlatformConfigModule } from '@platform/config/config.module';
       }),
     }),
   ],
+  providers: [MongoHealthProbe],
+  exports: [MongoHealthProbe],
 })
 export class MongoDatabaseModule {}

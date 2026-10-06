@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 
-import { PlatformConfigModule } from '@platform/config/config.module';
-import { DatabaseModule } from '@platform/database/database.module';
-import { HttpModule } from '@platform/http/http.module';
+import { PlatformConfigModule } from '@platform/config';
+import { DatabaseModule } from '@platform/database';
+import { HealthModule } from '@platform/health';
+import { HttpModule } from '@platform/http';
 
 /**
  * Composes the shared platform modules used by the Core application.
  */
 @Module({
-  imports: [PlatformConfigModule, HttpModule, DatabaseModule],
+  imports: [PlatformConfigModule, HttpModule, DatabaseModule, HealthModule],
 })
 export class CoreModule {}
