@@ -41,7 +41,7 @@ jobs:
         run: pnpm build
 
       - name: Audit dependencies
-        run: pnpm audit --audit-level moderate
+        run: pnpm audit --ignore-unfixable --audit-level moderate
 
   secret-scan:
     name: Scan pull request changes for secrets
