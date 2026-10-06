@@ -43,6 +43,15 @@ export const envSchema = z
       .int()
       .positive()
       .default(5_000),
+
+    // OpenTelemetry configurations
+    OTEL_SERVICE_NAME: z.string().trim().min(1).default('core-backend'),
+
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: z.preprocess(
+      (value: unknown) =>
+        typeof value === 'string' && value.trim() === '' ? undefined : value,
+      z.string().trim().url().optional(),
+    ),
   })
   .superRefine((env, context) => {
     if (env.POSTGRES_POOL_MIN_SIZE > env.POSTGRES_POOL_MAX_SIZE) {

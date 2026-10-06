@@ -1,3 +1,4 @@
+import { TracingModule } from '@/platform/observability/tracing';
 import { Module } from '@nestjs/common';
 
 import { PlatformConfigModule } from '@platform/config';
@@ -13,9 +14,10 @@ import { LoggingModule } from '@platform/observability/logging';
   imports: [
     PlatformConfigModule,
     HttpModule,
-    LoggingModule,
     DatabaseModule,
     HealthModule,
+    LoggingModule,
+    TracingModule,
   ],
 })
 export class CoreModule {}

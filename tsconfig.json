@@ -34,6 +34,5 @@
     "node_modules",
     "dist",
     "tsconfig.build.tsbuildinfo",
-    "jest.config.ts"
   ]
 }

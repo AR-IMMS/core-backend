@@ -4,27 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { createDatabaseConfig } from './database.config';
 import { envSchema } from './env.schema';
 import { createLoggingConfig } from './logging.config';
-
-type RuntimeEnvironment = 'development' | 'test' | 'staging' | 'production';
-
-function resolveRuntimeEnvironment(
-  value: string | undefined,
-): RuntimeEnvironment {
-  if (value === 'test' || value === 'staging' || value === 'production') {
-    return value;
-  }
-
-  return 'development';
-}
-
-const runtimeEnvironment = resolveRuntimeEnvironment(process.env.NODE_ENV);
-
-const envFilePath = [
-  `.env.${runtimeEnvironment}.local`,
-  '.env.local',
-  `.env.${runtimeEnvironment}`,
-  '.env',
-];
+import { resolveEnvFilePaths } from './env-files';
 
 /**
  * Loads environment files and exposes only validated configuration values.
@@ -33,7 +13,7 @@ const envFilePath = [
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath,
+      envFilePath: resolveEnvFilePaths(),
       skipProcessEnv: true,
       validate: (rawConfig: Record<string, unknown>) => {
         const environment = envSchema.parse(rawConfig);
