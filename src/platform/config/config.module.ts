@@ -1,14 +1,15 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
+import { createDatabaseConfig } from './database.config';
 import { envSchema } from './env.schema';
 
-type RuntimeEnvironment = 'development' | 'test' | 'production';
+type RuntimeEnvironment = 'development' | 'test' | 'staging' | 'production';
 
 function resolveRuntimeEnvironment(
   value: string | undefined,
 ): RuntimeEnvironment {
-  if (value === 'test' || value === 'production') {
+  if (value === 'test' || value === 'staging' || value === 'production') {
     return value;
   }
 
@@ -34,20 +35,12 @@ const envFilePath = [
       envFilePath,
       skipProcessEnv: true,
       validate: (rawConfig: Record<string, unknown>) => {
-        const result = envSchema.safeParse(rawConfig);
+        const environment = envSchema.parse(rawConfig);
 
-        if (!result.success) {
-          const details = result.error.issues
-            .map((issue) => {
-              const key = issue.path.map(String).join('.') || 'environment';
-              return `- ${key}: ${issue.message}`;
-            })
-            .join('\n');
-
-          throw new Error(`Invalid environment configuration:\n${details}`);
-        }
-
-        return result.data;
+        return {
+          ...environment,
+          database: createDatabaseConfig(environment),
+        };
       },
     }),
   ],
