@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 
 import { createDatabaseConfig } from './database.config';
 import { envSchema } from './env.schema';
+import { createLoggingConfig } from './logging.config';
 
 type RuntimeEnvironment = 'development' | 'test' | 'staging' | 'production';
 
@@ -40,6 +41,7 @@ const envFilePath = [
         return {
           ...environment,
           database: createDatabaseConfig(environment),
+          logging: createLoggingConfig(environment),
         };
       },
     }),

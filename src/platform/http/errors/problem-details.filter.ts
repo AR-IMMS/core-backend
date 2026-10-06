@@ -4,11 +4,11 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
-  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { ClsService } from 'nestjs-cls';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import type { EnvConfig } from '../../config/env.schema';
 import { mapExceptionToProblemDetails } from './problem-details.mapper';
@@ -20,9 +20,9 @@ const HEALTH_READINESS_PATH = '/health/ready';
  */
 @Catch()
 export class ProblemDetailsExceptionFilter implements ExceptionFilter<unknown> {
-  private readonly logger = new Logger(ProblemDetailsExceptionFilter.name);
-
   constructor(
+    @InjectPinoLogger(ProblemDetailsExceptionFilter.name)
+    private readonly logger: PinoLogger,
     private readonly cls: ClsService,
     private readonly config: ConfigService<EnvConfig, true>,
   ) {}
@@ -88,14 +88,16 @@ export class ProblemDetailsExceptionFilter implements ExceptionFilter<unknown> {
       return;
     }
 
-    const message = `Unhandled exception for request ${requestId}`;
+    const error =
+      exception instanceof Error ? exception : new Error(String(exception));
 
-    if (exception instanceof Error) {
-      this.logger.error(message, exception.stack);
-      return;
-    }
-
-    this.logger.error(`${message}: ${String(exception)}`);
+    this.logger.error(
+      {
+        err: error,
+        requestId,
+      },
+      `Unhandled exception for request ${requestId}`,
+    );
   }
 }
 

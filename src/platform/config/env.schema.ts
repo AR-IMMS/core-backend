@@ -6,6 +6,10 @@ export const envSchema = z
       .enum(['development', 'test', 'staging', 'production'])
       .default('development'),
 
+    LOG_LEVEL: z
+      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+      .default('info'),
+
     APP_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
 
     MONGODB_URI: z
