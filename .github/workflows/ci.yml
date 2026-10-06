@@ -35,7 +35,7 @@ jobs:
         run: pnpm exec eslint "{src,apps,libs,test}/**/*.ts"
 
       - name: Unit tests
-        run: pnpm test:cov -- --runInBand
+        run: pnpm test:cov --runInBand
 
       - name: Build
         run: pnpm build
