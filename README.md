@@ -70,6 +70,38 @@ pnpm test:e2e
 pnpm build
 ```
 
+### Local MongoDB and Readiness
+
+Docker Compose provides MongoDB for local development and readiness checks:
+
+```bash
+docker compose up -d mongodb
+docker compose ps
+```
+
+The MongoDB health check waits for the database ping to succeed. Configure the
+application with `MONGODB_URI=mongodb://localhost:27017` and
+`MONGODB_DB_NAME=ar_imms_core`, then start the API and check
+`GET /health/ready`. Readiness reports healthy only when the MongoDB ping
+succeeds. Stop the local database with `docker compose down`; its data remains
+in the named `mongodb-data` volume.
+
+### Logging
+
+The application uses Pino structured JSON logging on `stdout`, including HTTP
+request logs. Request serialization omits query strings and sensitive headers
+are redacted. Logs are available through the container or process output;
+centralized aggregation with Loki/Grafana is deferred to a later phase.
+
+### Continuous Integration
+
+GitHub Actions runs on pushes to `main` and `dev` and on pull requests targeting
+those branches. The quality workflow installs from the frozen pnpm lockfile,
+runs lint, unit tests with coverage, a production build, and a moderate-or-higher
+dependency audit. A separate TruffleHog job scans commits introduced by each
+pull request, starting from the PR base commit so pre-existing history is not
+scanned.
+
 If the project defines `format:check` or `typecheck` scripts, run them before opening a Pull Request. `lint` should be used for checks only; use `lint:fix` when you want to automatically format or fix fixable issues.
 
 ## Branches and Commits

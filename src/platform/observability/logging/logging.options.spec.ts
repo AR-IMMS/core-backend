@@ -59,4 +59,15 @@ describe('Pino HTTP logging options', () => {
     response.statusCode = 503;
     expect(options.customLogLevel(request, response, undefined)).toBe('error');
   });
+
+  it('emits structured JSON logs to stdout', () => {
+    const options = createPinoHttpOptions('info');
+
+    expect(options).not.toHaveProperty('stream');
+    expect(options).not.toHaveProperty('destination');
+    expect(options.level).toBe('info');
+
+    expect(typeof options.serializers?.req).toBe('function');
+    expect(typeof options.serializers?.res).toBe('function');
+  });
 });
