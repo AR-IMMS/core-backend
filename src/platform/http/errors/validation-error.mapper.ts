@@ -14,7 +14,7 @@ export type ValidationErrorCode =
  * A public validation error that does not expose Zod-specific issue metadata.
  */
 export interface ValidationFieldError {
-  path: Array<string | number>;
+  field: Array<string | number>;
   code: ValidationErrorCode;
   message: string;
 }
@@ -30,7 +30,7 @@ export function mapZodIssues(
 
     if (issue.code === 'unrecognized_keys') {
       return issue.keys.map((key) => ({
-        path: [...path, key],
+        field: [...path, key],
         code: 'UNKNOWN_FIELD',
         message: 'Unknown field.',
       }));
@@ -38,7 +38,7 @@ export function mapZodIssues(
 
     return [
       {
-        path,
+        field: path,
         code: mapIssueCode(issue),
         message: issue.message,
       },

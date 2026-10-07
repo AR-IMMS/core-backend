@@ -1,0 +1,371 @@
+openapi: 3.1.2
+info:
+  title: AR-IMMS Core API Baseline
+  version: 1.0.0
+  description: |
+    Reusable OpenAPI components for the AR-IMMS Core HTTP API.
+    This baseline is not a service API specification; concrete APIs must define
+    their own paths, resources, validation rules, and supported query fields.
+
+    API versioning:
+    - Use major versions in the URL path, for example /api/v1/assets.
+    - Backward-compatible additions remain in the current major version.
+    - Breaking contract changes require a new major API version.
+    - info.version identifies this OpenAPI document and is separate from the URL version.
+
+    Transport:
+    - REST/JSON is the primary request-response API.
+    - SSE is used for one-way live updates from Core to clients.
+    - SSE replay behavior is endpoint-specific. If replay is unavailable, clients
+      should reconnect and refresh the current state through REST.
+    - gRPC is not part of this initial HTTP baseline.
+
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+
+paths: {}
+
+components:
+  headers:
+    X-Request-Id:
+      description: |
+        Identifier for correlating one HTTP request. The API boundary should
+        generate an identifier when one is not supplied and return the same
+        value in the response. Do not treat a caller-supplied value as trusted.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+
+    Traceparent:
+      description: W3C Trace Context header. Instrumentation should validate and propagate it.
+      schema:
+        type: string
+      example: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+
+    Idempotency-Key:
+      description: |
+        Optional client-provided key for retryable unsafe operations where
+        duplicate execution is harmful. Each operation must document key scope,
+        retention duration, and behavior when a key is reused with a different payload.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+
+  parameters:
+    RequestIdHeader:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Optional caller-provided correlation identifier.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      description: Maximum number of resources returned; each endpoint documents its allowed maximum.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque pagination cursor. Clients must not decode or construct it.
+      schema:
+        type: string
+        minLength: 1
+
+    Page:
+      name: page
+      in: query
+      required: false
+      description: One-based page number for endpoints that support page pagination.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: |
+        Comma-separated sort fields. A field is ascending by default; prefix
+        with '-' for descending order. Each endpoint must document allowed fields.
+      schema:
+        type: string
+        example: -created_at,title
+
+    LastEventId:
+      name: Last-Event-ID
+      in: header
+      required: false
+      description: SSE reconnection cursor; does not itself guarantee event replay.
+      schema:
+        type: string
+
+  schemas:
+    Meta:
+      type: object
+      required:
+        - request_id
+      properties:
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        trace_id:
+          type: string
+          pattern: '^[0-9a-f]{32}$'
+          description: W3C trace ID in lowercase hexadecimal form.
+      examples:
+        - request_id: req_01J9K8X3
+          trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+
+    CursorPagination:
+      type: object
+      required:
+        - type
+        - next_cursor
+      properties:
+        type:
+          type: string
+          const: cursor
+        next_cursor:
+          type:
+            - string
+            - 'null'
+          description: Opaque cursor for the next page; null means there is no next page.
+      examples:
+        - type: cursor
+          next_cursor: eyJjcmVhdGVkX2F0Ijoi...
+        - type: cursor
+          next_cursor: null
+
+    PagePagination:
+      type: object
+      required:
+        - type
+        - page
+        - page_size
+        - has_next
+        - has_prev
+      properties:
+        type:
+          type: string
+          const: page
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total_items:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+          description: May be null when calculating an exact total is expensive.
+        total_pages:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+        has_next:
+          type: boolean
+        has_prev:
+          type: boolean
+      examples:
+        - type: page
+          page: 1
+          page_size: 20
+          total_items: 42
+          total_pages: 3
+          has_next: true
+          has_prev: false
+
+    Pagination:
+      oneOf:
+        - $ref: '#/components/schemas/CursorPagination'
+        - $ref: '#/components/schemas/PagePagination'
+
+    SingleResponse:
+      type: object
+      required:
+        - data
+      description: Single-resource envelope. Each endpoint must define the concrete data schema.
+      properties:
+        data: {}
+        meta:
+          $ref: '#/components/schemas/Meta'
+      examples:
+        - data:
+            id: asset_123
+            name: Rack A
+          meta:
+            request_id: req_01J9K8X3
+            trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+
+    ListResponse:
+      type: object
+      required:
+        - data
+      description: Collection envelope. Each endpoint must define the concrete item schema.
+      properties:
+        data:
+          type: array
+          items: {}
+        meta:
+          $ref: '#/components/schemas/Meta'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      examples:
+        - data:
+            - id: incident_001
+              title: High CPU usage
+              status: open
+              severity: critical
+          meta:
+            request_id: req_01J9K8X3
+            trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+          pagination:
+            type: cursor
+            next_cursor: null
+
+    ErrorCode:
+      type: string
+      pattern: '^[A-Z][A-Z0-9_]{1,63}$'
+      description: Stable machine-readable application error code. Clients must not parse message text.
+      examples:
+        - VALIDATION_ERROR
+        - RESOURCE_NOT_FOUND
+        - DUPLICATE_RESOURCE
+
+    FieldError:
+      type: object
+      required:
+        - field
+        - code
+        - message
+      properties:
+        field:
+          type: string
+          description: JSON Pointer identifying the affected field.
+          examples:
+            - /name
+            - /items/0/quantity
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          description: Human-readable explanation; not a stable machine-readable identifier.
+
+    ErrorResponse:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+        - code
+        - request_id
+      description: |
+        Standardized Problem Details response with AR-IMMS extensions. The HTTP status and
+        body status must match. Clients should ignore unrecognized extension fields.
+      properties:
+        type:
+          type: string
+          format: uri
+          example: https://api.example.com/problems/validation-error
+        title:
+          type: string
+          example: Request validation failed
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+          example: One or more fields are invalid.
+        instance:
+          type: string
+          format: uri-reference
+          description: Identifier or URI for this specific error occurrence.
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        request_id:
+          type: string
+        trace_id:
+          type: string
+          pattern: '^[0-9a-f]{32}$'
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+      examples:
+        - type: https://api.example.com/problems/validation-error
+          title: Request validation failed
+          status: 400
+          detail: One or more fields are invalid.
+          code: VALIDATION_ERROR
+          request_id: req_01J9K8X3
+          trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+          errors:
+            - field: /name
+              code: VALIDATION_ERROR
+              message: Name must not be empty.
+
+  examples:
+    IncidentChangedSseFrame:
+      summary: SSE frame carrying an incident update
+      value: "id: evt_01J9K8Y7M6\nevent: incident.changed\ndata: {\"event_id\":\"evt_01J9K8Y7M6\",\"incident_id\":\"incident_001\",\"status\":\"acknowledged\",\"severity\":\"critical\",\"occurred_at\":\"2026-10-04T13:30:00Z\"}\n\n"
+
+    IncidentListResponse:
+      summary: REST response containing an incident list
+      value:
+        data:
+          - id: incident_001
+            title: High CPU usage
+            status: open
+            severity: critical
+        meta:
+          request_id: req_01J9K8X3
+          trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        pagination:
+          type: cursor
+          next_cursor: null
+
+    ValidationErrorResponse:
+      summary: Validation error
+      value:
+        type: https://api.example.com/problems/validation-error
+        title: Request validation failed
+        status: 400
+        detail: One or more fields are invalid.
+        code: VALIDATION_ERROR
+        request_id: req_01J9K8X3
+        trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        errors:
+          - field: /name
+            code: VALIDATION_ERROR
+            message: Name must not be empty.
+
+  responses:
+    Problem:
+      description: API error using RFC 9457 Problem Details format.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            validationError:
+              $ref: '#/components/examples/ValidationErrorResponse'

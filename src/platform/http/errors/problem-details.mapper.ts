@@ -14,7 +14,7 @@ export interface ProblemDetailsResponse {
   detail: string;
   instance: string;
   code: string;
-  requestId: string;
+  request_id: string;
   errors?: ValidationFieldError[];
 }
 
@@ -104,7 +104,7 @@ export function mapExceptionToProblemDetails(
         ? mapZodIssues(zodError.issues)
         : [
             {
-              path: [],
+              field: [],
               code: 'INVALID_VALUE' as const,
               message: 'Request data is invalid.',
             },
@@ -117,7 +117,7 @@ export function mapExceptionToProblemDetails(
       detail: 'One or more request fields are invalid.',
       instance,
       code: 'VALIDATION_ERROR',
-      requestId,
+      request_id: requestId,
       errors,
     };
   }
@@ -133,7 +133,7 @@ export function mapExceptionToProblemDetails(
     detail: getUnexpectedErrorDetail(exception, isDevelopment),
     instance,
     code: 'INTERNAL_SERVER_ERROR',
-    requestId,
+    request_id: requestId,
   };
 }
 
@@ -157,7 +157,7 @@ function mapHttpException(
         presentation.detail),
     instance,
     code: presentation.code,
-    requestId,
+    request_id: requestId,
   };
 }
 

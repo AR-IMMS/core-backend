@@ -1,3 +1,4 @@
+import { RawResponse } from '@/platform/http/api';
 import { Controller, Get } from '@nestjs/common';
 import { HealthCheck, type HealthCheckResult } from '@nestjs/terminus';
 
@@ -6,6 +7,7 @@ import { HealthReadinessService } from '@platform/health/application/health-read
 /**
  * Exposes process liveness and infrastructure readiness endpoints.
  */
+@RawResponse()
 @Controller('health')
 export class HealthController {
   constructor(
