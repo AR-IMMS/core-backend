@@ -1,0 +1,233 @@
+openapi: 3.1.2
+info:
+  title: AR-IMMS Core Audit API
+  version: 1.0.0
+  description: |
+    Read-only API for querying immutable audit records.
+    Audit records are created from internal events; clients cannot submit them.
+    Access requires an authenticated principal with the audit:read permission.
+    The authentication scheme is defined by the IAM contract.
+
+paths:
+  /api/v1/audit/events:
+    get:
+      operationId: listAuditEvents
+      summary: List audit events
+      description: |
+        Returns audit events in descending occurred_at order.
+        event_id is used as a stable tie-breaker for cursor pagination.
+        occurred_from must be earlier than or equal to occurred_to.
+      tags:
+        - Audit
+      parameters:
+        - $ref: ../baseline.yaml#/components/parameters/PageSize
+        - $ref: ../baseline.yaml#/components/parameters/Cursor
+        - name: occurred_from
+          in: query
+          required: false
+          description: Inclusive lower bound for the event occurrence time.
+          schema:
+            type: string
+            format: date-time
+        - name: occurred_to
+          in: query
+          required: false
+          description: Inclusive upper bound for the event occurrence time.
+          schema:
+            type: string
+            format: date-time
+        - name: actor_id
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+        - name: resource_type
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+        - name: resource_id
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+        - name: request_id
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: A page of audit events.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: ../baseline.yaml#/components/schemas/ListResponse
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AuditEvent'
+                      pagination:
+                        $ref: ../baseline.yaml#/components/schemas/CursorPagination
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/audit/events/{event_id}:
+    get:
+      operationId: getAuditEvent
+      summary: Get an audit event
+      tags:
+        - Audit
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: The requested audit event.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: ../baseline.yaml#/components/schemas/SingleResponse
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AuditEvent'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+components:
+  schemas:
+    AuditEvent:
+      type: object
+      required:
+        - event_id
+        - event_type
+        - event_schema_version
+        - occurred_at
+        - recorded_at
+        - actor
+        - action
+        - resource
+        - changes
+      properties:
+        event_id:
+          type: string
+          minLength: 1
+          description: Stable identifier used for deduplication.
+        event_type:
+          type: string
+          minLength: 1
+          description: Internal event type that produced this audit record.
+        event_schema_version:
+          type: integer
+          minimum: 1
+        occurred_at:
+          type: string
+          format: date-time
+          description: Time when the business action occurred.
+        recorded_at:
+          type: string
+          format: date-time
+          description: Time when the audit record was persisted.
+        actor:
+          $ref: '#/components/schemas/AuditActor'
+        action:
+          type: string
+          minLength: 1
+          description: Business action performed on the resource.
+        resource:
+          $ref: '#/components/schemas/AuditResource'
+        changes:
+          type: array
+          description: Allowlisted field changes; full resource snapshots are not returned.
+          items:
+            $ref: '#/components/schemas/AuditChange'
+        context:
+          $ref: '#/components/schemas/AuditContext'
+
+    AuditActor:
+      type: object
+      required:
+        - type
+        - id
+      properties:
+        type:
+          type: string
+          enum:
+            - user
+            - service
+            - agent
+            - system
+        id:
+          type: string
+          minLength: 1
+
+    AuditResource:
+      type: object
+      required:
+        - type
+        - id
+      properties:
+        type:
+          type: string
+          minLength: 1
+        id:
+          type: string
+          minLength: 1
+
+    AuditChange:
+      type: object
+      required:
+        - field
+        - before
+        - after
+      properties:
+        field:
+          type: string
+          minLength: 1
+          description: Changed field path.
+        before:
+          description: Previous value, or null when the field did not exist.
+        after:
+          description: New value, or null when the field was removed.
+
+    AuditContext:
+      type: object
+      properties:
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        trace_id:
+          type: string
+          pattern: '^[0-9a-f]{32}$'
+        source:
+          type: string
+          minLength: 1
+          description: Source module or system that emitted the event.
