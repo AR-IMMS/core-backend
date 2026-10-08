@@ -1,0 +1,5 @@
+interface:
+  display_name: "Publish Tickets"
+  short_description: "Publish approved ticket drafts to the issue tracker"
+policy:
+  allow_implicit_invocation: false

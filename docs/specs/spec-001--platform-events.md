@@ -102,6 +102,8 @@ Audit records are the durable source for Audit queries.
 
 ## 5. Proposed source structure
 
+This is an suggested structure, more files if needed
+
 ```text
 src/
 ├── platform/events/
