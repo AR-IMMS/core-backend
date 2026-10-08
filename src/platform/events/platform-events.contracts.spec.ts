@@ -127,6 +127,13 @@ describe('Platform Events contracts', () => {
     const [delivery] = await deliveryPort.claimEligibleDeliveries({
       now: new Date('2026-10-08T00:00:00.000Z'),
       limit: 10,
+      consumerId: 'audit',
+      subscriptions: [
+        {
+          eventType: ASSET_REGISTERED_EVENT_TYPE,
+          eventVersion: ASSET_REGISTERED_EVENT_VERSION,
+        },
+      ],
     });
     await deliveryPort.markDelivered(delivery, new Date());
 

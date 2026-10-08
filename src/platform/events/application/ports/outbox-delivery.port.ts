@@ -1,3 +1,4 @@
+import type { BusinessFactSubscription } from './event-consumer.port';
 import type { BusinessFactEnvelope } from '../../domain/business-fact-envelope';
 
 /** A transport-neutral claim on one fact's delivery to one consumer. */
@@ -13,6 +14,8 @@ export interface OutboxDeliveryClaim {
 export interface EligibleDeliveryQuery {
   readonly now: Date;
   readonly limit: number;
+  readonly consumerId: string;
+  readonly subscriptions: readonly BusinessFactSubscription[];
 }
 
 /** Retry timing recorded when a consumer attempt fails. */
