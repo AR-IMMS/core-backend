@@ -13,7 +13,7 @@ flowchart TD
     subgraph Producer["2. Producer Module (Nghiệp vụ phát sự kiện)"]
         B[Use Case xử lý logic & thay đổi Aggregate]
         C[Ghi nhận Domain Events nội bộ]
-        D[Chuyển đổi Domain Event thành Business Fact]
+        D[Chuyển đổi Domain Event thành Business Fact hoặc audit.fact v1]
     end
 
     subgraph Platform["3. Platform Events (Hệ thống Nền tảng)"]
@@ -49,7 +49,7 @@ flowchart TD
     %% Quá trình Relay và Dispatch sự kiện
     J -->|Đọc Outbox đã commit| F
     J --> K
-    K -->|Định tuyến Fact v1| L
+    K -->|Định tuyến audit.fact v1| L
 
     %% Xử lý Consumer & Audit
     L -->|Kiểm tra event_id trùng lặp| M

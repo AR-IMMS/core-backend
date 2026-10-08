@@ -23,6 +23,9 @@ Keep Domain Events private to their owning module.
 Translate selected Domain Events into versioned Business Facts.
 Use Business Facts as the cross-module event contracts.
 Keep each Business Fact schema with its producing module.
+Use one shared, business-neutral `audit.fact` contract for Audit effects.
+Have producers supply actor, action, resource, context, and allowlisted changes.
+Do not map producer-specific Business Facts into Audit records.
 Use an in-process transport for the modular-monolith deployment.
 Keep transport-neutral application ports around event delivery.
 Persist Business Facts in an Outbox with the business write.
@@ -32,7 +35,7 @@ Deliver Outbox entries at least once.
 Require consumers to make their effects idempotent.
 Preserve processing order for each resource.
 Allow different resources to progress independently.
-Make Audit the initial Business Fact consumer.
+Make Audit the initial consumer of the shared `audit.fact` contract.
 Use MongoDB transactions for the current MongoDB adapter.
 Run transaction tests against a MongoDB replica set in Docker Compose.
 Treat the Outbox as a delivery buffer, not an event store.
@@ -104,6 +107,7 @@ The relay cannot process a later resource sequence before an earlier pending one
 Transactional MongoDB deployments need replica-set support.
 Local development and CI need a repeatable replica-set Compose service.
 The first version includes persistence and relay behavior beyond an in-memory bus.
+The Audit consumer accepts only the shared, versioned `audit.fact` contract.
 Outbox retention and cleanup policy remain operational decisions.
 No broker, replay system, schema registry, or event sourcing is introduced.
 A move to microservices requires later deployment and transport decisions.
@@ -114,6 +118,7 @@ Business Fact contracts and consumer idempotency remain applicable.
 The proposed platform boundary is `src/platform/events`.
 Producer Domain Events remain under `src/modules/<producer>/domain/events`.
 Producer Business Facts live under `src/modules/<producer>/contracts/events/v1`.
+The shared Audit Fact contract lives under `src/platform/events/contracts`.
 Translation lives in the producer application layer.
 Audit consumption lives under `src/modules/audit/infrastructure/events`.
 Mongo-specific Outbox storage lives in platform infrastructure.
