@@ -58,6 +58,7 @@ export const OutboxDeliverySchema =
 @Schema({
   collection: OUTBOX_COLLECTION,
   versionKey: false,
+  minimize: false,
   timestamps: { createdAt: 'createdAt', updatedAt: false },
 })
 export class OutboxEntry {

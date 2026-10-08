@@ -3,7 +3,13 @@
   "rootDir": ".",
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
-  "setupFiles": ["<rootDir>/test/setup-mongodb-test.ts"],
+  "setupFiles": ["<rootDir>/setup-mongodb-test.ts"],
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/../src/$1",
+    "^@modules/(.*)$": "<rootDir>/../src/modules/$1",
+    "^@platform/(.*)$": "<rootDir>/../src/platform/$1",
+    "^@shared/(.*)$": "<rootDir>/../src/shared/$1"
+  },
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   }
