@@ -43,7 +43,7 @@ jobs:
       - name: Audit dependencies
         run: pnpm audit --ignore-unfixable --audit-level moderate
 
-secret-scan:
+  secret-scan:
     name: Scan pull request changes for secrets
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
