@@ -59,4 +59,5 @@ jobs:
       - name: Scan commits introduced by this pull request
         uses: trufflesecurity/trufflehog@main
         with:
-          extra_args: --since-commit ${{ github.event.pull_request.base.sha }}
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}

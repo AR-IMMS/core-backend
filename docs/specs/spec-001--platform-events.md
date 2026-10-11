@@ -51,7 +51,10 @@ It is created by translating relevant Domain Events.
 It is owned and versioned by the producing module.
 It contains only data required by intended consumers.
 It must not expose a producer aggregate or database document.
-The initial consumer is Audit.
+Audit does not consume or map producer-specific Business Fact schemas.
+
+Modules that need audit history emit the shared, business-neutral `audit.fact`
+contract described in section 6.4.
 
 ### 3.3 Outbox entry
 
@@ -195,12 +198,39 @@ Audit change data is limited to the producer's explicit field allowlist.
 - No global schema registry is part of this design.
 - Public OpenAPI versioning is independent from internal fact versioning.
 
+### 6.4 Shared Audit Fact v1
+
+- `audit.fact` is the shared event type for producers requesting an Audit effect.
+- Version 1 is defined in `src/platform/events/contracts/audit-fact.v1.ts`.
+- Its standard envelope supplies event identity, producer, occurrence time,
+  resource identity and sequence, and permitted request/trace context.
+- Its payload supplies an actor `{ type, id }`, an action, and a list of changes.
+- Each change names one producer-allowlisted field and may include scalar
+  `before` and/or `after` values.
+- Complete resource snapshots, nested values, secrets, and credentials are
+  prohibited; Audit validates the payload before persistence.
+- Breaking contract changes use a new event version. Producers do not add
+  business-specific Audit mappings or rely on automatic event registration.
+
+```ts
+interface AuditFactPayload {
+  actor: { type: string; id: string };
+  action: string;
+  changes: readonly {
+    field: string;
+    before?: string | number | boolean | null;
+    after?: string | number | boolean | null;
+  }[];
+}
+```
+
 ## 7. Producer flow
 
 - A use case receives a command through its normal application entry point.
 - The use case loads and changes its own aggregate within its module boundary.
 - The aggregate records module-owned Domain Events for meaningful changes.
-- The application layer translates selected Domain Events to Business Facts.
+- The application layer translates selected Domain Events to producer-owned
+  Business Facts and emits `audit.fact` when the change requires Audit history.
 - The use case starts an explicit Unit of Work.
 - Producer repositories persist business state using that Unit of Work.
 - The Outbox writer appends Business Facts using the same Unit of Work.
@@ -246,7 +276,8 @@ Audit change data is limited to the producer's explicit field allowlist.
 
 - A consumer declares a stable consumer identifier.
 - A consumer declares the event types and versions it supports.
-- A consumer handles one typed Business Fact at a time.
+- A consumer handles one typed Business Fact at a time; Audit handles only the
+  shared `audit.fact` contract.
 - A consumer completes only after its durable effect is committed.
 - A consumer reports failure when its effect did not complete.
 - A consumer deduplicates repeated `event_id` values.
@@ -268,7 +299,8 @@ Audit change data is limited to the producer's explicit field allowlist.
 ### 9.3 Initial wiring
 
 - The Audit event handler is the first registered consumer.
-- Only explicitly configured producer facts are routed to Audit.
+- Producers opt into Audit by publishing the shared `audit.fact` contract.
+- Audit does not register producer-specific Business Fact mappings.
 - Additional consumers can be registered without changing producer entities.
 - A module must not subscribe by broad wildcard unless deliberately designed.
 
@@ -337,7 +369,8 @@ Delivery is at least once.
 
 - Business modules publish facts internally through the Outbox path.
 - Audit has no public write endpoint for client-submitted audit records.
-- Audit consumes allowed facts and creates append-only Audit records.
+- Audit consumes only the shared `audit.fact` contract and creates append-only
+  Audit records; it does not import or map producer schemas.
 - Audit records include actor, action, resource, timestamp, and context metadata.
   Before/after values are limited to explicit field allowlists.
 - Audit does not persist unrestricted resource snapshots.

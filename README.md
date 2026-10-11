@@ -72,19 +72,32 @@ pnpm build
 
 ### Local MongoDB and Readiness
 
-Docker Compose provides MongoDB for local development and readiness checks:
+Docker Compose provides a MongoDB replica set for local development, readiness
+checks, and transaction-backed tests:
 
 ```bash
-docker compose up -d mongodb
+docker compose up -d --wait mongodb
 docker compose ps
 ```
 
-The MongoDB health check waits for the database ping to succeed. Configure the
-application with `MONGODB_URI=mongodb://localhost:27017` and
-`MONGODB_DB_NAME=ar_imms_core`, then start the API and check
+The health check initiates and waits for replica set `rs0`; a standalone MongoDB
+server does not support the transactions used by event publishing. Configure
+the application with `MONGODB_URI=mongodb://localhost:27017/?replicaSet=rs0`
+and `MONGODB_DB_NAME=ar_imms_core`, then start the API and check
 `GET /health/ready`. Readiness reports healthy only when the MongoDB ping
-succeeds. Stop the local database with `docker compose down`; its data remains
-in the named `mongodb-data` volume.
+succeeds.
+
+Transaction-backed integration/e2e tests use a separate database:
+
+```text
+MONGODB_TEST_URI=mongodb://localhost:27017/ar_imms_core_test?replicaSet=rs0
+```
+
+The e2e setup maps `MONGODB_TEST_URI` into the application's Mongo settings and
+rejects URIs without a replica set or a database name ending in `_test`. Run
+`pnpm test:e2e` after starting Compose. Stop MongoDB with `docker compose down`;
+its data remains in the named `mongodb-data` volume. Use
+`docker compose down -v` only when you also intend to remove that data.
 
 ### Logging
 
