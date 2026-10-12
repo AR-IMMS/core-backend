@@ -97,11 +97,16 @@ export interface MongoOutboxModel {
 /** MongoDB persistence adapter for producer facts and consumer delivery state. */
 @Injectable()
 export class MongoOutboxStore implements OutboxWriterPort, OutboxDeliveryPort {
+  /**
+   * @param outboxModel Mongoose model registered by `PlatformEventsModule`.
+   * @example `new MongoOutboxStore(outboxModel)`
+   */
   constructor(
     @InjectModel(OUTBOX_ENTRY_MODEL)
     private readonly outboxModel: MongoOutboxModel,
   ) {}
 
+  /** @inheritdoc */
   async append<TPayload>(
     fact: BusinessFactEnvelope<TPayload>,
     context: UnitOfWorkContext,
@@ -118,6 +123,7 @@ export class MongoOutboxStore implements OutboxWriterPort, OutboxDeliveryPort {
     );
   }
 
+  /** @inheritdoc */
   async claimEligibleDeliveries(
     query: EligibleDeliveryQuery,
   ): Promise<readonly OutboxDeliveryClaim[]> {
@@ -226,6 +232,7 @@ export class MongoOutboxStore implements OutboxWriterPort, OutboxDeliveryPort {
     return claims;
   }
 
+  /** @inheritdoc */
   async markDelivered(
     claim: OutboxDeliveryClaim,
     completedAt: Date,
@@ -256,6 +263,7 @@ export class MongoOutboxStore implements OutboxWriterPort, OutboxDeliveryPort {
     this.ensureClaimWasUpdated(updateResult.matchedCount);
   }
 
+  /** @inheritdoc */
   async markRetryableFailure(
     claim: OutboxDeliveryClaim,
     failure: RetryableDeliveryFailure,

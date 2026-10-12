@@ -10,10 +10,15 @@ import type { MongoConnection } from './mongo-connection.types';
 /** MongoDB implementation of the producer Unit of Work boundary. */
 @Injectable()
 export class MongoUnitOfWork implements UnitOfWorkPort {
+  /**
+   * @param connection Shared Mongoose connection provided by DatabaseModule.
+   * @example `new MongoUnitOfWork(connection)`
+   */
   constructor(
     @InjectConnection() private readonly connection: MongoConnection,
   ) {}
 
+  /** @inheritdoc */
   async run<TResult>(
     operation: (context: UnitOfWorkContext) => Promise<TResult>,
   ): Promise<TResult> {
