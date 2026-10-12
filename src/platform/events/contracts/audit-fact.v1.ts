@@ -3,28 +3,39 @@ import {
   type BusinessFactEnvelope,
 } from '../domain/business-fact-envelope';
 
+/** Shared business-neutral Audit Fact event type. */
 export const AUDIT_FACT_EVENT_TYPE = 'audit.fact';
+/** Current supported version of the shared Audit Fact contract. */
 export const AUDIT_FACT_EVENT_VERSION = businessFactVersion(1);
 
+/** Scalar values allowed in explicitly selected audit changes. */
 export type AuditScalar = string | number | boolean | null;
 
 /** Producer identity supplied by the module emitting an Audit Fact. */
 export interface AuditActor {
+  /** Actor category, such as a user or service. */
   readonly type: string;
+  /** Stable actor identifier. */
   readonly id: string;
 }
 
 /** An explicit scalar field change; complete resource snapshots are excluded. */
 export interface AuditFactChange {
+  /** Explicit allowlisted field name. */
   readonly field: string;
+  /** Previous scalar value, omitted when the field is newly set. */
   readonly before?: AuditScalar;
+  /** New scalar value, omitted when the field is removed. */
   readonly after?: AuditScalar;
 }
 
 /** Business-neutral payload shared by all modules that emit Audit Facts. */
 export interface AuditFactPayload {
+  /** Actor responsible for the action. */
   readonly actor: AuditActor;
+  /** Producer-defined business-neutral action name. */
   readonly action: string;
+  /** Explicit scalar changes; no full resource snapshots. */
   readonly changes: readonly AuditFactChange[];
 }
 
@@ -38,7 +49,12 @@ export type AuditFact = BusinessFactEnvelope<
 const SENSITIVE_FIELD_NAME =
   /password|secret|token|credential|private.?key|authorization/i;
 
-/** Validates a wire payload before Audit stores it as a durable record. */
+/**
+ * Validates a wire payload before Audit stores it as a durable record.
+ * @param payload Untrusted event payload received over the internal event boundary.
+ * @returns Typed payload containing only supported fields and scalar changes.
+ * @example `const payload = parseAuditFactPayload(fact.payload)`
+ */
 export function parseAuditFactPayload(payload: unknown): AuditFactPayload {
   if (!isRecord(payload)) {
     throw new TypeError('Audit Fact payload must be an object');

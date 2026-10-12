@@ -16,6 +16,11 @@ export class EventConsumerRegistry implements EventConsumerDispatchPort {
   >();
   private readonly consumerRegistrations: readonly EventConsumerRegistration[];
 
+  /**
+   * Validates and indexes the consumers explicitly provided at composition.
+   * @param consumers Consumer implementations exported by imported Nest modules.
+   * @example `new EventConsumerRegistry([auditConsumer])`
+   */
   constructor(consumers: readonly EventConsumerPort[]) {
     const registrations: EventConsumerRegistration[] = [];
 
@@ -70,6 +75,10 @@ export class EventConsumerRegistry implements EventConsumerDispatchPort {
     this.consumerRegistrations = registrations;
   }
 
+  /**
+   * @returns A defensive snapshot of registered subscriptions.
+   * @example `registry.registrations()`
+   */
   registrations(): readonly EventConsumerRegistration[] {
     return this.consumerRegistrations.map((registration) => ({
       consumerId: registration.consumerId,
@@ -80,6 +89,13 @@ export class EventConsumerRegistry implements EventConsumerDispatchPort {
     }));
   }
 
+  /**
+   * Invokes a registered consumer only when it declared the fact version.
+   * @param consumerId Explicitly registered consumer identifier.
+   * @param fact Versioned Business Fact to dispatch.
+   * @returns Promise settled with the consumer's durable handling result.
+   * @example `await registry.dispatch('audit', fact)`
+   */
   async dispatch(
     consumerId: string,
     fact: BusinessFactEnvelope,

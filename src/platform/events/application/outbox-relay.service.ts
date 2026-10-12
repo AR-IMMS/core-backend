@@ -7,9 +7,13 @@ import type {
 const BASE_RETRY_DELAY_MS = 1_000;
 const MAX_RETRY_DELAY_MS = 5 * 60 * 1_000;
 
+/** Counters returned from one call to `OutboxRelayService.runOnce`. */
 export interface OutboxRelayRunResult {
+  /** Number of delivery claims handled by this run. */
   readonly claimed: number;
+  /** Number of claims acknowledged as delivered. */
   readonly delivered: number;
+  /** Number of consumer failures scheduled for retry. */
   readonly failed: number;
 }
 
@@ -20,6 +24,13 @@ export interface OutboxRelayRunResult {
  * allowing at-least-once redelivery without misclassifying a successful handler.
  */
 export class OutboxRelayService {
+  /**
+   * @param outbox Persistence adapter for claiming and acknowledging delivery.
+   * @param dispatch Registry that invokes the selected consumer.
+   * @param batchSize Maximum claims fetched per registered consumer per run.
+   * @default batchSize 100
+   * @example `new OutboxRelayService(outbox, dispatch)`
+   */
   constructor(
     private readonly outbox: OutboxDeliveryPort,
     private readonly dispatch: EventConsumerDispatchPort,
@@ -30,6 +41,13 @@ export class OutboxRelayService {
     }
   }
 
+  /**
+   * Processes one bounded relay pass; the host must schedule subsequent calls.
+   * @param now Eligibility time used consistently throughout this pass.
+   * @returns Counts of claims, successful deliveries and retryable failures.
+   * @default now new Date()
+   * @example `await relay.runOnce()`
+   */
   async runOnce(now: Date = new Date()): Promise<OutboxRelayRunResult> {
     const result = { claimed: 0, delivered: 0, failed: 0 };
 

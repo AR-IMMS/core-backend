@@ -28,15 +28,34 @@ import {
 } from './infrastructure/mongodb/outbox.schema';
 
 export interface PlatformEventsModuleOptions {
-  /** Modules that export the explicitly registered consumer provider tokens. */
+  /**
+   * Modules that export the consumer provider tokens listed in `consumers`.
+   * @default None; required when registering the module.
+   * @example `[AuditModule]`
+   */
   readonly imports: NonNullable<ModuleMetadata['imports']>;
+  /**
+   * Explicit consumer provider tokens registered with the relay.
+   * @default None; required when registering the module.
+   * @example `[AuditEventConsumer]`
+   */
   readonly consumers: readonly InjectionToken[];
 }
 
-/** Binds event ports to MongoDB persistence and the in-process relay. */
+/**
+ * Binds event ports to MongoDB persistence and the in-process relay.
+ * Import `DatabaseModule` at the application boundary before registering this
+ * module so Mongoose uses the application's shared connection.
+ */
 @Global()
 @Module({})
 export class PlatformEventsModule {
+  /**
+   * Creates the global event module and registers its consumer allowlist.
+   * @param options Consumer modules and exported consumer provider tokens.
+   * @returns Dynamic Nest module exposing event ports and the relay service.
+   * @example `PlatformEventsModule.register({ imports: [AuditModule], consumers: [AuditEventConsumer] })`
+   */
   static register(options: PlatformEventsModuleOptions): DynamicModule {
     return {
       module: PlatformEventsModule,
