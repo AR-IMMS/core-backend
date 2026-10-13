@@ -1,8 +1,6 @@
 import { createZodValidationPipe } from 'nestjs-zod';
 
-/**
- * Enforces Zod DTO declarations for request parameters across the application.
- */
+/** Global pipe that validates request DTOs declared with Zod. */
 export const CoreZodValidationPipe = createZodValidationPipe({
   strictSchemaDeclaration: true,
 });

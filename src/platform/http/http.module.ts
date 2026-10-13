@@ -7,7 +7,9 @@ import { CoreZodValidationPipe } from './validation/zod-validation.pipe';
 import { ApiResponseInterceptor } from './api/api-response.interceptor';
 
 /**
- * Provides shared HTTP request processing for the Core application.
+ * Registers the Core HTTP pipeline as global Nest providers.
+ * Import once from the application composition root; handlers then receive
+ * request IDs, Zod validation, Problem Details errors, and response envelopes.
  */
 @Module({
   imports: [RequestContextModule],
