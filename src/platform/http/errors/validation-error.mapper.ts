@@ -1,8 +1,6 @@
 import type { ZodIssue } from 'zod/v4';
 
-/**
- * Stable validation codes exposed by the Core API.
- */
+/** Stable validation codes exposed by the Core API. */
 export type ValidationErrorCode =
   | 'INVALID_TYPE'
   | 'INVALID_FORMAT'
@@ -10,17 +8,17 @@ export type ValidationErrorCode =
   | 'UNKNOWN_FIELD'
   | 'INVALID_VALUE';
 
-/**
- * A public validation error that does not expose Zod-specific issue metadata.
- */
+/** A public validation error that does not expose Zod-specific issue metadata. */
 export interface ValidationFieldError {
   field: Array<string | number>;
   code: ValidationErrorCode;
   message: string;
 }
 
-/**
- * Maps Zod issues to the stable validation error contract used by the API.
+/** Maps Zod issues to the stable validation error contract used by the API.
+ * @param issues Zod issues returned by request validation.
+ * @returns Public field errors with stable codes and normalized paths.
+ * @example `mapZodIssues(zodError.issues)`
  */
 export function mapZodIssues(
   issues: readonly ZodIssue[],
