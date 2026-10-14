@@ -21,7 +21,14 @@ paths:
         - Audit
       parameters:
         - $ref: ../baseline.yaml#/components/parameters/PageSize
-        - $ref: ../baseline.yaml#/components/parameters/Cursor
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque pagination cursor. Clients must not decode or construct it.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 512
         - name: occurred_from
           in: query
           required: false
@@ -42,30 +49,35 @@ paths:
           schema:
             type: string
             minLength: 1
+            maxLength: 256
         - name: action
           in: query
           required: false
           schema:
             type: string
             minLength: 1
+            maxLength: 256
         - name: resource_type
           in: query
           required: false
           schema:
             type: string
             minLength: 1
+            maxLength: 256
         - name: resource_id
           in: query
           required: false
           schema:
             type: string
             minLength: 1
+            maxLength: 256
         - name: request_id
           in: query
           required: false
           schema:
             type: string
             minLength: 1
+            maxLength: 256
       responses:
         '200':
           description: A page of audit events.
@@ -165,7 +177,7 @@ components:
           $ref: '#/components/schemas/AuditResource'
         changes:
           type: array
-          description: Allowlisted field changes; full resource snapshots are not returned.
+          description: Allowlisted field changes; full resource snapshots are not returned. String arrays are supported for audit.fact v2; additional_permissions arrays are catalog-validated and contain no duplicates.
           items:
             $ref: '#/components/schemas/AuditChange'
         context:
@@ -179,11 +191,7 @@ components:
       properties:
         type:
           type: string
-          enum:
-            - user
-            - service
-            - agent
-            - system
+          minLength: 1
         id:
           type: string
           minLength: 1
@@ -203,19 +211,34 @@ components:
 
     AuditChange:
       type: object
+      anyOf:
+        - required: [before]
+        - required: [after]
       required:
         - field
-        - before
-        - after
       properties:
         field:
           type: string
           minLength: 1
           description: Changed field path.
         before:
-          description: Previous value, or null when the field did not exist.
+          $ref: '#/components/schemas/AuditValue'
+          description: Previous scalar or flat string-array value, when present.
         after:
-          description: New value, or null when the field was removed.
+          $ref: '#/components/schemas/AuditValue'
+          description: New scalar or flat string-array value, when present.
+
+    AuditValue:
+      description: v1 scalar value or v2 scalar/flat string-array value.
+      oneOf:
+        - type: string
+        - type: number
+        - type: boolean
+        - type: 'null'
+        - type: array
+          maxItems: 64
+          items:
+            type: string
 
     AuditContext:
       type: object
