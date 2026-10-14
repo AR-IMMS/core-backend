@@ -14,7 +14,7 @@
 - A business module owns its domain, application, presentation, and infrastructure concerns. Keep domain code independent of NestJS, MongoDB, and other frameworks; application use cases depend on ports, with infrastructure adapters implementing them.
 - Do not reach into another module's internal repositories, services, domain models, or persistence. Cross-module collaboration must use a public application contract or an explicitly defined internal event contract.
 - Do not move module-specific business logic into `platform` or `shared` for convenient imports. Keep framework/database details in infrastructure and compose modules at the application boundary.
-- `docs/adr/adr-001--platform-event-bus-for-core-modular-monolith.md` and `docs/specs/spec-001--platform-events.md` describe the platform event bus design.
+- `docs/local/adr/adr-001--platform-event-bus-for-core-modular-monolith.md` and `docs/local/specs/spec-001--platform-events.md` describe the platform event bus design.
 
 ## Code and change conventions
 
@@ -37,18 +37,19 @@
 
 - `src/`: application entry point, composition, business modules, shared primitives, and platform capabilities.
 - `api/`: OpenAPI contracts.
-- `docs/`: business flows/specs, architecture decisions, and detailed design documents.
+- `docs/local/`: repository-specific business flows/specs, architecture decisions, and detailed design documents.
+- `docs/shared/`: organization-wide documentation shared across repositories through a Git submodule.
 - `test/`: end-to-end test configuration and tests.
 - `.github/workflows/`: CI workflows.
 
 ## Sources of truth
 
-Read the relevant source before changing behavior:
+Read the relevant source before changing behavior. Repository-specific sources live under `docs/local/`; organization-wide guidance lives under `docs/shared/`:
 
-- Business flows and acceptance criteria: `docs/business/`
-- Architecture and module boundaries: `docs/architecture/`
-- Accepted decisions: `docs/adr/`
-- Detailed feature specifications: `docs/specs/`
+- Business flows and acceptance criteria: `docs/local/business/`
+- Architecture and module boundaries: `docs/local/architecture/`
+- Accepted decisions: `docs/local/adr/`
+- Detailed feature specifications: `docs/local/specs/`
 - Public API contracts: `api/`
 
 If sources conflict, describe the conflict and ask for clarification. Do not treat planned designs as implemented behavior.
