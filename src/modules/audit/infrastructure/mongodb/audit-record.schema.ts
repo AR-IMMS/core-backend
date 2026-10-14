@@ -25,10 +25,10 @@ export class AuditChangeEntry implements AuditChange {
   field!: string;
 
   @Prop({ type: MongooseSchema.Types.Mixed })
-  before?: string | number | boolean | null;
+  before?: AuditChange['before'];
 
   @Prop({ type: MongooseSchema.Types.Mixed })
-  after?: string | number | boolean | null;
+  after?: AuditChange['after'];
 }
 
 export const AuditChangeEntrySchema =
