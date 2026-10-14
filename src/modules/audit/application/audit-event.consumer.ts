@@ -1,36 +1,54 @@
 import {
   AUDIT_FACT_EVENT_TYPE,
-  AUDIT_FACT_EVENT_VERSION,
+  AUDIT_FACT_EVENT_VERSION as AUDIT_FACT_EVENT_VERSION_V1,
+  AUDIT_FACT_EVENT_VERSION_V2,
   type BusinessFactSubscription,
   type EventConsumerPort,
   parseAuditFactPayload,
+  parseAuditFactPayloadV2,
   type BusinessFactEnvelope,
 } from '@platform/events';
+import type { PermissionCatalogPort } from '@modules/iam';
 import type { AuditRecordStorePort } from './ports/audit-record-store.port';
 
-const AUDIT_FACT_SUBSCRIPTION: BusinessFactSubscription = {
-  eventType: AUDIT_FACT_EVENT_TYPE,
-  eventVersion: AUDIT_FACT_EVENT_VERSION,
-};
+const AUDIT_FACT_SUBSCRIPTIONS: readonly BusinessFactSubscription[] = [
+  {
+    eventType: AUDIT_FACT_EVENT_TYPE,
+    eventVersion: AUDIT_FACT_EVENT_VERSION_V1,
+  },
+  {
+    eventType: AUDIT_FACT_EVENT_TYPE,
+    eventVersion: AUDIT_FACT_EVENT_VERSION_V2,
+  },
+];
 
 /** Validates and persists the shared business-neutral Audit Fact contract. */
 export class AuditEventConsumer implements EventConsumerPort {
   readonly consumerId = 'audit';
-  readonly subscriptions = [AUDIT_FACT_SUBSCRIPTION];
+  readonly subscriptions = AUDIT_FACT_SUBSCRIPTIONS;
 
-  constructor(private readonly auditRecords: AuditRecordStorePort) {}
+  constructor(
+    private readonly auditRecords: AuditRecordStorePort,
+    private readonly permissionCatalog: PermissionCatalogPort,
+  ) {}
 
   async handle(fact: BusinessFactEnvelope): Promise<void> {
     if (
       fact.event_type !== AUDIT_FACT_EVENT_TYPE ||
-      fact.event_version !== AUDIT_FACT_EVENT_VERSION
+      (fact.event_version !== AUDIT_FACT_EVENT_VERSION_V1 &&
+        fact.event_version !== AUDIT_FACT_EVENT_VERSION_V2)
     ) {
       throw new Error(
-        `Audit only accepts ${AUDIT_FACT_EVENT_TYPE} version ${AUDIT_FACT_EVENT_VERSION}`,
+        `Audit only accepts ${AUDIT_FACT_EVENT_TYPE} versions 1 and 2`,
       );
     }
 
-    const payload = parseAuditFactPayload(fact.payload);
+    const payload =
+      fact.event_version === AUDIT_FACT_EVENT_VERSION_V1
+        ? parseAuditFactPayload(fact.payload)
+        : parseAuditFactPayloadV2(fact.payload, (code) =>
+            this.permissionCatalog.isKnownPermissionCode(code),
+          );
     const occurredAt = new Date(fact.occurred_at);
     if (Number.isNaN(occurredAt.getTime())) {
       throw new TypeError('Audit Fact occurrence time is invalid');
@@ -49,7 +67,7 @@ export class AuditEventConsumer implements EventConsumerPort {
     await this.auditRecords.appendIfAbsent({
       eventId,
       eventType: AUDIT_FACT_EVENT_TYPE,
-      eventVersion: AUDIT_FACT_EVENT_VERSION,
+      eventVersion: fact.event_version,
       producer,
       actor: payload.actor,
       action: payload.action,

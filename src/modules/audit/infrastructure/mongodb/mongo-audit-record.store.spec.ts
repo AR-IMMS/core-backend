@@ -19,6 +19,31 @@ const record: AuditRecord = {
 };
 
 describe('MongoAuditRecordStore', () => {
+  /** It persists v2 permission arrays as JSON arrays without converting them to strings. */
+  test('stores v2 before and after arrays unchanged', async () => {
+    const recordWithPermissionArrays: AuditRecord = {
+      ...record,
+      eventVersion: 2,
+      changes: [
+        {
+          field: 'additional_permissions',
+          before: ['user:read'],
+          after: ['asset:read', 'user:read'],
+        },
+      ],
+    };
+    const create = jest.fn().mockResolvedValue([recordWithPermissionArrays]);
+    const store = new MongoAuditRecordStore({ create });
+
+    await store.appendIfAbsent(recordWithPermissionArrays);
+
+    expect(create).toHaveBeenCalledWith([recordWithPermissionArrays]);
+    expect(recordWithPermissionArrays.changes[0]?.after).toEqual([
+      'asset:read',
+      'user:read',
+    ]);
+  });
+
   test('stores a record as one append-only event-id keyed effect', async () => {
     const create = jest.fn().mockResolvedValue([record]);
     const model: MongoAuditRecordModel = { create };
