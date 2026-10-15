@@ -1,0 +1,1 @@
+export const IAM_ACCESS_TOKEN_ISSUER = Symbol('IAM_ACCESS_TOKEN_ISSUER');

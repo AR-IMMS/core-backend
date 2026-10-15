@@ -26,6 +26,7 @@ Normative terms **MUST**, **SHOULD**, and **MAY** indicate requirement strength.
 - Admin-managed additional user permissions (additive only).
 - API authentication and permission checks, plus resource-specific business policies.
 - User/session lifecycle and security-sensitive administrative operations.
+- Session-derived user presence (`ONLINE | BUSY | AWAY | OFFLINE`) as a coarse availability signal for consuming business modules.
 - Durable Audit facts for meaningful committed IAM business changes.
 - HTTP contracts conforming to the existing `/api/v1` response, validation, and error conventions.
 
@@ -163,7 +164,7 @@ Recommended fields:
 - `id`, `username`, `email`, `displayName?`
 - `role: RoleCode`
 - `additionalPermissions: PermissionCode[]`
-- `status: ACTIVE | DISABLED`
+- `status: ACTIVE | INACTIVE`
 - `version` (for optimistic concurrency / event sequence, subject to existing outbox rules)
 - `createdAt`, `updatedAt`
 
@@ -182,9 +183,10 @@ Invariants:
 
 - `userId` (unique), `passwordHash`, `mustChangePassword`, `passwordChangedAt`, optional `credentialVersion`.
 - Argon2id preferred; never store or emit plaintext passwords or password hashes.
-- Admin provisioning MUST use a secure first-use credential process; if temporary passwords are used, require change on first authenticated use.
+- The initial IT Admin MUST be created by a controlled seed outside the public API. The seed MUST read the initial password from deployment secret management, MUST NOT contain or log a fixed password, and MUST safely do nothing when an IT Admin already exists. The operator delivers the configured initial credential through an approved secure channel.
+- Admin provisioning MUST use a secure first-use credential process. Admin-created temporary credentials are returned once over the protected response with `Cache-Control: no-store`; the user MUST change the credential at first login.
 - Password reset revokes existing sessions, and the user must establish a new credential before normal access.
-- First-login password-change restriction MUST be enforced server-side, not only by UI.
+- First-login password-change restriction MUST be enforced server-side, not only by UI. A user with `mustChangePassword` may access only the password-change and logout operations until the change succeeds.
 
 ### 7.3 Session
 
@@ -196,7 +198,31 @@ Invariants:
 - Reuse handling SHOULD revoke the affected session/token family and emit a sanitized security log; exact false-positive/grace policy is deferred to implementation review.
 - Session revocation, user disable, and credential reset invalidate future requests.
 
-### 7.4 Persistence ownership
+Each session also owns a presence lease renewed by an authenticated heartbeat.
+The server uses its own clock and a configurable lease lifetime; clients cannot
+submit timestamps. Initial configurable PoC defaults are a 30-second heartbeat
+interval and a 90-second lease lifetime. A lease counts only while its session
+is active, not revoked, and unexpired. Logout or revocation immediately removes
+that device from presence; another valid device lease can keep the user online.
+
+### 7.4 User presence
+
+Account `UserStatus` (`ACTIVE | INACTIVE`) is distinct from effective
+`UserPresenceStatus` (`ONLINE | BUSY | AWAY | OFFLINE`). Each user has a
+cross-device `UserPresencePreference` (`AUTOMATIC | BUSY | AWAY`), defaulting
+to `AUTOMATIC` and retained while offline. Users cannot directly select
+`ONLINE` or `OFFLINE`.
+
+Effective presence is `OFFLINE` when the account is inactive or no active
+session has a live lease. Otherwise `BUSY` and `AWAY` preferences resolve to
+those statuses, while `AUTOMATIC` resolves to `ONLINE`. Presence is a coarse
+availability signal only; it grants no permission and does not guarantee
+assignment. IAM owns leases, preference, derivation, and lookup. A consuming
+business module supplies candidate user IDs through an IAM public application
+contract and owns candidate selection, assignment/workload/fairness rules, and
+resource-specific policy.
+
+### 7.5 Persistence ownership
 
 IAM owns its MongoDB schemas and repository adapters. Other modules MUST NOT read IAM collections directly. Domain entities MUST NOT depend on Mongoose, NestJS, HTTP, or JWT types.
 
@@ -227,6 +253,14 @@ Prefer Secure, HttpOnly, appropriately scoped cookies for refresh tokens in supp
 
 Refresh verifies the current session and refresh-token hash, atomically rotates the token, and issues a new access token. Logout revokes the current session. A user may have multiple active sessions; admin actions may revoke all sessions of a target user.
 
+An authenticated presence heartbeat renews only the current session's lease;
+expired, revoked, or invalid sessions cannot renew. Proposed application routes
+are `POST /api/v1/auth/me/presence/heartbeat` (204) and
+`PUT /api/v1/auth/me/presence-preference` (standard success envelope). The
+current-principal response includes effective presence and saved preference.
+Dashboard cookie refresh retains CSRF and Origin requirements; presence
+endpoints use the Bearer access token, not the refresh cookie.
+
 ### 8.5 Live authorization
 
 Authenticated requests MUST validate the active user and non-revoked session. Resolve current permissions from IAM state (MongoDB initially; no cache required). Permission changes are effective on the next authorization check. A permission check MUST NOT trust a stale role/permission claim in JWT.
@@ -237,7 +271,7 @@ Login and refresh endpoints MUST have practical rate limiting and generic authen
 
 ## 9. User administration and business rules
 
-- **Create user:** IT Admin supplies account identity and role; system creates credentials securely; audit creation. The initial admin is provisioned via a controlled bootstrap command, not a public route.
+- **Create user:** IT Admin supplies account identity and role; system creates credentials securely, returns the generated temporary password once without caching, and audits creation. The initial admin is provisioned via a controlled bootstrap command, not a public route; that seed reads its initial password from deployment secret management and never emits it.
 - **Update user:** Allowlisted profile fields only; role, status and additional permissions are not writable via generic profile update.
 - **Change role:** Requires `user:grant`; clears additional permissions; audits old/new role and the cleared permissions without violating scalar-only audit change rules.
 - **Set additional permissions:** Requires `user:grant`; accepts the full desired set, validates catalog and restricted grants, removes role-baseline duplicates, and computes grants/revocations for audit.
@@ -337,11 +371,17 @@ interface HumanPrincipal {
   role: RoleCode;
   status: 'ACTIVE' | 'INACTIVE';
 }
+interface UserPresencePort {
+  getPresence(candidateUserIds: readonly string[]): Promise<readonly {
+    userId: string;
+    status: 'ONLINE' | 'BUSY' | 'AWAY' | 'OFFLINE';
+  }[]>;
+}
 ```
 
 Authentication middleware may use an IAM-owned session-validation contract. Business modules receive `ActorContext` (`userId`, request/trace correlation) via a supported boundary and MUST NOT import IAM Mongoose schemas or repositories.
 
-**Dependency rule:** Place the contract in IAM's public API and export it via `IamModule`; do not place IAM business contracts in `src/shared` or `src/platform` merely for convenience. If a dependency cycle arises, revise the application composition/contracts rather than accessing internal implementations.
+**Dependency rule:** Place contracts in IAM's public API and export them via `IamModule`; do not place IAM business contracts in `src/shared` or `src/platform` merely for convenience. Presence lookup accepts caller-selected candidate IDs only; it does not enumerate the user directory. If a dependency cycle arises, revise the application composition/contracts rather than accessing internal implementations.
 
 ### 11.4 Suggested directory layout (Just for reference, you dont need to follow exactly)
 
@@ -398,6 +438,8 @@ IAM application use cases MUST:
 4. Persist IAM state and outbox fact via the same `UnitOfWorkPort` context.
 5. Keep MongoDB sessions and driver-specific types inside infrastructure.
 6. Use allowlisted, scalar-only changes; no full snapshots, nested values, password data, tokens, credential hashes, or secrets.
+
+Presence heartbeats, lease expiry/derived status, and presence-preference changes are operational availability state and MUST NOT emit Audit facts. IAM MUST NOT include secrets in presence responses or logs.
 
 ### 12.3 Audit action names
 
@@ -468,6 +510,8 @@ JWT keys/secrets, password hashing configuration, refresh lifetimes, rate limits
 - Logout and admin session revocation invalidate future access.
 - Password reset invalidates sessions.
 - Login rate limiting and sanitized error output.
+- Presence lease renewal uses server time and cannot renew expired/revoked sessions; tests cover multiple device leases, expiry, logout/revocation, inactive users, and configured PoC intervals.
+- Presence derivation covers `AUTOMATIC -> ONLINE`, `BUSY -> BUSY`, and `AWAY -> AWAY` with any live lease, and `OFFLINE` when the account is inactive or all leases are invalid/expired.
 
 ### 14.3 HTTP contract tests
 
@@ -475,6 +519,7 @@ JWT keys/secrets, password hashing configuration, refresh lifetimes, rate limits
 - Problem Details response status/code/format match existing filter.
 - Missing authentication -> 401; missing permission -> 403.
 - Strict Zod rejects unknown fields, invalid enum values and malformed requests.
+- Current-principal presence fields, heartbeat (`204`), and self-service preference responses follow the standard envelope/error/auth conventions; only the authenticated user may update their preference.
 - User APIs do not leak password hashes or refresh secrets.
 - Audit query routes, when added, require `audit:read`.
 
@@ -499,10 +544,11 @@ A slice is complete only when: behavior is implemented within the owning module;
 | 1 — Domain and catalog                 | User model, role/permission catalog, resolver, invariants, unit tests                   | No platform changes                                                |
 | 2 — Persistence and bootstrap          | User/Credential/Session repositories, indexes, controlled initial-admin bootstrap       | Verify DB conventions and transaction support                      |
 | 3 — Authentication                     | Password service, login, JWT, refresh rotation, logout, session checks                  | Token transport decision for Web/AR/Mobile                         |
-| 4 — Admin commands and Audit           | User administration, role/additional permission changes, audit facts/outbox integration | Verify Audit fact allowlist and resource sequencing                |
-| 5 — Authorization and HTTP integration | Guards, decorators, public IAM port, OpenAPI and e2e tests                              | Verify platform HTTP/DI conventions; Audit query wiring separately |
+| 4 — Authorization and HTTP integration | Guards, decorators, principal context, public IAM access/presence contracts, OpenAPI    | Verify platform HTTP/DI conventions; resource policies stay in owners |
+| 5 — User administration and access     | User administration, role/additional permission changes, audit facts/outbox integration | Verify Audit fact allowlist and resource sequencing               |
+| 6 — Integrated verification             | Composed IAM journeys including session-derived presence and consumer lookup            | Existing E2E runner and replica-set setup                           |
 
-Slices are conceptual review units, not necessarily one PR each. Avoid broad refactoring of `platform`, `audit`, or unrelated business modules.
+Slices are conceptual review units, not necessarily one PR each. Presence lease/preference capabilities are implemented with authentication/session lifecycle; the typed cross-module lookup belongs to HTTP/public-contract integration. User administration must not implement Ticket candidate selection or resource-specific policy. Avoid broad refactoring of `platform`, `audit`, or unrelated business modules.
 
 ## 16. Repository verification checklist (required before coding)
 
@@ -521,7 +567,7 @@ Slices are conceptual review units, not necessarily one PR each. Avoid broad ref
 
 These do not invalidate the baseline but must be resolved at the indicated implementation gate:
 
-1. **Initial admin bootstrap:** secure one-time CLI/seed workflow and credential delivery.
+1. **Initial admin bootstrap — resolved:** A non-HTTP seed reads a deployment-managed password, safely no-ops when an IT Admin exists, and never logs the credential. The operator delivers the initial credential through an approved secure channel; the first authenticated use must change the password before any ordinary protected operation.
 2. **Client refresh-token transport:** cookie strategy for Dashboard versus AR/Mobile/WebView.
 3. **Audit permission-change encoding:** represent multiple grant/revoke changes without violating scalar-only allowlist.
 4. **Event resource sequence:** exact allocation mechanism under concurrent User mutations.

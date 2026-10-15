@@ -12,6 +12,38 @@ export const envSchema = z
 
     APP_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
 
+    IAM_PRESENCE_HEARTBEAT_INTERVAL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(30),
+
+    IAM_PRESENCE_LEASE_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(90),
+
+    IAM_JWT_PRIVATE_KEY: z.string().trim().min(1).optional(),
+    IAM_JWT_PUBLIC_KEY: z.string().trim().min(1).optional(),
+    IAM_JWT_ISSUER: z.string().trim().min(1).default('core-backend'),
+    IAM_JWT_AUDIENCE: z.string().trim().min(1).default('ar-imms-clients'),
+    IAM_ACCESS_TOKEN_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(900),
+    IAM_REFRESH_SESSION_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(604_800),
+
+    IAM_BOOTSTRAP_USER_ID: z.string().trim().min(1).optional(),
+    IAM_BOOTSTRAP_USERNAME: z.string().trim().min(1).optional(),
+    IAM_BOOTSTRAP_EMAIL: z.string().trim().email().optional(),
+    IAM_BOOTSTRAP_PASSWORD: z.string().min(12).optional(),
+
     MONGODB_URI: z
       .string()
       .trim()
@@ -54,6 +86,25 @@ export const envSchema = z
     ),
   })
   .superRefine((env, context) => {
+    if (Boolean(env.IAM_JWT_PRIVATE_KEY) !== Boolean(env.IAM_JWT_PUBLIC_KEY)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['IAM_JWT_PRIVATE_KEY'],
+        message:
+          'IAM_JWT_PRIVATE_KEY and IAM_JWT_PUBLIC_KEY must be configured together',
+      });
+    }
+    if (
+      env.IAM_PRESENCE_LEASE_TTL_SECONDS <=
+      env.IAM_PRESENCE_HEARTBEAT_INTERVAL_SECONDS
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['IAM_PRESENCE_LEASE_TTL_SECONDS'],
+        message:
+          'IAM_PRESENCE_LEASE_TTL_SECONDS must exceed IAM_PRESENCE_HEARTBEAT_INTERVAL_SECONDS',
+      });
+    }
     if (env.POSTGRES_POOL_MIN_SIZE > env.POSTGRES_POOL_MAX_SIZE) {
       context.addIssue({
         code: 'custom',

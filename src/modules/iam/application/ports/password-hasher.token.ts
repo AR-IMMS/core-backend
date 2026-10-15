@@ -1,0 +1,1 @@
+export const IAM_PASSWORD_HASHER = Symbol('IAM_PASSWORD_HASHER');
