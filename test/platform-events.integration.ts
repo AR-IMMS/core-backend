@@ -29,6 +29,7 @@ import {
   type MongoOutboxModel,
 } from '@platform/events/infrastructure/mongodb/mongo-outbox.store';
 import { MongoUnitOfWork } from '@platform/events/infrastructure/mongodb/mongo-unit-of-work';
+import { OutboxRelayScheduler } from '../src/app/outbox-relay.scheduler';
 import { resolveMongoTestConfig } from './mongodb-test-config';
 
 interface BusinessWrite {
@@ -79,7 +80,7 @@ async function main(): Promise<void> {
     const unitOfWork = new MongoUnitOfWork(connection);
 
     await clearCollections();
-    await runCase('commit and Audit delivery', async () => {
+    await runCase('commit and scheduled Audit delivery', async () => {
       const event = auditFact('pe006-commit');
       await unitOfWork.run(async (context) => {
         await businessWrites.create([{ eventId: event.event_id }], {
@@ -94,11 +95,13 @@ async function main(): Promise<void> {
         outbox,
         new EventConsumerRegistry([consumer]),
       );
-      assert.deepEqual(await relay.runOnce(), {
-        claimed: 1,
-        delivered: 1,
-        failed: 0,
-      });
+      const scheduler = new OutboxRelayScheduler(relay);
+      scheduler.onApplicationBootstrap();
+      try {
+        await waitForAuditEvent(auditModel, event.event_id);
+      } finally {
+        await scheduler.onApplicationShutdown();
+      }
       assert.equal(
         await businessWrites.countDocuments({ eventId: event.event_id }),
         1,
@@ -260,6 +263,18 @@ async function outboxCountByEvent(
 ): Promise<number> {
   const model = connection.model(OUTBOX_ENTRY_MODEL, OutboxEntrySchema);
   return model.countDocuments({ 'fact.event_id': eventId });
+}
+
+async function waitForAuditEvent(
+  auditRecords: Model<AuditRecord>,
+  eventId: string,
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    if (await auditRecords.countDocuments({ eventId })) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(await auditRecords.countDocuments({ eventId }), 1);
 }
 
 function auditFact(

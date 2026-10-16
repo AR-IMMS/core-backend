@@ -10,6 +10,7 @@ import { PlatformEventsModule } from '@platform/events';
 import { HealthModule } from '@platform/health';
 import { HttpModule } from '@platform/http';
 import { LoggingModule } from '@platform/observability/logging';
+import { OutboxRelayScheduler } from './outbox-relay.scheduler';
 
 /**
  * Composes the shared platform modules used by the Core application.
@@ -28,5 +29,6 @@ import { LoggingModule } from '@platform/observability/logging';
     LoggingModule,
     TracingModule,
   ],
+  providers: [OutboxRelayScheduler],
 })
 export class CoreModule {}
