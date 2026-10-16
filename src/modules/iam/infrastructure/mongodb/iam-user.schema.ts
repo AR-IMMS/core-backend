@@ -31,10 +31,19 @@ export class IamUserEntry {
   @Prop({ type: String, default: null })
   displayName!: string | null;
 
-  @Prop({ required: true, enum: ['IT_ADMIN', 'OPERATOR', 'TECHNICIAN'] })
+  @Prop({
+    required: true,
+    type: String,
+    enum: ['IT_ADMIN', 'OPERATOR', 'TECHNICIAN'],
+  })
   role!: RoleCode;
 
-  @Prop({ required: true, enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' })
+  @Prop({
+    required: true,
+    type: String,
+    enum: ['ACTIVE', 'INACTIVE'],
+    default: 'ACTIVE',
+  })
   status!: UserStatus;
 
   @Prop({ type: [String], default: [] })
@@ -42,6 +51,7 @@ export class IamUserEntry {
 
   @Prop({
     required: true,
+    type: String,
     enum: ['AUTOMATIC', 'BUSY', 'AWAY'],
     default: 'AUTOMATIC',
   })

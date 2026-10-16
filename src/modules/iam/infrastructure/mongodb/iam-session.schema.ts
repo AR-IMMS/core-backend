@@ -10,7 +10,7 @@ export const IAM_SESSION_COLLECTION = 'iam_sessions';
   timestamps: { createdAt: true, updatedAt: false },
 })
 export class IamSessionEntry {
-  @Prop({ required: true, type: String, unique: true })
+  @Prop({ required: true, type: String })
   sessionId!: string;
 
   @Prop({ required: true, type: String, index: true })

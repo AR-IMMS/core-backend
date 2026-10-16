@@ -476,7 +476,7 @@ async function main(): Promise<void> {
           .lean();
         assert.ok(firstAdmin);
         const actor = await users
-          .findOne({ normalizedUsername: 'operator' })
+          .findOne({ role: 'OPERATOR', status: 'ACTIVE' })
           .lean();
         assert.ok(actor);
         const secondAdmin = await service.createUser({
@@ -507,7 +507,7 @@ async function main(): Promise<void> {
         );
         assert.equal(
           await users.countDocuments({ role: 'IT_ADMIN', status: 'ACTIVE' }),
-          2,
+          1,
         );
       },
     );

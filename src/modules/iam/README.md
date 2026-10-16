@@ -104,6 +104,11 @@ characters. The browser routes reject requests when an exact origin or CSRF
 secret is not configured. Cookie `Domain` is omitted, and the Secure HttpOnly
 cookie is scoped to `/api/v1/auth/browser`.
 
+For local development, run `./generate-keys.ps1` from PowerShell to create an
+RSA key pair and write the escaped values to the ignored `.env.local` file.
+The temporary PEM files are removed when the script exits. Production signing
+keys must come from deployment secret management, not this local helper.
+
 Authentication limits default to 5 login attempts per minute for each
 source-IP/normalized-account pair and 30 refresh attempts per minute per
 session. PoC counters are in process memory; a multi-instance deployment needs
