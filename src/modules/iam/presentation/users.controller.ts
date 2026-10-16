@@ -17,6 +17,7 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { createZodDto } from 'nestjs-zod';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -103,6 +104,13 @@ const userListQuerySchema = z.strictObject({
   cursor: z.string().trim().min(1).max(512).optional(),
 });
 const userIdSchema = z.string().trim().min(1).max(128);
+const userIdParamsSchema = z.object({ user_id: userIdSchema }).strict();
+
+/** Declares the Zod schema metadata required by the strict global validation pipe. */
+class UserListQueryDto extends createZodDto(userListQuerySchema) {}
+
+/** Declares the Zod schema metadata required by the strict global validation pipe. */
+class UserIdParamsDto extends createZodDto(userIdParamsSchema) {}
 
 const userSchema: SchemaObject = {
   type: 'object',
@@ -286,7 +294,7 @@ export class UsersController {
   @ApiBadRequestResponse({
     description: 'User list cursor or page size is invalid.',
   })
-  list(@Query() rawQuery: Record<string, unknown>) {
+  list(@Query() rawQuery: UserListQueryDto) {
     const query = parse(
       userListQuerySchema,
       rawQuery,
@@ -321,9 +329,9 @@ export class UsersController {
   })
   @ApiNotFoundResponse({ description: 'User not found.' })
   @ApiBadRequestResponse({ description: 'User ID is invalid.' })
-  async get(@Param('user_id') rawUserId: string) {
+  async get(@Param() rawParams: UserIdParamsDto) {
     const user = await this.admin().getUser(
-      parse(userIdSchema, rawUserId, 'Invalid user ID'),
+      parse(userIdSchema, rawParams.user_id, 'Invalid user ID'),
     );
     if (!user) throw new NotFoundException('User not found');
     return serializeUser(user);
@@ -348,9 +356,9 @@ export class UsersController {
   })
   async updateProfile(
     @Req() request: AuthenticatedHumanRequest,
-    @Param('user_id') rawUserId: string,
+    @Param() rawParams: UserIdParamsDto,
   ) {
-    const userId = parse(userIdSchema, rawUserId, 'Invalid user ID');
+    const userId = parse(userIdSchema, rawParams.user_id, 'Invalid user ID');
     const profile = parse(
       profileSchema,
       request.body,
@@ -398,7 +406,7 @@ export class UsersController {
   })
   async replaceRole(
     @Req() request: AuthenticatedHumanRequest,
-    @Param('user_id') rawUserId: string,
+    @Param() rawParams: UserIdParamsDto,
   ) {
     const role = parse(
       replaceRoleSchema,
@@ -409,7 +417,7 @@ export class UsersController {
       return serializeUser(
         await this.admin().replaceRole({
           actorUserId: request.user.userId,
-          userId: parse(userIdSchema, rawUserId, 'Invalid user ID'),
+          userId: parse(userIdSchema, rawParams.user_id, 'Invalid user ID'),
           role: role.role,
         }),
       );
@@ -446,7 +454,7 @@ export class UsersController {
   @ApiConflictResponse({ description: 'Concurrent user change conflict.' })
   async replaceAdditionalPermissions(
     @Req() request: AuthenticatedHumanRequest,
-    @Param('user_id') rawUserId: string,
+    @Param() rawParams: UserIdParamsDto,
   ) {
     const input = parse(
       replacePermissionsSchema,
@@ -457,7 +465,7 @@ export class UsersController {
       return serializeUser(
         await this.admin().replaceAdditionalPermissions({
           actorUserId: request.user.userId,
-          userId: parse(userIdSchema, rawUserId, 'Invalid user ID'),
+          userId: parse(userIdSchema, rawParams.user_id, 'Invalid user ID'),
           permissions: input.permissions,
         }),
       );
@@ -490,7 +498,7 @@ export class UsersController {
   })
   async setStatus(
     @Req() request: AuthenticatedHumanRequest,
-    @Param('user_id') rawUserId: string,
+    @Param() rawParams: UserIdParamsDto,
   ) {
     const input = parse(
       statusSchema,
@@ -501,7 +509,7 @@ export class UsersController {
       return serializeUser(
         await this.admin().setStatus({
           actorUserId: request.user.userId,
-          userId: parse(userIdSchema, rawUserId, 'Invalid user ID'),
+          userId: parse(userIdSchema, rawParams.user_id, 'Invalid user ID'),
           status: input.status,
         }),
       );
@@ -532,14 +540,14 @@ export class UsersController {
   @ApiConflictResponse({ description: 'Concurrent user change conflict.' })
   async resetPassword(
     @Req() request: AuthenticatedHumanRequest,
-    @Param('user_id') rawUserId: string,
+    @Param() rawParams: UserIdParamsDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     response.setHeader('Cache-Control', 'no-store');
     try {
       const reset = await this.admin().resetPassword({
         actorUserId: request.user.userId,
-        userId: parse(userIdSchema, rawUserId, 'Invalid user ID'),
+        userId: parse(userIdSchema, rawParams.user_id, 'Invalid user ID'),
       });
       return {
         temporary_password: reset.temporaryPassword,
@@ -568,12 +576,12 @@ export class UsersController {
   @ApiConflictResponse({ description: 'Concurrent user change conflict.' })
   async revokeSessions(
     @Req() request: AuthenticatedHumanRequest,
-    @Param('user_id') rawUserId: string,
+    @Param() rawParams: UserIdParamsDto,
   ) {
     try {
       const result = await this.admin().revokeSessions({
         actorUserId: request.user.userId,
-        userId: parse(userIdSchema, rawUserId, 'Invalid user ID'),
+        userId: parse(userIdSchema, rawParams.user_id, 'Invalid user ID'),
       });
       return { revoked_count: result.revokedCount };
     } catch (error) {
