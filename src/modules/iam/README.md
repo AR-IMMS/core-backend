@@ -112,9 +112,12 @@ Access and refresh lifetimes default to 900 and 604800 seconds. JWT signing
 uses configured RS256 keys, issuer, and audience. Credential-bearing responses
 are `Cache-Control: no-store`; access and refresh credentials are never logged.
 
-Account creation and password changes, their per-user Audit resource sequence
-updates, and their `audit.fact` v1 Outbox records share one MongoDB
-transaction. Sequence allocation uses an atomic compare-and-increment against
-the expected stored sequence. A stale sequence returns a conflict and aborts
-the transaction; it is not retried as a business operation. MongoDB must
-support replica-set transactions.
+Account creation and password changes, as well as user-administration changes,
+their per-user Audit resource sequence updates, and their Outbox facts share
+one MongoDB transaction. Scalar-only changes use immutable `audit.fact` v1;
+role and additional-permission set changes use v2, with complete before/after
+permission arrays. Sequence allocation uses an atomic compare-and-increment
+against the expected stored sequence. A stale or transient OCC conflict retries
+the entire transaction up to three times, then returns a stable conflict.
+MongoDB must support replica-set transactions. Profile, role, permission,
+status, credential, and session-revocation changes omit secrets from audit.

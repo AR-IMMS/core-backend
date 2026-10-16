@@ -56,6 +56,9 @@ export class IamUserEntry {
   @Prop({ required: true, type: Number, default: 0, min: 0 })
   auditSequence!: number;
 
+  @Prop({ required: true, type: Number, default: 0, min: 0 })
+  adminGuardVersion!: number;
+
   @Prop({ type: String, select: false })
   bootstrapKey?: string;
 

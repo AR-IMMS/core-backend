@@ -506,6 +506,8 @@ paths:
           $ref: ../baseline.yaml#/components/responses/Problem
         '404':
           $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          $ref: ../baseline.yaml#/components/responses/Problem
       x-required-permissions: [user:manage]
 
   /api/v1/users/{user_id}/role:
@@ -677,6 +679,8 @@ paths:
           $ref: ../baseline.yaml#/components/responses/Problem
         '404':
           $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          $ref: ../baseline.yaml#/components/responses/Problem
       x-required-permissions: [user:manage]
 
   /api/v1/users/{user_id}/revoke-sessions:
@@ -710,6 +714,8 @@ paths:
         '403':
           $ref: ../baseline.yaml#/components/responses/Problem
         '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
           $ref: ../baseline.yaml#/components/responses/Problem
       x-required-permissions: [user:manage]
 

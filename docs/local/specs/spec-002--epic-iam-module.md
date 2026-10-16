@@ -6,7 +6,7 @@
 **Scope:** Human users of Dashboard, AR, and Mobile clients  
 **Architecture:** NestJS modular monolith, Modular Clean Architecture  
 **Related documents:** `docs/shared/PRODUCT.md`; business flows; `docs/local/adr/adr-001--platform-event-bus-for-core-modular-monolith.md`; `docs/local/specs/spec-001--platform-events.md`; platform HTTP conventions; Audit API contract  
-**Implementation status:** Design only. No IAM implementation is assumed to exist.
+**Implementation status:** IAM foundation, provisioning, authentication, authorization integration, and user-administration capabilities are implemented incrementally in `src/modules/iam/`; this specification remains the behavioral source of truth and implementation must be verified against the current branch.
 
 ## 1. Purpose
 
@@ -57,7 +57,7 @@ No `agent:*` permission is approved by this specification. Agent Management MUST
 | Admin                  | All catalog permissions, but never bypasses domain invariants  |
 | Persistence            | MongoDB; no `roles` or `permissions` collection for PoC        |
 | Cross-module access    | Public application contracts, never another module's internals |
-| Audit                  | `audit.fact` v1 through transactional outbox                   |
+| Audit                  | `audit.fact` v1/v2 through the transactional Outbox            |
 | Delivery               | Existing at-least-once relay; idempotent Audit consumer        |
 
 Prefer a small set of stable business capabilities over one permission per HTTP route. Adding a permission requires a catalog update, role-matrix review, endpoint/use-case enforcement, tests, and documentation. No silent grants to existing roles.
@@ -284,9 +284,9 @@ Login and refresh endpoints MUST have configurable practical rate limits and gen
 
 Concurrency for last-admin protection and permission updates MUST be covered by integration tests.
 
-## 10. HTTP API contract proposal
+## 10. HTTP API contract
 
-All routes below are **proposed**, not implemented or present in current OpenAPI. Prefix is `/api/v1`; health endpoints remain excluded as today. Apply the existing JSON response envelope (`data`, `meta.request_id`, optional `pagination`) and `application/problem+json` error conventions.
+Routes below describe the public IAM contract and are implemented incrementally; verify runtime wiring rather than assuming every operation exists. OpenAPI source is `api/v1/iam.yaml`. Prefix is `/api/v1`; health endpoints remain excluded. Apply the existing JSON response envelope (`data`, `meta.request_id`, optional `pagination`) and `application/problem+json` error conventions.
 
 | Method | Route                                     | Access             | Purpose                                   |
 | ------ | ----------------------------------------- | ------------------ | ----------------------------------------- |
@@ -372,10 +372,12 @@ interface HumanPrincipal {
   status: 'ACTIVE' | 'INACTIVE';
 }
 interface UserPresencePort {
-  getPresence(candidateUserIds: readonly string[]): Promise<readonly {
-    userId: string;
-    status: 'ONLINE' | 'BUSY' | 'AWAY' | 'OFFLINE';
-  }[]>;
+  getPresence(candidateUserIds: readonly string[]): Promise<
+    readonly {
+      userId: string;
+      status: 'ONLINE' | 'BUSY' | 'AWAY' | 'OFFLINE';
+    }[]
+  >;
 }
 ```
 
@@ -424,7 +426,7 @@ This is a target layout, not a requirement to create empty files/directories. Ke
 
 ### 12.1 Existing infrastructure contract
 
-Use `src/platform/events`'s existing `UnitOfWorkPort`, Outbox writer, versioned Business Fact envelope, relay, and consumer registry. The Audit consumer currently subscribes to `audit.fact` version 1 and appends idempotently by `event_id`. There is no broker topic or public event-ingestion route.
+Use `src/platform/events`'s existing `UnitOfWorkPort`, Outbox writer, versioned Business Fact envelope, relay, and consumer registry. Audit accepts immutable `audit.fact` v1 and v2 contracts and appends idempotently by `event_id`, preserving the originating event version. There is no broker topic or public event-ingestion route.
 
 **Business mutation and its Audit fact MUST be persisted in the same MongoDB transaction.** The relay runs independently under a host scheduler/worker and may deliver at least once. Do not claim synchronous audit-query visibility when the command returns.
 
@@ -434,34 +436,33 @@ IAM application use cases MUST:
 
 1. Obtain trusted actor identity from authenticated context (or explicit trusted bootstrap/system identity).
 2. Apply validated domain transition.
-3. Construct a valid `audit.fact` v1 with `event_id`, `event_type`, `event_version`, `producer`, `occurred_at`, resource identity/sequence, approved `payload`, and request/trace context.
+3. Construct a valid versioned `audit.fact` with `event_id`, `event_type`, `event_version`, `producer`, `occurred_at`, resource identity/sequence, approved `payload`, and request/trace context. Use v1 for scalar-only changes and v2 for approved permission-set array changes.
 4. Persist IAM state and outbox fact via the same `UnitOfWorkPort` context.
 5. Keep MongoDB sessions and driver-specific types inside infrastructure.
-6. Use allowlisted, scalar-only changes; no full snapshots, nested values, password data, tokens, credential hashes, or secrets.
+6. Use allowlisted scalar and v2 string-array changes; no full snapshots, arbitrary nested values, password data, tokens, credential hashes, or secrets.
 
 Presence heartbeats, lease expiry/derived status, and presence-preference changes are operational availability state and MUST NOT emit Audit facts. IAM MUST NOT include secrets in presence responses or logs.
 
 ### 12.3 Audit action names
 
-| IAM transition                | Action                        |
-| ----------------------------- | ----------------------------- |
-| User created                  | `iam.user.created`            |
-| User profile changed          | `iam.user.updated`            |
-| User enabled/disabled         | `iam.user.status_changed`     |
-| Role replaced                 | `iam.user.role_changed`       |
-| Additional permission granted | `iam.user.permission_granted` |
-| Additional permission revoked | `iam.user.permission_revoked` |
-| Admin credential reset        | `iam.credential.reset`        |
-| Password changed              | `iam.credential.changed`      |
-| Admin session revocation      | `iam.session.revoked`         |
+| IAM transition                     | Action                              |
+| ---------------------------------- | ----------------------------------- |
+| User created                       | `iam.user.created`                  |
+| User profile changed               | `iam.user.updated`                  |
+| User enabled/disabled              | `iam.user.status_changed`           |
+| Role replaced                      | `iam.user.role_changed`             |
+| Additional permission set replaced | `iam.user.permissions_changed` (v2) |
+| Admin credential reset             | `iam.credential.reset`              |
+| Password changed                   | `iam.credential.changed`            |
+| Admin session revocation           | `iam.session.revoked`               |
 
-For multiple permission changes, prefer a single business command with one or more valid facts according to existing resource-sequence semantics. Because Audit `changes[]` supports only allowlisted scalar values, do **not** serialize permission arrays into a scalar string or use unapproved nested payloads. A valid approach is one fact per changed permission with a scalar `permission` change **only if** the current parser allows that field and action representation; otherwise extend the versioned contract deliberately before implementation. This is a **contract review gate**, not permission to bypass validation.
+Role and additional-permission replacement are recorded as one `audit.fact` v2 containing complete before/after permission arrays and any related scalar role change. V2 permits only its declared scalar and string-array value types; arrays are validated as unique IAM permission codes. Keep v1 immutable and use it for scalar-only changes. Never serialize arrays into strings or include secrets.
 
 Failed login attempts, logout, and refresh-token reuse SHOULD use sanitized security logging/rate-limit metrics rather than pretending they are committed business mutations. Telemetry MUST NOT include account identifiers, passwords, tokens, hashes, or other secrets.
 
 ### 12.4 Ordering and concurrency
 
-Event resource sequences MUST increase per resource and remain unique under concurrent mutations. Reuse a version/optimistic-concurrency strategy only after confirming its compatibility with existing event sequencing and MongoDB transaction behavior. At-least-once delivery means consumers must remain idempotent; the existing Audit `appendIfAbsent(event_id)` behavior is the baseline.
+Event resource sequences MUST increase per resource and remain unique under concurrent mutations. IAM uses an atomic expected-sequence compare-and-increment within the same MongoDB transaction as state and Outbox writes. Retry the complete transaction up to three times for OCC/transient transaction conflicts; after exhaustion return a stable `409 Conflict`. Protect concurrent last-active-admin demotions by writing a shared guard record in the transaction before demotion. At-least-once delivery means consumers must remain idempotent; Audit `appendIfAbsent(event_id)` preserves the originating version.
 
 ### 12.5 Audit query compatibility
 
@@ -539,14 +540,14 @@ A slice is complete only when: behavior is implemented within the owning module;
 
 ## 15. Implementation slices and dependencies
 
-| Slice                                  | Deliverables                                                                            | Dependencies / review gate                                         |
-| -------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| 1 — Domain and catalog                 | User model, role/permission catalog, resolver, invariants, unit tests                   | No platform changes                                                |
-| 2 — Persistence and bootstrap          | User/Credential/Session repositories, indexes, controlled initial-admin bootstrap       | Verify DB conventions and transaction support                      |
-| 3 — Authentication                     | Password service, login, JWT, refresh rotation, logout, session checks                  | Token transport decision for Web/AR/Mobile                         |
+| Slice                                  | Deliverables                                                                            | Dependencies / review gate                                            |
+| -------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 1 — Domain and catalog                 | User model, role/permission catalog, resolver, invariants, unit tests                   | No platform changes                                                   |
+| 2 — Persistence and bootstrap          | User/Credential/Session repositories, indexes, controlled initial-admin bootstrap       | Verify DB conventions and transaction support                         |
+| 3 — Authentication                     | Password service, login, JWT, refresh rotation, logout, session checks                  | Token transport decision for Web/AR/Mobile                            |
 | 4 — Authorization and HTTP integration | Guards, decorators, principal context, public IAM access/presence contracts, OpenAPI    | Verify platform HTTP/DI conventions; resource policies stay in owners |
-| 5 — User administration and access     | User administration, role/additional permission changes, audit facts/outbox integration | Verify Audit fact allowlist and resource sequencing               |
-| 6 — Integrated verification             | Composed IAM journeys including session-derived presence and consumer lookup            | Existing E2E runner and replica-set setup                           |
+| 5 — User administration and access     | User administration, role/additional permission changes, audit facts/outbox integration | Verify Audit fact allowlist and resource sequencing                   |
+| 6 — Integrated verification            | Composed IAM journeys including session-derived presence and consumer lookup            | Existing E2E runner and replica-set setup                             |
 
 Slices are conceptual review units, not necessarily one PR each. Presence lease/preference capabilities are implemented with authentication/session lifecycle; the typed cross-module lookup belongs to HTTP/public-contract integration. User administration must not implement Ticket candidate selection or resource-specific policy. Avoid broad refactoring of `platform`, `audit`, or unrelated business modules.
 

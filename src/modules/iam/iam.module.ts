@@ -20,6 +20,7 @@ import {
 } from './application/ports/human-session-access.token';
 import { UserPresenceService } from './application/user-presence.service';
 import { UserProvisioningService } from './application/user-provisioning.service';
+import { UserAdministrationService } from './application/user-administration.service';
 import { AuthService } from './application/auth.service';
 import {
   IAM_SESSION_MODEL,
@@ -50,7 +51,10 @@ import { HumanAccessGuard } from './presentation/human-access.guard';
 import { HumanPermissionGuard } from './presentation/human-permission.guard';
 import { CurrentUserController } from './presentation/current-user.controller';
 import { AuthController } from './presentation/auth.controller';
-import { UsersController } from './presentation/users.controller';
+import {
+  IamCatalogController,
+  UsersController,
+} from './presentation/users.controller';
 import { BrowserAuthController } from './presentation/browser-auth.controller';
 import { IAM_AUTH_RATE_LIMITER } from './application/ports/auth-rate-limiter.token';
 import { InMemoryAuthRateLimiter } from './infrastructure/rate-limit/in-memory-auth-rate-limiter';
@@ -63,6 +67,12 @@ import {
   MongoHumanAccessStore,
   type MongoHumanAccessModel,
 } from './infrastructure/mongodb/mongo-human-access.store';
+import { IAM_USER_ADMINISTRATION_STORE } from './application/ports/user-administration-store.port';
+import {
+  MongoUserAdministrationStore,
+  type MongoUserAdministrationModel,
+  type MongoUserAdministrationSessionModel,
+} from './infrastructure/mongodb/mongo-user-administration.store';
 
 /** Composes IAM-owned identity/presence persistence and public contracts. */
 @Module({
@@ -98,6 +108,7 @@ import {
     BrowserAuthController,
     CurrentUserController,
     UsersController,
+    IamCatalogController,
   ],
   providers: [
     { provide: IAM_AUTH_RATE_LIMITER, useClass: InMemoryAuthRateLimiter },
@@ -204,6 +215,29 @@ import {
       ) => new UserProvisioningService(users, passwords, unitOfWork, outbox),
       inject: [
         IAM_HUMAN_AUTH_STORE,
+        IAM_PASSWORD_HASHER,
+        UNIT_OF_WORK_PORT,
+        OUTBOX_WRITER_PORT,
+      ],
+    },
+    {
+      provide: IAM_USER_ADMINISTRATION_STORE,
+      useFactory: (
+        userModel: MongoUserAdministrationModel,
+        sessionModel: MongoUserAdministrationSessionModel,
+      ) => new MongoUserAdministrationStore(userModel, sessionModel),
+      inject: [getModelToken(IAM_USER_MODEL), getModelToken(IAM_SESSION_MODEL)],
+    },
+    {
+      provide: UserAdministrationService,
+      useFactory: (
+        users: ConstructorParameters<typeof UserAdministrationService>[0],
+        passwords: ConstructorParameters<typeof UserAdministrationService>[1],
+        unitOfWork: ConstructorParameters<typeof UserAdministrationService>[2],
+        outbox: ConstructorParameters<typeof UserAdministrationService>[3],
+      ) => new UserAdministrationService(users, passwords, unitOfWork, outbox),
+      inject: [
+        IAM_USER_ADMINISTRATION_STORE,
         IAM_PASSWORD_HASHER,
         UNIT_OF_WORK_PORT,
         OUTBOX_WRITER_PORT,
