@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { Reflector } from '@nestjs/core';
 import type { INestApplication } from '@nestjs/common';
 import type { Server } from 'node:http';
 import request from 'supertest';
@@ -7,6 +8,13 @@ import type { AuditEventPage, AuditRecordView } from '../domain/audit-query';
 import { GetAuditEventUseCase } from '../application/get-audit-event.use-case';
 import { ListAuditEventsUseCase } from '../application/list-audit-events.use-case';
 import { AuditController } from './audit.controller';
+import { HumanAccessGuard } from '@modules/iam/presentation/human-access.guard';
+import { HumanPermissionGuard } from '@modules/iam/presentation/human-permission.guard';
+import { PermissionCatalogService } from '@modules/iam/application/permission-catalog.service';
+import type {
+  AccessTokenVerifierPort,
+  HumanSessionAccessPort,
+} from '@modules/iam/application/ports/human-session-access.port';
 
 describe('AuditController read integration', () => {
   let app: INestApplication;
@@ -68,10 +76,37 @@ describe('AuditController read integration', () => {
     }).compile();
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api/v1');
-    app.use((req: { user?: unknown }, _res: unknown, next: () => void) => {
-      req.user = { permissions: ['audit:read'] };
-      next();
-    });
+    const tokenVerifier: AccessTokenVerifierPort = {
+      verifyAccessToken: (token) =>
+        Promise.resolve(
+          token === 'invalid'
+            ? null
+            : {
+                userId: token === 'limited' ? 'limited-user' : 'admin-1',
+                sessionId: 'session-1',
+              },
+        ),
+    };
+    const sessionAccess: HumanSessionAccessPort = {
+      getActivePrincipal: (userId, sessionId) =>
+        Promise.resolve({
+          userId,
+          role: userId === 'limited-user' ? 'OPERATOR' : 'IT_ADMIN',
+          status: 'ACTIVE',
+          sessionId,
+          mustChangePassword: false,
+          username: userId,
+          email: `${userId}@example.test`,
+          displayName: null,
+          effectivePermissions:
+            userId === 'limited-user' ? ['ticket:read'] : ['audit:read'],
+          presencePreference: 'AUTOMATIC',
+        }),
+    };
+    app.useGlobalGuards(
+      new HumanAccessGuard(tokenVerifier, sessionAccess, new Reflector()),
+      new HumanPermissionGuard(new Reflector(), new PermissionCatalogService()),
+    );
     await app.init();
   });
 
@@ -105,30 +140,36 @@ describe('AuditController read integration', () => {
     expect(response.body.changes[0].after).toEqual(['user:read', 'audit:read']);
   });
 
-  function get(path: string): Promise<{
+  /** It returns 401 when Audit has no valid IAM bearer principal. */
+  test('requires a valid bearer principal before permission evaluation', async () => {
+    const response = await get('/api/v1/audit/events', null);
+    expect(response.status).toBe(401);
+  });
+
+  /** It returns 403 when an authenticated principal lacks audit:read. */
+  test('denies an authenticated principal without audit:read', async () => {
+    const response = await get('/api/v1/audit/events', 'limited');
+    expect(response.status).toBe(403);
+  });
+
+  function get(
+    path: string,
+    token: string | null = 'authorized',
+  ): Promise<{
+    status: number;
     body: {
       items: Array<Record<string, unknown>>;
       changes: Array<{ after: unknown }>;
     };
   }> {
+    let testRequest = request(app.getHttpServer() as Server).get(path);
+    if (token)
+      testRequest = testRequest.set('Authorization', `Bearer ${token}`);
     return new Promise((resolve, reject) => {
-      request(app.getHttpServer() as Server)
-        .get(path)
-        .expect(200)
-        .end((error, response) => {
-          if (error) reject(new Error(String(error)));
-          else {
-            const body = (response as unknown as { body: unknown }).body;
-            resolve(
-              JSON.parse(JSON.stringify({ body })) as {
-                body: {
-                  items: Array<Record<string, unknown>>;
-                  changes: Array<{ after: unknown }>;
-                };
-              },
-            );
-          }
-        });
+      testRequest.end((error, response) => {
+        if (error) reject(new Error(String(error)));
+        else resolve(response);
+      });
     });
   }
 });

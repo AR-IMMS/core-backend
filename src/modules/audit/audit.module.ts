@@ -21,7 +21,6 @@ import {
 } from './infrastructure/mongodb/mongo-audit-record.store';
 import { AUDIT_RECORD_STORE_PORT } from './infrastructure/mongodb/audit-record-store.port.token';
 import { AuditController } from './presentation/audit.controller';
-import { AuditReadGuard } from './presentation/audit-read.guard';
 
 /** Composes Audit's internal consumer and append-only MongoDB adapter. */
 @Module({
@@ -65,7 +64,6 @@ import { AuditReadGuard } from './presentation/audit-read.guard';
       ) => new GetAuditEventUseCase(store),
       inject: [AUDIT_RECORD_QUERY_STORE_PORT],
     },
-    AuditReadGuard,
   ],
   exports: [AuditEventConsumer],
 })

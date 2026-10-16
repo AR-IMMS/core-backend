@@ -1,6 +1,7 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
 
+import { HTTP_ROUTE_POLICY_METADATA } from '@platform/http/api';
 import type {
   AccessTokenVerifierPort,
   HumanSessionAccessPort,
@@ -65,6 +66,29 @@ describe('HumanAccessGuard', () => {
     );
   });
 
+  /** Skips bearer verification only when the route is explicitly public. */
+  test('allows an explicitly public route without authenticating a bearer token', async () => {
+    const verifier: AccessTokenVerifierPort = {
+      verifyAccessToken: jest.fn().mockResolvedValue(null),
+    };
+    const sessions: HumanSessionAccessPort = {
+      getActivePrincipal: jest.fn().mockResolvedValue(null),
+    };
+    const guard = new HumanAccessGuard(verifier, sessions);
+    const handler = function publicHandler() {};
+    Reflect.defineMetadata(
+      HTTP_ROUTE_POLICY_METADATA,
+      { kind: 'public' },
+      handler,
+    );
+
+    await expect(
+      guard.canActivate(createContext({ headers: {} }, handler)),
+    ).resolves.toBe(true);
+    expect(verifier.verifyAccessToken).not.toHaveBeenCalled();
+    expect(sessions.getActivePrincipal).not.toHaveBeenCalled();
+  });
+
   /** It blocks an initial-password user from protected routes other than the change flow. */
   test('allows only first-password change and logout while rotation is required', async () => {
     const verifier: AccessTokenVerifierPort = {
@@ -120,8 +144,13 @@ describe('HumanAccessGuard', () => {
   });
 });
 
-function createContext(request: unknown): ExecutionContext {
+function createContext(
+  request: unknown,
+  handler = function handler() {},
+): ExecutionContext {
   return {
+    getHandler: () => handler,
+    getClass: () => class TestController {},
     switchToHttp: () => ({ getRequest: () => request }),
   } as ExecutionContext;
 }

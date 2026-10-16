@@ -2,13 +2,11 @@ import {
   BadRequestException,
   ConflictException,
   Controller,
-  ForbiddenException,
   HttpCode,
   HttpStatus,
   Post,
   Req,
   Res,
-  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -31,7 +29,7 @@ import {
   UserProvisioningService,
 } from '../application/user-provisioning.service';
 import type { AuthenticatedHumanPrincipal } from '../application/ports/human-session-access.port';
-import { HumanAccessGuard } from './human-access.guard';
+import { RequirePermissions } from './authorization.decorators';
 
 interface AuthenticatedHumanRequest {
   readonly user: AuthenticatedHumanPrincipal;
@@ -50,11 +48,11 @@ const createUserSchema = z
 /** Admin-protected user provisioning endpoint. */
 @ApiTags('IAM Users')
 @Controller('users')
-@UseGuards(HumanAccessGuard)
 export class UsersController {
   constructor(private readonly provisioning: UserProvisioningService) {}
 
   @Post()
+  @RequirePermissions('user:manage')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Provision a user account' })
   @ApiBearerAuth('HumanAccessToken')
@@ -124,9 +122,6 @@ export class UsersController {
     @Req() request: AuthenticatedHumanRequest,
     @Res({ passthrough: true }) response: Response,
   ) {
-    if (!request.user.effectivePermissions.includes('user:manage')) {
-      throw new ForbiddenException();
-    }
     const input = parseRequest(request.body);
     response.setHeader('Cache-Control', 'no-store');
 

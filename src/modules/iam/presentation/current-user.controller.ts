@@ -9,7 +9,6 @@ import {
   Post,
   Put,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 import { z, ZodError } from 'zod';
 import {
@@ -27,7 +26,7 @@ import type { SchemaObject } from '@nestjs/swagger';
 
 import type { AuthenticatedHumanPrincipal } from '../application/ports/human-session-access.port';
 import { UserPresenceService } from '../application/user-presence.service';
-import { HumanAccessGuard } from './human-access.guard';
+import { AuthenticatedOnly } from './authorization.decorators';
 
 interface AuthenticatedHumanRequest {
   readonly user: AuthenticatedHumanPrincipal;
@@ -42,7 +41,7 @@ const updatePresencePreferenceSchema = z
 /** Self-service principal and presence routes protected by IAM session auth. */
 @ApiTags('IAM Current User')
 @Controller('auth/me')
-@UseGuards(HumanAccessGuard)
+@AuthenticatedOnly()
 export class CurrentUserController {
   constructor(private readonly presence: UserPresenceService) {}
 

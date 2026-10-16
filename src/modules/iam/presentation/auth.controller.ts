@@ -10,7 +10,6 @@ import {
   Req,
   Res,
   UnauthorizedException,
-  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -41,7 +40,8 @@ import {
   UserProvisioningService,
 } from '../application/user-provisioning.service';
 import type { AuthenticatedHumanPrincipal } from '../application/ports/human-session-access.port';
-import { HumanAccessGuard } from './human-access.guard';
+import { AuthenticatedOnly } from './authorization.decorators';
+import { PublicRoute } from '@platform/http/api';
 
 interface AuthenticatedHumanRequest {
   readonly user: AuthenticatedHumanPrincipal;
@@ -95,6 +95,7 @@ export class AuthController {
   ) {}
 
   @Post('login')
+  @PublicRoute()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Authenticate with username/email and password' })
   @ApiBody({
@@ -155,6 +156,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @PublicRoute()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Rotate a native refresh token' })
   @ApiBody({
@@ -212,7 +214,7 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(HumanAccessGuard)
+  @AuthenticatedOnly()
   @ApiOperation({ summary: 'Revoke the current authenticated session' })
   @ApiBearerAuth('HumanAccessToken')
   @ApiResponse({
@@ -229,7 +231,7 @@ export class AuthController {
 
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(HumanAccessGuard)
+  @AuthenticatedOnly()
   @ApiOperation({ summary: 'Change the authenticated user password' })
   @ApiBearerAuth('HumanAccessToken')
   @ApiBody({

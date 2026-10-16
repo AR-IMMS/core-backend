@@ -23,6 +23,7 @@ info:
 paths:
   /api/v1/auth/login:
     post:
+      security: []
       operationId: loginNative
       summary: Authenticate a native client
       description: |
@@ -70,6 +71,7 @@ paths:
 
   /api/v1/auth/refresh:
     post:
+      security: []
       operationId: refreshNativeSession
       summary: Rotate a native refresh token
       description: |
@@ -123,6 +125,7 @@ paths:
 
   /api/v1/auth/browser/login:
     post:
+      security: []
       operationId: loginBrowser
       summary: Authenticate the browser Dashboard
       description: |
@@ -178,6 +181,7 @@ paths:
 
   /api/v1/auth/browser/refresh:
     post:
+      security: []
       operationId: refreshBrowserSession
       summary: Rotate the browser refresh cookie
       description: |

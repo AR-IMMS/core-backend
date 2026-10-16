@@ -1,6 +1,7 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import type { Response } from 'express';
 
+import { HTTP_ROUTE_POLICY_METADATA } from '@platform/http/api';
 import type { UserProvisioningService } from '../application/user-provisioning.service';
 import { UsersController } from './users.controller';
 
@@ -63,27 +64,20 @@ describe('UsersController', () => {
     ]);
   });
 
-  /** It prevents a non-admin from provisioning a human account. */
-  test('rejects callers without user:manage', async () => {
-    const provisioning = { createUser: jest.fn() };
-    const controller = new UsersController(
-      provisioning as unknown as UserProvisioningService,
-    );
+  /** Declares user provisioning as an explicit user:manage capability route. */
+  test('requires user:manage on the create route', () => {
+    const handler: unknown = Object.getOwnPropertyDescriptor(
+      UsersController.prototype,
+      'create',
+    )?.value;
+    expect(typeof handler).toBe('function');
 
-    await expect(
-      controller.create(
-        {
-          user: { userId: 'operator-1', effectivePermissions: ['user:read'] },
-          body: {
-            username: 'Technician',
-            email: 't@example.test',
-            role: 'TECHNICIAN',
-          },
-        } as never,
-        { setHeader: jest.fn() } as unknown as Response,
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(provisioning.createUser).not.toHaveBeenCalled();
+    if (typeof handler === 'function') {
+      expect(Reflect.getMetadata(HTTP_ROUTE_POLICY_METADATA, handler)).toEqual({
+        kind: 'permissions',
+        permissions: ['user:manage'],
+      });
+    }
   });
 
   /** It rejects unknown body fields and malformed account values. */

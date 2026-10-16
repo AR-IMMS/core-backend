@@ -19,6 +19,9 @@ paths:
         occurred_from must be earlier than or equal to occurred_to.
       tags:
         - Audit
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [audit:read]
       parameters:
         - $ref: ../baseline.yaml#/components/parameters/PageSize
         - name: cursor
@@ -107,6 +110,9 @@ paths:
       summary: Get an audit event
       tags:
         - Audit
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [audit:read]
       parameters:
         - name: event_id
           in: path
@@ -134,6 +140,12 @@ paths:
           $ref: ../baseline.yaml#/components/responses/Problem
 
 components:
+  securitySchemes:
+    HumanAccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: IAM-issued bearer access token; current permissions are resolved server-side.
   schemas:
     AuditEvent:
       type: object

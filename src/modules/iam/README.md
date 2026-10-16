@@ -29,6 +29,21 @@ IAM permissions are coarse capability checks only. The module that owns a
 resource remains responsible for assignment, ownership, workflow state, and
 record-level rules.
 
+## HTTP authorization boundary
+
+IAM registers the human authentication guard before the permission guard. Every
+non-public HTTP route must declare `@AuthenticatedOnly()` or
+`@RequirePermissions(...)`; missing or invalid policy is denied. Permission
+policies use all-of semantics against the principal's current server-resolved
+effective permissions. JWT permission claims are not used.
+
+Health and authentication entry routes use the platform's `@PublicRoute()`
+metadata. Browser refresh and logout remain public only at the bearer access
+token layer; the browser handlers still enforce their cookie, CSRF and Origin
+checks. Consuming modules import IAM's public authorization decorators and
+`HumanAccessPort` from `@modules/iam`; IAM persistence, domain and session
+internals remain private.
+
 ## User presence
 
 Effective user presence is separate from account status. IAM stores a shared

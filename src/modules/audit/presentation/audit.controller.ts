@@ -5,9 +5,14 @@ import {
   NotFoundException,
   Param,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import { createPaginatedResult } from '@platform/http/api/pagination/paginated-result';
+import {
+  ApiBearerAuth,
+  ApiForbiddenResponse,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import type { AuditRecordView } from '../domain/audit-query';
 import { GetAuditEventUseCase } from '../application/get-audit-event.use-case';
 import { ListAuditEventsUseCase } from '../application/list-audit-events.use-case';
@@ -17,12 +22,18 @@ import {
   InvalidAuditCursorError,
 } from '../application/audit-cursor';
 import { auditEventListQuerySchema } from './audit-event-query.schema';
-import { AuditReadGuard } from './audit-read.guard';
+import { RequirePermissions } from '@modules/iam';
 import { ZodError } from 'zod';
 
 /** Read-only HTTP endpoints for immutable Audit events. */
 @Controller('audit/events')
-@UseGuards(AuditReadGuard)
+@RequirePermissions('audit:read')
+@ApiTags('Audit')
+@ApiBearerAuth('HumanAccessToken')
+@ApiUnauthorizedResponse({ description: 'Access token is missing or invalid.' })
+@ApiForbiddenResponse({
+  description: 'The caller lacks audit:read permission.',
+})
 export class AuditController {
   constructor(
     private readonly listEvents: ListAuditEventsUseCase,

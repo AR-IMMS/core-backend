@@ -41,6 +41,7 @@ import {
   IAM_BROWSER_AUTH_CONFIG,
   type BrowserAuthConfig,
 } from './browser-auth-config.token';
+import { PublicRoute } from '@platform/http/api';
 
 const browserLoginSchema = z
   .object({
@@ -54,6 +55,7 @@ const browserCookiePath = '/api/v1/auth/browser';
 /** Dashboard cookie transport; native clients continue to use AuthController's JSON routes. */
 @ApiTags('IAM Browser Authentication')
 @Controller('auth/browser')
+@PublicRoute()
 export class BrowserAuthController {
   private readonly logger = new Logger(BrowserAuthController.name);
 

@@ -37,6 +37,8 @@ export class AssetsController {
 
 `HttpModule` composes shared request processing at the application boundary and exposes the `/api/v1` prefix and `X-Request-Id` header constants. Its API helpers define response and pagination contracts, while the global pipe, filter, and interceptor adapt Nest requests and handler results to those contracts.
 
+HTTP route policy metadata is also a platform concern: `@PublicRoute()` marks an intentional anonymous entry point, and `HTTP_ROUTE_POLICY_METADATA` carries generic policy labels for application guards. The platform does not interpret IAM permission codes or depend on the IAM module. Business modules define their own authenticated and capability decorators on top of this metadata.
+
 ## ⚡ Cheat Sheet
 
 | Common Task | Service/Port to Inject | Method/Usage |

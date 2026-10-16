@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
@@ -46,6 +47,7 @@ import {
   type MongoHumanSessionModel as MongoHumanCredentialSessionModel,
 } from './infrastructure/mongodb/mongo-human-auth.store';
 import { HumanAccessGuard } from './presentation/human-access.guard';
+import { HumanPermissionGuard } from './presentation/human-permission.guard';
 import { CurrentUserController } from './presentation/current-user.controller';
 import { AuthController } from './presentation/auth.controller';
 import { UsersController } from './presentation/users.controller';
@@ -54,6 +56,13 @@ import { IAM_AUTH_RATE_LIMITER } from './application/ports/auth-rate-limiter.tok
 import { InMemoryAuthRateLimiter } from './infrastructure/rate-limit/in-memory-auth-rate-limiter';
 import { IAM_BROWSER_AUTH_CONFIG } from './presentation/browser-auth-config.token';
 import { PermissionCatalogModule } from './permission-catalog.module';
+import { IAM_HUMAN_ACCESS_PORT } from './application/ports/human-access.token';
+import { IAM_HUMAN_ACCESS_STORE } from './application/ports/human-access-store.token';
+import { HumanAccessService } from './application/human-access.service';
+import {
+  MongoHumanAccessStore,
+  type MongoHumanAccessModel,
+} from './infrastructure/mongodb/mongo-human-access.store';
 
 /** Composes IAM-owned identity/presence persistence and public contracts. */
 @Module({
@@ -142,6 +151,20 @@ import { PermissionCatalogModule } from './permission-catalog.module';
       inject: [getModelToken(IAM_USER_MODEL), getModelToken(IAM_SESSION_MODEL)],
     },
     {
+      provide: IAM_HUMAN_ACCESS_STORE,
+      useFactory: (userModel: MongoHumanAccessModel) =>
+        new MongoHumanAccessStore(userModel),
+      inject: [getModelToken(IAM_USER_MODEL)],
+    },
+    {
+      provide: HumanAccessService,
+      useFactory: (
+        store: ConstructorParameters<typeof HumanAccessService>[0],
+      ) => new HumanAccessService(store),
+      inject: [IAM_HUMAN_ACCESS_STORE],
+    },
+    { provide: IAM_HUMAN_ACCESS_PORT, useExisting: HumanAccessService },
+    {
       provide: IAM_HUMAN_AUTH_STORE,
       useFactory: (
         userModel: MongoHumanAccountModel,
@@ -219,8 +242,13 @@ import { PermissionCatalogModule } from './permission-catalog.module';
         IAM_AUTH_RATE_LIMITER,
       ],
     },
-    HumanAccessGuard,
+    { provide: APP_GUARD, useClass: HumanAccessGuard },
+    { provide: APP_GUARD, useClass: HumanPermissionGuard },
   ],
-  exports: [IAM_USER_PRESENCE_PORT, PermissionCatalogModule],
+  exports: [
+    IAM_USER_PRESENCE_PORT,
+    IAM_HUMAN_ACCESS_PORT,
+    PermissionCatalogModule,
+  ],
 })
 export class IamModule {}

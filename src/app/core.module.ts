@@ -3,7 +3,7 @@ import { Module } from '@nestjs/common';
 
 import { AuditEventConsumer } from '@modules/audit/application/audit-event.consumer';
 import { AuditModule } from '@modules/audit/audit.module';
-import { IamModule } from '@modules/iam';
+import { IamModule } from '@modules/iam/iam.module';
 import { PlatformConfigModule } from '@platform/config';
 import { DatabaseModule } from '@platform/database';
 import { PlatformEventsModule } from '@platform/events';

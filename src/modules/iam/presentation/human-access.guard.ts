@@ -5,6 +5,12 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+
+import {
+  HTTP_ROUTE_POLICY_METADATA,
+  type HttpRoutePolicy,
+} from '@platform/http/api';
 
 import type {
   AccessTokenVerifierPort,
@@ -32,10 +38,17 @@ export class HumanAccessGuard implements CanActivate {
     private readonly tokenVerifier: AccessTokenVerifierPort,
     @Inject(IAM_HUMAN_SESSION_ACCESS)
     private readonly sessionAccess: HumanSessionAccessPort,
+    private readonly reflector: Reflector = new Reflector(),
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<HumanAccessRequest>();
+    const policy = this.reflector.getAllAndOverride<HttpRoutePolicy>(
+      HTTP_ROUTE_POLICY_METADATA,
+      [context.getHandler(), context.getClass()],
+    );
+    if (policy?.kind === 'public') return true;
+
     const token = extractBearerToken(request.headers.authorization);
     if (!token) throw new UnauthorizedException();
 
