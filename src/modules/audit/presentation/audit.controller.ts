@@ -6,6 +6,7 @@ import {
   Param,
   Query,
 } from '@nestjs/common';
+import { createZodDto } from 'nestjs-zod';
 import { createPaginatedResult } from '@platform/http/api/pagination/paginated-result';
 import {
   ApiBearerAuth,
@@ -23,7 +24,19 @@ import {
 } from '../application/audit-cursor';
 import { auditEventListQuerySchema } from './audit-event-query.schema';
 import { RequirePermissions } from '@modules/iam';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
+
+const auditEventIdParamsSchema = z
+  .object({ event_id: z.string().trim().min(1) })
+  .strict();
+
+/** Declares the query schema metadata required by the strict global validation pipe. */
+class AuditEventListQueryRequestDto extends createZodDto(
+  auditEventListQuerySchema,
+) {}
+
+/** Declares the path schema metadata required by the strict global validation pipe. */
+class AuditEventIdParamsDto extends createZodDto(auditEventIdParamsSchema) {}
 
 /** Read-only HTTP endpoints for immutable Audit events. */
 @Controller('audit/events')
@@ -41,7 +54,7 @@ export class AuditController {
   ) {}
 
   @Get()
-  async list(@Query() rawQuery: Record<string, unknown>) {
+  async list(@Query() rawQuery: AuditEventListQueryRequestDto) {
     let query;
     try {
       query = auditEventListQuerySchema.parse(rawQuery);
@@ -82,8 +95,8 @@ export class AuditController {
   }
 
   @Get(':event_id')
-  async get(@Param('event_id') eventId: string) {
-    const record = await this.getEvent.execute(eventId);
+  async get(@Param() rawParams: AuditEventIdParamsDto) {
+    const record = await this.getEvent.execute(rawParams.event_id);
     if (!record) throw new NotFoundException('Audit event not found');
     return serializeAuditRecord(record);
   }

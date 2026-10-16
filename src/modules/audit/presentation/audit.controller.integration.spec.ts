@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import type { INestApplication } from '@nestjs/common';
 import type { Server } from 'node:http';
 import request from 'supertest';
+import { CoreZodValidationPipe } from '@platform/http/validation/zod-validation.pipe';
 
 import type { AuditEventPage, AuditRecordView } from '../domain/audit-query';
 import { GetAuditEventUseCase } from '../application/get-audit-event.use-case';
@@ -76,6 +77,7 @@ describe('AuditController read integration', () => {
     }).compile();
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api/v1');
+    app.useGlobalPipes(new CoreZodValidationPipe());
     const tokenVerifier: AccessTokenVerifierPort = {
       verifyAccessToken: (token) =>
         Promise.resolve(

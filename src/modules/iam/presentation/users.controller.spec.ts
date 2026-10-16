@@ -143,7 +143,7 @@ describe('UsersController', () => {
           user: { userId: 'admin-1' },
           body: { display_name: 'New', role: 'IT_ADMIN' },
         } as never,
-        'user-2',
+        { user_id: 'user-2' },
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -166,7 +166,7 @@ describe('UsersController', () => {
     await expect(
       controller.resetPassword(
         { user: { userId: 'admin-1' }, body: undefined } as never,
-        'user-2',
+        { user_id: 'user-2' },
         response,
       ),
     ).resolves.toEqual({
