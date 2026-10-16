@@ -1,0 +1,1 @@
+export const MONGO_MIGRATIONS = Symbol('MONGO_MIGRATIONS');
