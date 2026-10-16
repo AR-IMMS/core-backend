@@ -11,6 +11,18 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiForbiddenResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+  ApiBadRequestResponse,
+} from '@nestjs/swagger';
+import type { SchemaObject } from '@nestjs/swagger';
 import { z, ZodError } from 'zod';
 
 import { IAM_ROLE_CODES } from '../domain/role-permissions';
@@ -36,6 +48,7 @@ const createUserSchema = z
   .strict();
 
 /** Admin-protected user provisioning endpoint. */
+@ApiTags('IAM Users')
 @Controller('users')
 @UseGuards(HumanAccessGuard)
 export class UsersController {
@@ -43,6 +56,70 @@ export class UsersController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Provision a user account' })
+  @ApiBearerAuth('HumanAccessToken')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['username', 'email', 'role'],
+      additionalProperties: false,
+      properties: {
+        username: { type: 'string', minLength: 3, maxLength: 64 },
+        email: { type: 'string', format: 'email', maxLength: 254 },
+        display_name: { type: 'string', minLength: 1, maxLength: 128 },
+        role: { type: 'string', enum: ['IT_ADMIN', 'OPERATOR', 'TECHNICIAN'] },
+      },
+    },
+  })
+  @ApiCreatedResponse({
+    description:
+      'User created; generated temporary password is returned once. Response is no-store.',
+    schema: singleResponseSchema({
+      type: 'object',
+      required: [
+        'id',
+        'username',
+        'email',
+        'role',
+        'additional_permissions',
+        'effective_permissions',
+        'status',
+        'must_change_password',
+        'created_at',
+        'updated_at',
+        'temporary_password',
+      ],
+      properties: {
+        id: { type: 'string' },
+        username: { type: 'string' },
+        email: { type: 'string', format: 'email' },
+        display_name: { type: 'string', nullable: true },
+        role: { type: 'string', enum: ['IT_ADMIN', 'OPERATOR', 'TECHNICIAN'] },
+        additional_permissions: { type: 'array', items: { type: 'string' } },
+        effective_permissions: { type: 'array', items: { type: 'string' } },
+        status: { type: 'string', enum: ['ACTIVE', 'INACTIVE'] },
+        must_change_password: { type: 'boolean', enum: [true] },
+        created_at: { type: 'string', format: 'date-time' },
+        updated_at: { type: 'string', format: 'date-time' },
+        temporary_password: {
+          type: 'string',
+          description:
+            'One-time credential; never persist or log in plaintext.',
+        },
+      },
+    }),
+  })
+  @ApiBadRequestResponse({ description: 'User request is invalid.' })
+  @ApiUnauthorizedResponse({
+    description: 'Access token is missing or invalid.',
+  })
+  @ApiForbiddenResponse({
+    description: 'The caller lacks user:manage permission.',
+  })
+  @ApiConflictResponse({
+    description:
+      'Username or email already exists, or account changed concurrently.',
+  })
   async create(
     @Req() request: AuthenticatedHumanRequest,
     @Res({ passthrough: true }) response: Response,
@@ -87,6 +164,24 @@ export class UsersController {
       throw error;
     }
   }
+}
+
+function singleResponseSchema(data: SchemaObject): SchemaObject {
+  return {
+    type: 'object',
+    required: ['data', 'meta'],
+    properties: {
+      data,
+      meta: {
+        type: 'object',
+        required: ['request_id'],
+        properties: {
+          request_id: { type: 'string' },
+          trace_id: { type: 'string' },
+        },
+      },
+    },
+  };
 }
 
 function parseRequest(input: unknown): z.infer<typeof createUserSchema> {

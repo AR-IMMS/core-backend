@@ -3,6 +3,7 @@ import './instrumentation';
 import { RequestMethod } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger as PinoLogger } from 'nestjs-pino';
 
 import { CoreModule } from './app/core.module';
@@ -23,6 +24,18 @@ async function bootstrap(): Promise<void> {
       { path: 'health/ready', method: RequestMethod.GET },
     ],
   });
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('AR-IMMS Core API')
+    .setDescription('HTTP API documentation for implemented Core endpoints.')
+    .setVersion('1.0.0')
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      'HumanAccessToken',
+    )
+    .build();
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api/docs', app, swaggerDocument);
 
   app.enableShutdownHooks();
 
