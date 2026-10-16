@@ -39,6 +39,18 @@ describe('Pino HTTP logging options', () => {
     expect(options.genReqId(request, response)).toBe('request-123');
   });
 
+  /** It creates and publishes a request ID when logging runs before request context setup. */
+  it('creates a request ID when request context has not set one yet', () => {
+    const request = new IncomingMessage(new Socket());
+    const response = new ServerResponse(request);
+    const options = createPinoHttpOptions('info');
+
+    const requestId = options.genReqId(request, response);
+
+    expect(requestId).toEqual(expect.any(String));
+    expect(response.getHeader(REQUEST_ID_HEADER)).toBe(requestId);
+  });
+
   it('serializes only safe request fields and removes query parameters', () => {
     const request = new IncomingMessage(new Socket());
 

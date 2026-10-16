@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
 import type { LogLevel } from '@platform/config/logging.config';
@@ -47,13 +48,14 @@ export function createPinoHttpOptions(
     genReqId: (_request: IncomingMessage, response: ServerResponse): string => {
       const requestId = response.getHeader(REQUEST_ID_HEADER);
 
-      if (typeof requestId !== 'string') {
-        throw new Error(
-          'Request context must set the request ID before Pino HTTP logging',
-        );
+      if (typeof requestId === 'string') {
+        return requestId;
       }
 
-      return requestId;
+      const generatedRequestId = randomUUID();
+      response.setHeader(REQUEST_ID_HEADER, generatedRequestId);
+
+      return generatedRequestId;
     },
 
     serializers: {

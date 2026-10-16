@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import type { Response } from 'express';
 import { Module } from '@nestjs/common';
 import { ClsModule } from 'nestjs-cls';
 
 import { REQUEST_ID_HEADER } from '../http.constants';
+import { getRequestId } from './request-id';
 
 /**
  * RequestContextModule manages request-scoped context and correlation IDs.
@@ -19,7 +19,7 @@ import { REQUEST_ID_HEADER } from '../http.constants';
       middleware: {
         mount: true,
         generateId: true,
-        idGenerator: () => randomUUID(),
+        idGenerator: getRequestId,
         setup: (cls, _request, response: Response) => {
           response.setHeader(REQUEST_ID_HEADER, cls.getId());
         },
