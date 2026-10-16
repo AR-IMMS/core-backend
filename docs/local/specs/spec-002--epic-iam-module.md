@@ -241,13 +241,13 @@ IAM owns its MongoDB schemas and repository adapters. Other modules MUST NOT rea
 
 Access JWT claims: `sub` (user ID), `sid` (session ID), `iat`, `exp`, `jti`, and standard issuer/audience as configured. Do **not** embed effective permissions as authoritative claims.
 
-Initial configuration suggestions (not contractual constants): access token 10–15 minutes; refresh session absolute lifetime approximately 7 days. All TTLs MUST be configurable and tested.
+Initial configurable PoC values are a 900-second access token and a 604800-second absolute refresh-session lifetime. All TTLs MUST be configurable and tested.
 
-Use asymmetric JWT signing if deployment/key-management permits; otherwise a strong secret with explicit algorithm allowlisting and rotation planning. Verify issuer, audience, signature algorithm, expiry, and session binding.
+Use RS256 with deployment-managed asymmetric key material. Verify issuer, audience, signature algorithm, expiry, and session binding. Key material MUST remain outside source control and logs.
 
 ### 8.3 Client token handling
 
-Prefer Secure, HttpOnly, appropriately scoped cookies for refresh tokens in supported web deployments; account for CSRF protection and cross-origin constraints. For AR/Mobile/WebView clients, select storage/transport based on actual client runtime; do not assume browser cookies or use `localStorage` as a blanket default. Never log tokens.
+Dashboard browser authentication is deployment-independent at the application layer. Same-origin deployment through a reverse proxy is the preferred production topology; configured cross-origin, same-site deployment is supported with credentialed CORS for exact allowed origins, Secure/HttpOnly host-only refresh cookies, and CSRF/Origin validation. Cross-site deployment requires additional browser compatibility validation and MUST NOT be assumed to work solely by enabling `SameSite=None`. For AR/Mobile/WebView clients, return access and refresh tokens through the JSON contract and require OS-protected secure storage; do not recommend `localStorage` as a blanket default. Never log tokens.
 
 ### 8.4 Refresh and logout
 
@@ -267,7 +267,7 @@ Authenticated requests MUST validate the active user and non-revoked session. Re
 
 ### 8.6 Brute-force controls
 
-Login and refresh endpoints MUST have practical rate limiting and generic authentication failures. Account enumeration via error messages is prohibited. Thresholds are configurable; detailed lockout strategy may be deferred.
+Login and refresh endpoints MUST have configurable practical rate limits and generic authentication failures. Initial configurable PoC limits are 5 login attempts per minute per source-IP and normalized-account pair and 30 refresh attempts per minute per session. Account enumeration via error messages is prohibited. Detailed lockout strategy may be deferred.
 
 ## 9. User administration and business rules
 
@@ -457,7 +457,7 @@ Presence heartbeats, lease expiry/derived status, and presence-preference change
 
 For multiple permission changes, prefer a single business command with one or more valid facts according to existing resource-sequence semantics. Because Audit `changes[]` supports only allowlisted scalar values, do **not** serialize permission arrays into a scalar string or use unapproved nested payloads. A valid approach is one fact per changed permission with a scalar `permission` change **only if** the current parser allows that field and action representation; otherwise extend the versioned contract deliberately before implementation. This is a **contract review gate**, not permission to bypass validation.
 
-Security telemetry such as failed login attempts SHOULD use sanitized security logging/rate-limit metrics rather than pretending every failed login is a committed business mutation.
+Failed login attempts, logout, and refresh-token reuse SHOULD use sanitized security logging/rate-limit metrics rather than pretending they are committed business mutations. Telemetry MUST NOT include account identifiers, passwords, tokens, hashes, or other secrets.
 
 ### 12.4 Ordering and concurrency
 

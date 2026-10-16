@@ -6,12 +6,29 @@ import type {
   HumanSessionStorePort,
 } from './ports/human-auth-store.port';
 import type { PasswordHasherPort } from './ports/password-hasher.port';
+import type { AuthRateLimiterPort } from './ports/auth-rate-limiter.port';
 
 /** Generic login failure that does not disclose account existence or status. */
 export class InvalidCredentialsError extends Error {
   constructor() {
     super('Invalid credentials');
     this.name = 'InvalidCredentialsError';
+  }
+}
+
+/** A rotated refresh credential was presented again; callers keep the public error generic. */
+export class RefreshTokenReplayError extends InvalidCredentialsError {
+  constructor() {
+    super();
+    this.name = 'RefreshTokenReplayError';
+  }
+}
+
+/** A public authentication endpoint has exceeded its configured attempt limit. */
+export class AuthRateLimitExceededError extends Error {
+  constructor(readonly retryAfterSeconds: number) {
+    super('Authentication rate limit exceeded');
+    this.name = 'AuthRateLimitExceededError';
   }
 }
 
@@ -38,7 +55,21 @@ export class AuthService {
     private readonly generateRefreshSecret: () => Buffer = () =>
       randomBytes(32),
     private readonly generateSessionId: () => string = () => randomUUID(),
+    private readonly rateLimiter?: AuthRateLimiterPort,
+    private readonly loginLimit = 5,
+    private readonly refreshLimit = 30,
+    private readonly rateWindowSeconds = 60,
   ) {}
+
+  async checkLoginRateLimit(
+    identifier: string,
+    sourceKey: string,
+  ): Promise<void> {
+    await this.assertRateLimit(
+      `login:${sourceKey}:${identifier.trim().toLowerCase()}`,
+      this.loginLimit,
+    );
+  }
 
   async login(input: {
     readonly identifier: string;
@@ -77,14 +108,24 @@ export class AuthService {
     );
   }
 
-  async refresh(refreshToken: string): Promise<AuthTokenSet> {
+  async refresh(
+    refreshToken: string,
+    sourceKey = 'unknown',
+  ): Promise<AuthTokenSet> {
     const currentTokenHash = hashRefreshToken(refreshToken);
     const session =
       await this.sessions.findByRefreshTokenHash(currentTokenHash);
+    await this.assertRateLimit(
+      session
+        ? `refresh:${session.sessionId}`
+        : `refresh:${sourceKey}:${currentTokenHash}`,
+      this.refreshLimit,
+    );
     const now = this.now();
     if (!session || session.revokedAt || session.expiresAt <= now) {
       if (session?.isCurrentToken === false) {
         await this.sessions.revokeSession(session.sessionId, now);
+        throw new RefreshTokenReplayError();
       }
       throw new InvalidCredentialsError();
     }
@@ -98,7 +139,7 @@ export class AuthService {
     });
     if (!rotated) {
       await this.sessions.revokeByUsedRefreshTokenHash(currentTokenHash, now);
-      throw new InvalidCredentialsError();
+      throw new RefreshTokenReplayError();
     }
 
     const user = await this.users.findByUserId(session.userId);
@@ -117,6 +158,27 @@ export class AuthService {
 
   async logout(sessionId: string): Promise<void> {
     await this.sessions.revokeSession(sessionId, this.now());
+  }
+
+  async logoutByRefreshToken(refreshToken: string): Promise<void> {
+    const session = await this.sessions.findByRefreshTokenHash(
+      hashRefreshToken(refreshToken),
+    );
+    if (session && !session.revokedAt) {
+      await this.sessions.revokeSession(session.sessionId, this.now());
+    }
+  }
+
+  private async assertRateLimit(key: string, limit: number): Promise<void> {
+    if (!this.rateLimiter) return;
+    const result = await this.rateLimiter.consume(
+      key,
+      limit,
+      this.rateWindowSeconds,
+    );
+    if (!result.allowed) {
+      throw new AuthRateLimitExceededError(result.retryAfterSeconds);
+    }
   }
 
   private async createTokenSet(

@@ -103,6 +103,205 @@ describe('AuthService', () => {
       service.login({ identifier: 'unknown', password: 'wrong' }),
     ).rejects.toThrow('Invalid credentials');
   });
+
+  /** It hides disabled-account state behind the same generic failure and creates no session. */
+  test('rejects inactive accounts with generic invalid credentials', async () => {
+    const inactiveUser = {
+      ...makeAuthUser(),
+      status: 'INACTIVE' as const,
+    };
+    const authStore = makeAuthStore(inactiveUser);
+    const sessions = makeSessionStore();
+    const hash = jest.fn();
+    const passwords: PasswordHasherPort = {
+      hash,
+      verify: jest.fn().mockResolvedValue(false),
+    };
+    const service = new AuthService(
+      authStore,
+      sessions,
+      passwords,
+      makeTokenIssuer(),
+      900,
+      604_800,
+    );
+
+    await expect(
+      service.login({ identifier: 'operator', password: 'wrong' }),
+    ).rejects.toThrow('Invalid credentials');
+    expect(sessions.create).not.toHaveBeenCalled();
+    expect(hash).toHaveBeenCalledWith('wrong');
+  });
+
+  /** It permits only one refresh rotation and revokes the session when the losing request replays the token. */
+  test('allows one concurrent refresh winner and revokes the token family on replay', async () => {
+    const user = {
+      userId: 'u-1',
+      username: 'operator',
+      email: 'operator@example.test',
+      normalizedUsername: 'operator',
+      normalizedEmail: 'operator@example.test',
+      role: 'OPERATOR' as const,
+      status: 'ACTIVE' as const,
+      additionalPermissions: [],
+      passwordHash: 'encoded-hash',
+      mustChangePassword: false,
+    };
+    const sessions = makeSessionStore();
+    jest.mocked(sessions.findByRefreshTokenHash).mockResolvedValue({
+      sessionId: 'session-1',
+      userId: 'u-1',
+      expiresAt: new Date('2026-10-22T12:00:00Z'),
+      revokedAt: null,
+      isCurrentToken: true,
+    });
+    let rotations = 0;
+    jest
+      .mocked(sessions.rotateRefreshToken)
+      .mockImplementation(() => Promise.resolve(++rotations === 1));
+    const service = new AuthService(
+      makeAuthStore(user),
+      sessions,
+      makeHasher(true),
+      makeTokenIssuer(),
+      900,
+      604_800,
+      () => new Date('2026-10-15T12:00:00Z'),
+      () => Buffer.from('01234567890123456789012345678901'),
+      () => 'session-next',
+    );
+
+    const results = await Promise.allSettled([
+      service.refresh('opaque-refresh-token-value'),
+      service.refresh('opaque-refresh-token-value'),
+    ]);
+
+    expect(
+      results.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === 'rejected'),
+    ).toHaveLength(1);
+    expect(sessions.revokeByUsedRefreshTokenHash).toHaveBeenCalledTimes(1);
+  });
+
+  /** It enforces login-attempt limits using the normalized account and source key without disclosing the account. */
+  test('rejects login attempts when the configured rate limit is exhausted', async () => {
+    const limiter = {
+      consume: jest
+        .fn()
+        .mockResolvedValue({ allowed: false, retryAfterSeconds: 17 }),
+    };
+    const service = new AuthService(
+      makeAuthStore(null),
+      makeSessionStore(),
+      makeHasher(false),
+      makeTokenIssuer(),
+      900,
+      604_800,
+      undefined,
+      undefined,
+      undefined,
+      limiter,
+      5,
+      30,
+      60,
+    );
+
+    await expect(
+      service.checkLoginRateLimit(' ADMIN ', '127.0.0.1'),
+    ).rejects.toMatchObject({
+      name: 'AuthRateLimitExceededError',
+      retryAfterSeconds: 17,
+    });
+    expect(limiter.consume).toHaveBeenCalledWith(
+      'login:127.0.0.1:admin',
+      5,
+      60,
+    );
+  });
+
+  /** It keys refresh-attempt limits by the stable session ID so rotation does not reset the budget. */
+  test('applies the configured refresh limit to the session', async () => {
+    const sessions = makeSessionStore();
+    jest.mocked(sessions.findByRefreshTokenHash).mockResolvedValue({
+      sessionId: 'session-1',
+      userId: 'u-1',
+      expiresAt: new Date('2026-10-22T12:00:00Z'),
+      revokedAt: null,
+      isCurrentToken: true,
+    });
+    jest.mocked(sessions.rotateRefreshToken).mockResolvedValue(true);
+    const limiter = {
+      consume: jest
+        .fn()
+        .mockResolvedValue({ allowed: true, retryAfterSeconds: 60 }),
+    };
+    const service = new AuthService(
+      makeAuthStore(makeAuthUser()),
+      sessions,
+      makeHasher(true),
+      makeTokenIssuer(),
+      900,
+      604_800,
+      () => new Date('2026-10-15T12:00:00Z'),
+      () => Buffer.from('01234567890123456789012345678901'),
+      () => 'session-1',
+      limiter,
+      5,
+      30,
+      60,
+    );
+
+    await service.refresh('opaque-refresh-token-value');
+
+    expect(limiter.consume).toHaveBeenCalledWith('refresh:session-1', 30, 60);
+  });
+
+  /** It rejects expired refresh sessions before attempting rotation. */
+  test('rejects refresh tokens belonging to expired sessions', async () => {
+    const sessions = makeSessionStore();
+    jest.mocked(sessions.findByRefreshTokenHash).mockResolvedValue({
+      sessionId: 'expired-session',
+      userId: 'u-1',
+      expiresAt: new Date('2026-10-14T12:00:00Z'),
+      revokedAt: null,
+      isCurrentToken: true,
+    });
+    const service = new AuthService(
+      makeAuthStore(null),
+      sessions,
+      makeHasher(false),
+      makeTokenIssuer(),
+      900,
+      604_800,
+      () => new Date('2026-10-15T12:00:00Z'),
+    );
+
+    await expect(service.refresh('expired-refresh-token')).rejects.toThrow(
+      'Invalid credentials',
+    );
+    expect(sessions.rotateRefreshToken).not.toHaveBeenCalled();
+  });
+
+  /** It revokes the current server-side session when logout is requested. */
+  test('revokes a session on logout', async () => {
+    const sessions = makeSessionStore();
+    const now = new Date('2026-10-15T12:00:00Z');
+    const service = new AuthService(
+      makeAuthStore(null),
+      sessions,
+      makeHasher(false),
+      makeTokenIssuer(),
+      900,
+      604_800,
+      () => now,
+    );
+
+    await service.logout('session-1');
+
+    expect(sessions.revokeSession).toHaveBeenCalledWith('session-1', now);
+  });
 });
 
 function makeAuthStore(user: unknown): HumanAuthStorePort {
@@ -115,6 +314,21 @@ function makeAuthStore(user: unknown): HumanAuthStorePort {
     updatePasswordWithAuditSequence: jest.fn(),
     allocateAuditSequence: jest.fn(),
     updatePassword: jest.fn(),
+  };
+}
+
+function makeAuthUser() {
+  return {
+    userId: 'u-1',
+    username: 'operator',
+    email: 'operator@example.test',
+    normalizedUsername: 'operator',
+    normalizedEmail: 'operator@example.test',
+    role: 'OPERATOR' as const,
+    status: 'ACTIVE' as const,
+    additionalPermissions: [],
+    passwordHash: 'encoded-hash',
+    mustChangePassword: false,
   };
 }
 

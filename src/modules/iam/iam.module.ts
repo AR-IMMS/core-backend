@@ -49,6 +49,10 @@ import { HumanAccessGuard } from './presentation/human-access.guard';
 import { CurrentUserController } from './presentation/current-user.controller';
 import { AuthController } from './presentation/auth.controller';
 import { UsersController } from './presentation/users.controller';
+import { BrowserAuthController } from './presentation/browser-auth.controller';
+import { IAM_AUTH_RATE_LIMITER } from './application/ports/auth-rate-limiter.token';
+import { InMemoryAuthRateLimiter } from './infrastructure/rate-limit/in-memory-auth-rate-limiter';
+import { IAM_BROWSER_AUTH_CONFIG } from './presentation/browser-auth-config.token';
 import { PermissionCatalogModule } from './permission-catalog.module';
 
 /** Composes IAM-owned identity/presence persistence and public contracts. */
@@ -80,8 +84,31 @@ import { PermissionCatalogModule } from './permission-catalog.module';
       { name: IAM_SESSION_MODEL, schema: IamSessionSchema },
     ]),
   ],
-  controllers: [AuthController, CurrentUserController, UsersController],
+  controllers: [
+    AuthController,
+    BrowserAuthController,
+    CurrentUserController,
+    UsersController,
+  ],
   providers: [
+    { provide: IAM_AUTH_RATE_LIMITER, useClass: InMemoryAuthRateLimiter },
+    {
+      provide: IAM_BROWSER_AUTH_CONFIG,
+      useFactory: (config: ConfigService) => ({
+        allowedOrigins: (
+          config.get<string>('IAM_BROWSER_ALLOWED_ORIGINS') ?? ''
+        )
+          .split(',')
+          .map((origin) => origin.trim())
+          .filter(Boolean),
+        csrfSecret: config.get<string>('IAM_BROWSER_CSRF_SECRET'),
+        cookieSameSite: config.get<'lax' | 'none'>(
+          'IAM_BROWSER_COOKIE_SAME_SITE',
+          'lax',
+        ),
+      }),
+      inject: [ConfigService],
+    },
     {
       provide: IAM_USER_PRESENCE_STORE,
       useFactory: (
@@ -167,6 +194,7 @@ import { PermissionCatalogModule } from './permission-catalog.module';
         passwords: ConstructorParameters<typeof AuthService>[2],
         tokens: ConstructorParameters<typeof AuthService>[3],
         config: ConfigService,
+        rateLimiter: ConstructorParameters<typeof AuthService>[9],
       ) =>
         new AuthService(
           users,
@@ -175,6 +203,12 @@ import { PermissionCatalogModule } from './permission-catalog.module';
           tokens,
           config.get<number>('IAM_ACCESS_TOKEN_TTL_SECONDS', 900),
           config.get<number>('IAM_REFRESH_SESSION_TTL_SECONDS', 604_800),
+          undefined,
+          undefined,
+          undefined,
+          rateLimiter,
+          config.get<number>('IAM_LOGIN_RATE_LIMIT_PER_MINUTE', 5),
+          config.get<number>('IAM_REFRESH_RATE_LIMIT_PER_MINUTE', 30),
         ),
       inject: [
         IAM_HUMAN_AUTH_STORE,
@@ -182,6 +216,7 @@ import { PermissionCatalogModule } from './permission-catalog.module';
         IAM_PASSWORD_HASHER,
         IAM_ACCESS_TOKEN_ISSUER,
         ConfigService,
+        IAM_AUTH_RATE_LIMITER,
       ],
     },
     HumanAccessGuard,

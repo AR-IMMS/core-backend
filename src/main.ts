@@ -18,6 +18,24 @@ async function bootstrap(): Promise<void> {
 
   const configService = app.get(ConfigService);
 
+  const browserOrigins = (
+    configService.get<string>('IAM_BROWSER_ALLOWED_ORIGINS') ?? ''
+  )
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.enableCors({
+    origin: (
+      origin: string | undefined,
+      callback: (error: Error | null, allow?: boolean) => void,
+    ) => {
+      callback(null, origin !== undefined && browserOrigins.includes(origin));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+  });
+
   app.setGlobalPrefix(API_PREFIX, {
     exclude: [
       { path: 'health/live', method: RequestMethod.GET },
@@ -32,6 +50,11 @@ async function bootstrap(): Promise<void> {
     .addBearerAuth(
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
       'HumanAccessToken',
+    )
+    .addCookieAuth(
+      '__Secure-arimms_refresh',
+      { type: 'apiKey', in: 'cookie' },
+      'BrowserRefreshCookie',
     )
     .build();
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);

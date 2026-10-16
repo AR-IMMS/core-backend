@@ -68,6 +68,35 @@ credential to the administrator through an approved secure channel; IAM
 requires a password change at first login. Do not commit the password to an
 environment file or source control.
 
+## Authentication and browser deployment
+
+Native AR/Mobile/WebView clients use `/api/v1/auth/login` and `/refresh` with
+JSON access and refresh tokens; retain them in OS-protected secure storage.
+The Dashboard uses `/api/v1/auth/browser/*`: the access token and CSRF proof
+are returned in JSON, while the refresh token is an HttpOnly cookie. Browser
+refresh and logout require both the current `X-CSRF-Token` and an exact
+configured `Origin`. CORS allows credentials only for configured origins.
+Prefer same-origin deployment behind a reverse proxy. Configured
+cross-origin, same-site deployments use `SameSite=Lax`; cross-site cookie use
+requires additional compatibility validation and explicit
+`IAM_BROWSER_CROSS_SITE_COMPATIBILITY_VALIDATED=true` before selecting
+`SameSite=None`.
+
+Set `IAM_BROWSER_ALLOWED_ORIGINS` to a comma-separated list of exact HTTPS
+origins (local HTTP origins are permitted for localhost development) and set
+`IAM_BROWSER_CSRF_SECRET` from deployment secret management to at least 32
+characters. The browser routes reject requests when an exact origin or CSRF
+secret is not configured. Cookie `Domain` is omitted, and the Secure HttpOnly
+cookie is scoped to `/api/v1/auth/browser`.
+
+Authentication limits default to 5 login attempts per minute for each
+source-IP/normalized-account pair and 30 refresh attempts per minute per
+session. PoC counters are in process memory; a multi-instance deployment needs
+shared rate-limit storage before treating the configured ceilings as global.
+Access and refresh lifetimes default to 900 and 604800 seconds. JWT signing
+uses configured RS256 keys, issuer, and audience. Credential-bearing responses
+are `Cache-Control: no-store`; access and refresh credentials are never logged.
+
 Account creation and password changes, their per-user Audit resource sequence
 updates, and their `audit.fact` v1 Outbox records share one MongoDB
 transaction. Sequence allocation uses an atomic compare-and-increment against

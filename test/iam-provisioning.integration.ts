@@ -3,6 +3,11 @@ import { createConnection } from 'mongoose';
 
 import { UserProvisioningService } from '@modules/iam/application/user-provisioning.service';
 import {
+  AuthService,
+  hashRefreshToken,
+} from '@modules/iam/application/auth.service';
+import type { AccessTokenIssuerPort } from '@modules/iam/application/ports/access-token-issuer.port';
+import {
   IAM_SESSION_MODEL,
   IamSessionSchema,
 } from '@modules/iam/infrastructure/mongodb/iam-session.schema';
@@ -12,7 +17,6 @@ import {
 } from '@modules/iam/infrastructure/mongodb/iam-user.schema';
 import {
   MongoHumanAuthStore,
-  type MongoHumanAccountModel,
   type MongoHumanSessionModel,
 } from '@modules/iam/infrastructure/mongodb/mongo-human-auth.store';
 import type { PasswordHasherPort } from '@modules/iam/application/ports/password-hasher.port';
@@ -40,7 +44,7 @@ async function main(): Promise<void> {
     await Promise.all([users.init(), sessions.init(), outboxModel.init()]);
 
     const store = new MongoHumanAuthStore(
-      users as unknown as MongoHumanAccountModel,
+      users,
       sessions as unknown as MongoHumanSessionModel,
     );
     const outbox = new MongoOutboxStore(
@@ -48,8 +52,8 @@ async function main(): Promise<void> {
     );
     const unitOfWork = new MongoUnitOfWork(connection);
     const passwords: PasswordHasherPort = {
-      hash: async (password) => `argon2id:${password}`,
-      verify: async () => true,
+      hash: (password) => Promise.resolve(`argon2id:${password}`),
+      verify: () => Promise.resolve(true),
     };
     const service = new UserProvisioningService(
       store,
@@ -107,9 +111,7 @@ async function main(): Promise<void> {
           passwords,
           unitOfWork,
           {
-            append: async () => {
-              throw new Error('outbox unavailable');
-            },
+            append: () => Promise.reject(new Error('outbox unavailable')),
           },
           () => new Date(),
           () => 'iam-provisioning-rollback',
@@ -163,26 +165,161 @@ async function main(): Promise<void> {
     });
 
     await runCase(
+      'concurrent refresh-token replay has one winner and revokes the session',
+      async () => {
+        const target = await users
+          .findOne({ normalizedUsername: 'operator' })
+          .lean();
+        assert.ok(target);
+        const refreshToken = 'R'.repeat(43);
+        await store.create({
+          sessionId: 'iam-auth-refresh-race',
+          userId: target.userId,
+          refreshTokenHash: hashRefreshToken(refreshToken),
+          expiresAt: new Date('2026-10-22T12:00:00.000Z'),
+        });
+        const tokens: AccessTokenIssuerPort = {
+          issueAccessToken: () => Promise.resolve('signed-access-token'),
+        };
+        const auth = new AuthService(
+          store,
+          store,
+          passwords,
+          tokens,
+          900,
+          604_800,
+          () => new Date('2026-10-15T12:00:00.000Z'),
+        );
+        const results = await Promise.allSettled([
+          auth.refresh(refreshToken),
+          auth.refresh(refreshToken),
+        ]);
+        assert.equal(
+          results.filter((result) => result.status === 'fulfilled').length,
+          1,
+        );
+        assert.equal(
+          results.filter((result) => result.status === 'rejected').length,
+          1,
+        );
+        const storedSession = await sessions
+          .findOne({ sessionId: 'iam-auth-refresh-race' })
+          .lean();
+        assert.ok(storedSession?.revokedAt);
+      },
+    );
+
+    await runCase(
+      'password change and Audit fact commit together without recording credentials',
+      async () => {
+        const target = await users
+          .findOne({ normalizedUsername: 'operator' })
+          .lean();
+        assert.ok(target);
+        await store.create({
+          sessionId: 'iam-auth-password-current',
+          userId: target.userId,
+          refreshTokenHash: hashRefreshToken('P'.repeat(43)),
+          expiresAt: new Date('2026-10-22T12:00:00.000Z'),
+        });
+        await store.create({
+          sessionId: 'iam-auth-password-other',
+          userId: target.userId,
+          refreshTokenHash: hashRefreshToken('Q'.repeat(43)),
+          expiresAt: new Date('2026-10-22T12:00:00.000Z'),
+        });
+        await service.changePassword({
+          userId: target.userId,
+          sessionId: 'iam-auth-password-current',
+          currentPassword: 'old-password',
+          newPassword: 'new-password-that-is-secret',
+        });
+        const changed = await users
+          .findOne({ userId: target.userId })
+          .select('+passwordHash')
+          .lean();
+        assert.equal(changed?.mustChangePassword, false);
+        assert.equal(
+          changed?.passwordHash,
+          'argon2id:new-password-that-is-secret',
+        );
+        const otherSession = await sessions
+          .findOne({ sessionId: 'iam-auth-password-other' })
+          .lean();
+        assert.ok(otherSession?.revokedAt);
+        const fact = await outboxModel
+          .findOne({ 'fact.payload.action': 'iam.credential.changed' })
+          .lean();
+        assert.equal(fact?.fact.event_type, 'audit.fact');
+        assert.equal(fact?.fact.event_version, 1);
+        assert.equal(
+          JSON.stringify(fact?.fact).includes('new-password-that-is-secret'),
+          false,
+        );
+        const failingPasswordChange = new UserProvisioningService(
+          store,
+          passwords,
+          unitOfWork,
+          {
+            append: () => Promise.reject(new Error('outbox unavailable')),
+          },
+          () => new Date('2026-10-15T12:00:00.000Z'),
+        );
+        await assert.rejects(
+          failingPasswordChange.changePassword({
+            userId: target.userId,
+            sessionId: 'iam-auth-password-current',
+            currentPassword: 'old-password',
+            newPassword: 'rollback-password-must-not-persist',
+          }),
+          /outbox unavailable/,
+        );
+        const afterRollback = await users
+          .findOne({ userId: target.userId })
+          .select('+passwordHash')
+          .lean();
+        assert.equal(afterRollback?.passwordHash, changed?.passwordHash);
+        assert.equal(afterRollback?.auditSequence, changed?.auditSequence);
+        assert.equal(
+          await outboxModel.countDocuments({
+            'fact.resource.id': target.userId,
+            'fact.payload.action': 'iam.credential.changed',
+          }),
+          1,
+        );
+      },
+    );
+
+    await runCase(
       'optimistic sequence allocation permits one concurrent winner',
       async () => {
         const target = await users
           .findOne({ normalizedUsername: 'operator' })
           .lean();
         assert.ok(target);
+        const expectedSequence = target.auditSequence;
         const outcomes = await Promise.all(
           [1, 2].map(() =>
             unitOfWork.run((context) =>
-              store.allocateAuditSequence(target.userId, 1, context),
+              store.allocateAuditSequence(
+                target.userId,
+                expectedSequence,
+                context,
+              ),
             ),
           ),
         );
-        assert.equal(outcomes.filter((sequence) => sequence === 2).length, 1);
+        assert.equal(
+          outcomes.filter((sequence) => sequence === expectedSequence + 1)
+            .length,
+          1,
+        );
         assert.equal(
           outcomes.filter((sequence) => sequence === null).length,
           1,
         );
         const updated = await users.findOne({ userId: target.userId }).lean();
-        assert.equal(updated?.auditSequence, 2);
+        assert.equal(updated?.auditSequence, expectedSequence + 1);
       },
     );
   } finally {

@@ -2,8 +2,10 @@ import {
   BadRequestException,
   Controller,
   ConflictException,
+  HttpException,
   HttpCode,
   HttpStatus,
+  Logger,
   Post,
   Req,
   Res,
@@ -19,6 +21,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
   ApiBadRequestResponse,
   ApiForbiddenResponse,
@@ -28,7 +31,9 @@ import { z, ZodError } from 'zod';
 
 import {
   AuthService,
+  AuthRateLimitExceededError,
   InvalidCredentialsError,
+  RefreshTokenReplayError,
 } from '../application/auth.service';
 import {
   AuditSequenceConflictError,
@@ -82,6 +87,8 @@ const tokenSetResponseSchema = singleResponseSchema({
 @ApiTags('IAM Authentication')
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly auth: AuthService,
     private readonly provisioning: UserProvisioningService,
@@ -107,8 +114,11 @@ export class AuthController {
   })
   @ApiBadRequestResponse({ description: 'Invalid request body.' })
   @ApiUnauthorizedResponse({ description: 'Credentials are invalid.' })
+  @ApiTooManyRequestsResponse({
+    description: 'Authentication rate limit exceeded.',
+  })
   async login(
-    @Req() request: { readonly body: unknown },
+    @Req() request: { readonly body: unknown; readonly ip?: string },
     @Res({ passthrough: true }) response: Response,
   ) {
     const input = parseRequest(
@@ -118,6 +128,10 @@ export class AuthController {
     );
     response.setHeader('Cache-Control', 'no-store');
     try {
+      await this.auth.checkLoginRateLimit(
+        input.identifier,
+        request.ip ?? 'unknown',
+      );
       return serializeTokenSet(
         await this.auth.login({
           identifier: input.identifier,
@@ -125,7 +139,15 @@ export class AuthController {
         }),
       );
     } catch (error) {
+      if (error instanceof AuthRateLimitExceededError) {
+        response.setHeader('Retry-After', String(error.retryAfterSeconds));
+        throw new HttpException(
+          'Too many authentication attempts',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
       if (error instanceof InvalidCredentialsError) {
+        this.logger.warn('iam.auth.login.failed');
         throw new UnauthorizedException('Invalid credentials');
       }
       throw error;
@@ -153,8 +175,11 @@ export class AuthController {
   @ApiUnauthorizedResponse({
     description: 'Refresh token is invalid or reused.',
   })
+  @ApiTooManyRequestsResponse({
+    description: 'Authentication rate limit exceeded.',
+  })
   async refresh(
-    @Req() request: { readonly body: unknown },
+    @Req() request: { readonly body: unknown; readonly ip?: string },
     @Res({ passthrough: true }) response: Response,
   ) {
     const input = parseRequest(
@@ -164,9 +189,21 @@ export class AuthController {
     );
     response.setHeader('Cache-Control', 'no-store');
     try {
-      return serializeTokenSet(await this.auth.refresh(input.refresh_token));
+      return serializeTokenSet(
+        await this.auth.refresh(input.refresh_token, request.ip ?? 'unknown'),
+      );
     } catch (error) {
+      if (error instanceof AuthRateLimitExceededError) {
+        response.setHeader('Retry-After', String(error.retryAfterSeconds));
+        throw new HttpException(
+          'Too many authentication attempts',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
       if (error instanceof InvalidCredentialsError) {
+        if (error instanceof RefreshTokenReplayError) {
+          this.logger.warn('iam.auth.refresh.replay_detected');
+        }
         throw new UnauthorizedException('Refresh token is invalid');
       }
       throw error;
@@ -187,6 +224,7 @@ export class AuthController {
   })
   async logout(@Req() request: AuthenticatedHumanRequest): Promise<void> {
     await this.auth.logout(request.user.sessionId);
+    this.logger.log('iam.auth.logout.completed');
   }
 
   @Post('change-password')
