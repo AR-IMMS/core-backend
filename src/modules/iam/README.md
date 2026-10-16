@@ -83,6 +83,15 @@ credential to the administrator through an approved secure channel; IAM
 requires a password change at first login. Do not commit the password to an
 environment file or source control.
 
+## Database migrations
+
+Build the application, then run `pnpm db:migrate:mongo` against the target
+`MONGODB_URI` before deploying code that depends on the migration. The IAM
+index migration creates the indexes declared for user and session lookups,
+uniqueness, and session expiry. It does not rewrite or delete existing IAM
+records. If duplicate data prevents a unique index from being created, the
+migration fails; resolve the conflicting records and rerun the command.
+
 ## Authentication and browser deployment
 
 Native AR/Mobile/WebView clients use `/api/v1/auth/login` and `/refresh` with
