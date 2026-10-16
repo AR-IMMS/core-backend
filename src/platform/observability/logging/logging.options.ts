@@ -1,6 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
 
 import type { LogLevel } from '@platform/config/logging.config';
+import type { RuntimeEnvironment } from '@platform/config/env-files';
 import { REQUEST_ID_HEADER } from '@platform/http/http.constants';
 
 interface SerializedRequest {
@@ -13,20 +16,46 @@ interface SerializedResponse {
   statusCode: number;
 }
 
-export function createPinoHttpOptions(level: LogLevel) {
+export function createPinoHttpOptions(
+  level: LogLevel,
+  environment: RuntimeEnvironment = 'production',
+) {
   return {
     level,
+    ...(environment === 'development'
+      ? {
+          transport: {
+            target: resolve(
+              process.cwd(),
+              'src/platform/observability/logging/pino-pretty.transport.cjs',
+            ),
+            options: {
+              colorize: true,
+              ignore: 'pid,hostname,context',
+              singleLine: true,
+              translateTime: 'SYS:HH:MM:ss',
+            },
+          },
+          customSuccessMessage: (
+            request: IncomingMessage,
+            response: ServerResponse,
+            responseTime: number,
+          ): string =>
+            `${request.method ?? 'UNKNOWN'} ${stripQueryString(request.url)} -> ${response.statusCode} (${Math.round(responseTime)} ms)`,
+        }
+      : {}),
 
     genReqId: (_request: IncomingMessage, response: ServerResponse): string => {
       const requestId = response.getHeader(REQUEST_ID_HEADER);
 
-      if (typeof requestId !== 'string') {
-        throw new Error(
-          'Request context must set the request ID before Pino HTTP logging',
-        );
+      if (typeof requestId === 'string') {
+        return requestId;
       }
 
-      return requestId;
+      const generatedRequestId = randomUUID();
+      response.setHeader(REQUEST_ID_HEADER, generatedRequestId);
+
+      return generatedRequestId;
     },
 
     serializers: {

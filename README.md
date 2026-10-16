@@ -4,6 +4,13 @@ The Core Backend serves as the monolith backend for AR-IMMS. This repository foc
 
 > The repository is currently in its foundational bootstrap phase. Business modules will be added incrementally in vertical slices, complete with tests and corresponding contracts.
 
+## Documentation
+
+Repository-specific documentation, including business flows, architecture
+decisions, and feature specifications, lives in [`docs/local/`](docs/local/).
+Organization-wide documentation shared across repositories lives in
+[`docs/shared/`](docs/shared/), which is maintained as a Git submodule.
+
 ## Initial Scope
 
 - **IAM** — Identity, authentication, and authorization.

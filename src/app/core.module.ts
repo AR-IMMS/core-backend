@@ -3,12 +3,14 @@ import { Module } from '@nestjs/common';
 
 import { AuditEventConsumer } from '@modules/audit/application/audit-event.consumer';
 import { AuditModule } from '@modules/audit/audit.module';
+import { IamModule } from '@modules/iam/iam.module';
 import { PlatformConfigModule } from '@platform/config';
 import { DatabaseModule } from '@platform/database';
 import { PlatformEventsModule } from '@platform/events';
 import { HealthModule } from '@platform/health';
 import { HttpModule } from '@platform/http';
 import { LoggingModule } from '@platform/observability/logging';
+import { OutboxRelayScheduler } from './outbox-relay.scheduler';
 
 /**
  * Composes the shared platform modules used by the Core application.
@@ -16,6 +18,7 @@ import { LoggingModule } from '@platform/observability/logging';
 @Module({
   imports: [
     PlatformConfigModule,
+    IamModule,
     HttpModule,
     DatabaseModule,
     PlatformEventsModule.register({
@@ -26,5 +29,6 @@ import { LoggingModule } from '@platform/observability/logging';
     LoggingModule,
     TracingModule,
   ],
+  providers: [OutboxRelayScheduler],
 })
 export class CoreModule {}

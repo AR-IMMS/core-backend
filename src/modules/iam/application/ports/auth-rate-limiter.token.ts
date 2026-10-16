@@ -1,0 +1,1 @@
+export const IAM_AUTH_RATE_LIMITER = Symbol('IAM_AUTH_RATE_LIMITER');

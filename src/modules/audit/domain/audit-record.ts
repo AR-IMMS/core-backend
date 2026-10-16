@@ -1,5 +1,6 @@
 import type { AuditActor } from '@platform/events';
 import type { BusinessFactContext } from '@platform/events';
+import type { AuditValueV2 } from '@platform/events';
 
 /** Durable Audit effect for one shared Audit Fact. */
 export interface AuditRecord {
@@ -18,9 +19,9 @@ export interface AuditRecord {
   readonly changes: readonly AuditChange[];
 }
 
-/** One producer-allowlisted scalar change. */
+/** One producer-allowlisted scalar or flat string-array change. */
 export interface AuditChange {
   readonly field: string;
-  readonly before?: string | number | boolean | null;
-  readonly after?: string | number | boolean | null;
+  readonly before?: AuditValueV2;
+  readonly after?: AuditValueV2;
 }

@@ -1,0 +1,1 @@
+export const IAM_HUMAN_ACCESS_STORE = Symbol('IAM_HUMAN_ACCESS_STORE');

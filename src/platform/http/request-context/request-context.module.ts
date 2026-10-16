@@ -1,16 +1,16 @@
-import { randomUUID } from 'node:crypto';
 import type { Response } from 'express';
 import { Module } from '@nestjs/common';
 import { ClsModule } from 'nestjs-cls';
 
 import { REQUEST_ID_HEADER } from '../http.constants';
+import { getRequestId } from './request-id';
 
 /**
- * RequestContextModule manages execution context isolation and distributed request tracing.
+ * RequestContextModule manages request-scoped context and correlation IDs.
  *
  * Leveraging `nestjs-cls`, this module automatically provisions a unique cryptographically
- * secure UUID for every incoming HTTP request, propagates it across asynchronous boundaries,
- * and attaches it to outbound response headers for observability.
+ * UUID for each incoming HTTP request, propagates it across asynchronous
+ * boundaries, and writes it to the `X-Request-Id` response header.
  */
 @Module({
   imports: [
@@ -19,7 +19,7 @@ import { REQUEST_ID_HEADER } from '../http.constants';
       middleware: {
         mount: true,
         generateId: true,
-        idGenerator: () => randomUUID(),
+        idGenerator: getRequestId,
         setup: (cls, _request, response: Response) => {
           response.setHeader(REQUEST_ID_HEADER, cls.getId());
         },

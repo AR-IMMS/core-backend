@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { PlatformConfigModule } from '@platform/config';
-import { MongoHealthProbe } from '@platform/health';
+import { MongoHealthProbe } from '@platform/health/infrastructure/mongodb/mongo-health.probe';
 
 /**
  * Provides the shared MongoDB connection and its infrastructure health probe.

@@ -1,0 +1,2 @@
+export const IAM_HUMAN_AUTH_STORE = Symbol('IAM_HUMAN_AUTH_STORE');
+export const IAM_HUMAN_SESSION_STORE = Symbol('IAM_HUMAN_SESSION_STORE');

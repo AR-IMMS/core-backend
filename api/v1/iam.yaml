@@ -1,0 +1,1299 @@
+openapi: 3.1.2
+info:
+  title: AR-IMMS Core IAM API
+  version: 1.0.0
+  description: |
+    Proposed HTTP contract for human identity, authentication, and access
+    administration. The routes in this document describe SPEC-002 and are not
+    evidence that those routes are implemented. Public responses use the Core
+    `{data, meta}` envelope and Problem Details errors from the API baseline.
+
+    Native clients use JSON access and refresh tokens. The browser Dashboard
+    uses a JSON access token and an HttpOnly refresh cookie on the dedicated
+    `/auth/browser/*` routes. Browser authentication is deployment-independent
+    at the application layer. Same-origin deployment through a reverse proxy
+    is the preferred production topology. Configured cross-origin, same-site
+    deployment is supported. Cross-site deployment requires additional browser
+    compatibility validation; setting SameSite=None alone does not guarantee
+    support. Business modules remain responsible for resource-specific
+    authorization policies. When `must_change_password` is true, only password
+    change, logout, and session refresh are allowed; other protected
+    operations return 403 until the password changes.
+
+paths:
+  /api/v1/auth/login:
+    post:
+      security: []
+      operationId: loginNative
+      summary: Authenticate a native client
+      description: |
+        Returns access and opaque refresh tokens in JSON for AR, Mobile, and
+        WebView clients. Store both only in OS-protected secure storage. Failed
+        authentication always returns the same response to avoid account
+        enumeration. Responses containing credentials use `Cache-Control:
+        no-store`. Initial configurable PoC defaults are 900 seconds for the
+        access token and 604800 seconds for the absolute refresh-session
+        lifetime. Initial configurable rate limits are 5 login attempts per
+        minute per source IP and normalized account identifier, and 30 refresh
+        attempts per minute per session.
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication succeeded.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/NativeTokenSet'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          description: Invalid credentials or account cannot authenticate.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/auth/refresh:
+    post:
+      security: []
+      operationId: refreshNativeSession
+      summary: Rotate a native refresh token
+      description: |
+        Atomically rotates the opaque refresh token. Only one concurrent use
+        of a token may succeed. Reuse of a rotated token revokes the affected
+        session/token family. The returned tokens must replace the stored
+        values. Responses containing credentials use `Cache-Control:
+        no-store`.
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NativeRefreshRequest'
+      responses:
+        '200':
+          description: Session refreshed and refresh token rotated.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/NativeTokenSet'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/auth/logout:
+    post:
+      operationId: logoutNativeSession
+      summary: Revoke the current native session
+      description: Revokes the session identified by the authenticated access token.
+      tags: [Authentication]
+      security:
+        - HumanAccessToken: []
+      responses:
+        '204':
+          description: Current session revoked.
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/auth/browser/login:
+    post:
+      security: []
+      operationId: loginBrowser
+      summary: Authenticate the browser Dashboard
+      description: |
+        Returns the short-lived access token and CSRF token in the response
+        body, and sets the opaque refresh token in the `__Secure-arimms_refresh`
+        cookie. The refresh token is never included in JSON. The cookie is
+        Secure, HttpOnly, host-only, and scoped to `/api/v1/auth/browser`.
+        Same-origin deployment through a reverse proxy is preferred for
+        production. Same-origin and configured cross-origin, same-site
+        deployments use SameSite=Lax; cross-origin requests require exact
+        allowed origins and credentialed CORS. Validate CSRF token and Origin.
+        Cross-site deployment is not guaranteed by this contract: it requires
+        additional browser compatibility validation, including cookie and
+        third-party-cookie behavior. SameSite=None; Secure may be required but
+        is not sufficient by itself. Credential responses use
+        `Cache-Control: no-store`. Initial configurable PoC defaults are 900
+        seconds for access tokens and 604800 seconds for absolute session
+        lifetime. Initial configurable rate limits are 5 login attempts per
+        minute per source IP and normalized account identifier, and 30 refresh
+        attempts per minute per session.
+      tags: [Browser Authentication]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication succeeded and the refresh cookie was set.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Set-Cookie:
+              $ref: '#/components/headers/BrowserRefreshCookie'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/BrowserLoginResult'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/auth/browser/refresh:
+    post:
+      security: []
+      operationId: refreshBrowserSession
+      summary: Rotate the browser refresh cookie
+      description: |
+        Reads the refresh token from the HttpOnly cookie, rotates it
+        atomically, and returns a new access token and CSRF token. The rotated
+        refresh token is set only as a cookie. Send `X-CSRF-Token` and a valid
+        `Origin` header. Reuse of a rotated token revokes the affected
+        session/token family.
+      tags: [Browser Authentication]
+      security:
+        - BrowserRefreshCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '200':
+          description: Session refreshed and refresh cookie rotated.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Set-Cookie:
+              $ref: '#/components/headers/BrowserRefreshCookie'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/BrowserSessionResult'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          description: CSRF token or request origin is invalid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/auth/browser/logout:
+    post:
+      operationId: logoutBrowserSession
+      summary: Revoke the current browser session
+      description: Revokes the session, expires the refresh cookie, and requires a CSRF token and valid Origin.
+      tags: [Browser Authentication]
+      security:
+        - BrowserRefreshCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: Session revoked and refresh cookie expired.
+          headers:
+            Set-Cookie:
+              description: Expired `__Secure-arimms_refresh` cookie.
+              schema:
+                type: string
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/auth/me:
+    get:
+      operationId: getCurrentHumanPrincipal
+      summary: Get the current user's profile and effective permissions
+      description: |
+        Effective permissions are informational for client capability gating.
+        The server resolves permissions from current IAM state for each
+        authorization check; clients must not treat this response as an
+        authorization decision.
+      tags: [Authentication]
+      security:
+        - HumanAccessToken: []
+      responses:
+        '200':
+          description: Current principal.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CurrentPrincipal'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/auth/me/presence/heartbeat:
+    post:
+      operationId: renewCurrentSessionPresenceLease
+      summary: Renew the current session's presence lease
+      description: |
+        Renews the lease for the authenticated session using server time.
+        The client cannot supply a timestamp. Expired, revoked, or invalid
+        sessions cannot renew. Presence requests use the Bearer access token,
+        including for Dashboard clients; refresh cookies do not authenticate
+        this operation.
+      tags: [Authentication]
+      security:
+        - HumanAccessToken: []
+      responses:
+        '204':
+          description: Presence lease renewed.
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/auth/me/presence-preference:
+    put:
+      operationId: updateCurrentUserPresencePreference
+      summary: Update the current user's presence preference
+      description: |
+        Preference is shared across the user's sessions. It does not directly
+        set ONLINE or OFFLINE; effective presence is derived from account
+        status and live per-session leases. Heartbeats and preference changes
+        are operational availability state and do not emit Audit facts.
+      tags: [Authentication]
+      security:
+        - HumanAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePresencePreferenceRequest'
+      responses:
+        '200':
+          description: Preference updated and current effective presence returned.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PresencePreferenceResult'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/auth/change-password:
+    post:
+      operationId: changeOwnPassword
+      summary: Change the authenticated user's password
+      description: |
+        Requires the current password unless completing a server-enforced
+        first-use/reset password change. Revokes other sessions. Passwords are
+        never returned or included in audit records.
+      tags: [Authentication]
+      security:
+        - HumanAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [changed]
+                        properties:
+                          changed:
+                            type: boolean
+                            const: true
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/users:
+    post:
+      operationId: createUser
+      summary: Create a human user
+      description: |
+        Creates an account and a generated temporary password. The password is
+        returned once in this response only, is never logged or persisted in
+        plaintext, and must be changed at first login. The response must use
+        `Cache-Control: no-store`. Creation is audited atomically with the user
+        record. New accounts start in the `ACTIVE` status.
+      tags: [Users]
+      security:
+        - HumanAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created; temporary credential is returned once.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CreatedUser'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          $ref: ../baseline.yaml#/components/responses/Problem
+      x-required-permissions: [user:manage]
+
+    get:
+      operationId: listUsers
+      summary: List human users
+      description: Requires `user:read`. Uses opaque cursor pagination; unknown query parameters are rejected.
+      tags: [Users]
+      security:
+        - HumanAccessToken: []
+      parameters:
+        - $ref: ../baseline.yaml#/components/parameters/PageSize
+        - $ref: ../baseline.yaml#/components/parameters/Cursor
+      responses:
+        '200':
+          description: A page of users.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamListResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/User'
+                      pagination:
+                        $ref: ../baseline.yaml#/components/schemas/CursorPagination
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+      x-required-permissions: [user:read]
+
+  /api/v1/users/{user_id}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      operationId: getUser
+      summary: Get a user
+      tags: [Users]
+      security:
+        - HumanAccessToken: []
+      responses:
+        '200':
+          description: User details.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+      x-required-permissions: [user:read]
+
+    patch:
+      operationId: updateUserProfile
+      summary: Update allowlisted user profile fields
+      description: Role, status, permissions, and credentials cannot be changed through this operation.
+      tags: [Users]
+      security:
+        - HumanAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserProfileRequest'
+      responses:
+        '200':
+          description: Profile updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          $ref: ../baseline.yaml#/components/responses/Problem
+      x-required-permissions: [user:manage]
+
+  /api/v1/users/{user_id}/role:
+    put:
+      operationId: replaceUserRole
+      summary: Replace a user's role
+      description: |
+        Replaces the role and clears additional permissions atomically.
+        Administrators cannot change their own role. The Audit fact includes
+        the role change and complete old/new additional-permission sets under
+        `audit.fact` v2.
+      tags: [Users]
+      security:
+        - HumanAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceRoleRequest'
+      responses:
+        '200':
+          description: Role changed and additional permissions cleared.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          $ref: ../baseline.yaml#/components/responses/Problem
+      x-required-permissions: [user:grant]
+
+  /api/v1/users/{user_id}/additional-permissions:
+    put:
+      operationId: replaceAdditionalPermissions
+      summary: Replace a user's additional permissions
+      description: |
+        Accepts the complete desired additional permission set. Values must be
+        unique catalog codes and cannot duplicate the role baseline. A
+        non-admin user cannot receive `user:manage` or `user:grant`. The
+        committed set replacement is recorded as one `audit.fact` v2 change;
+        the v1 contract remains unchanged.
+      tags: [Users]
+      security:
+        - HumanAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplacePermissionsRequest'
+      responses:
+        '200':
+          description: Additional permissions replaced.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          $ref: ../baseline.yaml#/components/responses/Problem
+      x-required-permissions: [user:grant]
+
+  /api/v1/users/{user_id}/status:
+    put:
+      operationId: setUserStatus
+      summary: Enable or disable a user
+      description: |
+        This state change is audited atomically. `INACTIVE` prevents authentication and authorization and revokes active
+        sessions. Enabling a user does not restore revoked sessions. The
+        current actor cannot disable themselves, and the last active IT Admin
+        cannot be disabled.
+      tags: [Users]
+      security:
+        - HumanAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetUserStatusRequest'
+      responses:
+        '200':
+          description: User status changed.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          $ref: ../baseline.yaml#/components/responses/Problem
+      x-required-permissions: [user:manage]
+
+  /api/v1/users/{user_id}/reset-password:
+    post:
+      operationId: resetUserPassword
+      summary: Reset a user's password
+      description: |
+        Generates a one-time temporary password and returns it only in this
+        response. The user must change it before normal access. Existing
+        sessions are revoked. No notification provider is required; the
+        administrator is responsible for secure delivery. Never cache or log
+        the response or credential.
+      tags: [Users]
+      security:
+        - HumanAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Password reset; temporary credential returned once.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TemporaryCredentialResult'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          $ref: ../baseline.yaml#/components/responses/Problem
+      x-required-permissions: [user:manage]
+
+  /api/v1/users/{user_id}/revoke-sessions:
+    post:
+      operationId: revokeUserSessions
+      summary: Revoke all sessions for a user
+      tags: [Users]
+      security:
+        - HumanAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Matching active sessions were revoked.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [revoked_count]
+                        properties:
+                          revoked_count:
+                            type: integer
+                            minimum: 0
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          $ref: ../baseline.yaml#/components/responses/Problem
+      x-required-permissions: [user:manage]
+
+  /api/v1/iam/roles:
+    get:
+      operationId: listIamRoles
+      summary: List fixed system roles
+      tags: [Access Catalog]
+      security:
+        - HumanAccessToken: []
+      responses:
+        '200':
+          description: Fixed role catalog and role permission baselines.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/RoleCatalogEntry'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+      x-required-permissions: [user:read]
+
+  /api/v1/iam/permissions:
+    get:
+      operationId: listIamPermissions
+      summary: List fixed system permissions
+      tags: [Access Catalog]
+      security:
+        - HumanAccessToken: []
+      responses:
+        '200':
+          description: Fixed permission catalog. No Agent Management permissions are defined.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/IamSingleResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PermissionCatalogEntry'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+      x-required-permissions: [user:read]
+
+components:
+  securitySchemes:
+    HumanAccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Short-lived human access JWT signed with RS256. The configured issuer,
+        audience, and key material are verified by the API. Initial configurable
+        PoC lifetime is 900 seconds. Current permissions are resolved
+        server-side; the token is not authoritative for permission grants.
+    BrowserRefreshCookie:
+      type: apiKey
+      in: cookie
+      name: __Secure-arimms_refresh
+      description: Secure, HttpOnly browser refresh cookie; use only on `/auth/browser/*` routes.
+
+  parameters:
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 256
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      description: Must exactly match a configured Dashboard origin. The application layer does not assume a specific deployment topology.
+      schema:
+        type: string
+        format: uri
+
+  headers:
+    NoStore:
+      description: Prevents browser and intermediary caches from storing credentials.
+      schema:
+        type: string
+        const: no-store
+    BrowserRefreshCookie:
+      description: |
+        `__Secure-arimms_refresh`; Secure; HttpOnly; Path=/api/v1/auth/browser;
+        host-only; SameSite=Lax for same-origin or configured cross-origin,
+        same-site deployments. Cross-site use requires additional browser
+        compatibility validation; SameSite=None; Secure alone does not
+        guarantee cookie support. No Domain attribute.
+      schema:
+        type: string
+
+  schemas:
+    IamSingleResponse:
+      allOf:
+        - $ref: ../baseline.yaml#/components/schemas/SingleResponse
+        - type: object
+          required: [meta]
+          properties:
+            meta:
+              $ref: ../baseline.yaml#/components/schemas/Meta
+
+    IamListResponse:
+      allOf:
+        - $ref: ../baseline.yaml#/components/schemas/ListResponse
+        - type: object
+          required: [meta, pagination]
+          properties:
+            meta:
+              $ref: ../baseline.yaml#/components/schemas/Meta
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [identifier, password]
+      properties:
+        identifier:
+          type: string
+          minLength: 1
+          maxLength: 254
+          description: Normalized username or email address.
+        password:
+          type: string
+          minLength: 1
+          writeOnly: true
+
+    NativeRefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          minLength: 32
+          writeOnly: true
+
+    NativeTokenSet:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          access_token,
+          refresh_token,
+          token_type,
+          expires_in,
+          refresh_expires_at,
+          must_change_password,
+        ]
+      properties:
+        access_token:
+          type: string
+          description: Short-lived RS256-signed access token; send as a Bearer token. Verify issuer, audience, signature, and expiry.
+        refresh_token:
+          type: string
+          description: Opaque rotating token; store only in OS-protected secure storage. The initial configurable PoC absolute session lifetime is 604800 seconds.
+        token_type:
+          type: string
+          const: Bearer
+        expires_in:
+          type: integer
+          minimum: 1
+          description: Access token lifetime in seconds; initial configurable PoC default is 900 seconds.
+        refresh_expires_at:
+          type: string
+          format: date-time
+          description: Absolute session expiry; initial configurable PoC lifetime is 7 days.
+        must_change_password:
+          type: boolean
+
+    BrowserLoginResult:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          access_token,
+          token_type,
+          expires_in,
+          refresh_expires_at,
+          must_change_password,
+          csrf_token,
+        ]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          const: Bearer
+        expires_in:
+          type: integer
+          minimum: 1
+        refresh_expires_at:
+          type: string
+          format: date-time
+          description: Absolute session expiry; initial configurable PoC lifetime is 7 days.
+        must_change_password:
+          type: boolean
+        csrf_token:
+          type: string
+          description: Keep in memory and send as `X-CSRF-Token` on cookie-authenticated refresh/logout requests.
+
+    BrowserSessionResult:
+      type: object
+      additionalProperties: false
+      required:
+        [access_token, token_type, expires_in, refresh_expires_at, csrf_token]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          const: Bearer
+        expires_in:
+          type: integer
+          minimum: 1
+        refresh_expires_at:
+          type: string
+          format: date-time
+          description: Absolute session expiry; initial configurable PoC lifetime is 7 days.
+        csrf_token:
+          type: string
+
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [new_password]
+      properties:
+        current_password:
+          type: string
+          writeOnly: true
+          description: Required except during a forced first-use/reset password change.
+        new_password:
+          type: string
+          minLength: 12
+          writeOnly: true
+
+    CreateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [username, email, role]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        role:
+          $ref: '#/components/schemas/RoleCode'
+
+    UpdateUserProfileRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        display_name:
+          type:
+            - string
+            - 'null'
+          maxLength: 128
+
+    ReplaceRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role:
+          $ref: '#/components/schemas/RoleCode'
+
+    ReplacePermissionsRequest:
+      type: object
+      additionalProperties: false
+      required: [permissions]
+      properties:
+        permissions:
+          type: array
+          uniqueItems: true
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+
+    SetUserStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/UserStatus'
+
+    User:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          username,
+          email,
+          role,
+          additional_permissions,
+          effective_permissions,
+          status,
+          must_change_password,
+          created_at,
+          updated_at,
+        ]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type:
+            - string
+            - 'null'
+        role:
+          $ref: '#/components/schemas/RoleCode'
+        additional_permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+        effective_permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        must_change_password:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreatedUser:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          username,
+          email,
+          role,
+          additional_permissions,
+          effective_permissions,
+          status,
+          must_change_password,
+          created_at,
+          updated_at,
+          temporary_password,
+        ]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type:
+            - string
+            - 'null'
+        role:
+          $ref: '#/components/schemas/RoleCode'
+        additional_permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+        effective_permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        must_change_password:
+          type: boolean
+          const: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        temporary_password:
+          type: string
+          description: Generated one-time credential; shown once and never persisted or logged in plaintext.
+
+    TemporaryCredentialResult:
+      type: object
+      additionalProperties: false
+      required: [temporary_password, must_change_password]
+      properties:
+        temporary_password:
+          type: string
+        must_change_password:
+          type: boolean
+          const: true
+
+    CurrentPrincipal:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          user_id,
+          username,
+          email,
+          role,
+          status,
+          effective_permissions,
+          must_change_password,
+          presence_status,
+          presence_preference,
+        ]
+      properties:
+        user_id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type:
+            - string
+            - 'null'
+        role:
+          $ref: '#/components/schemas/RoleCode'
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        effective_permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+        must_change_password:
+          type: boolean
+        presence_status:
+          $ref: '#/components/schemas/UserPresenceStatus'
+        presence_preference:
+          $ref: '#/components/schemas/UserPresencePreference'
+
+    UserPresenceStatus:
+      type: string
+      enum: [ONLINE, BUSY, AWAY, OFFLINE]
+
+    UserPresencePreference:
+      type: string
+      enum: [AUTOMATIC, BUSY, AWAY]
+
+    UpdatePresencePreferenceRequest:
+      type: object
+      additionalProperties: false
+      required: [preference]
+      properties:
+        preference:
+          $ref: '#/components/schemas/UserPresencePreference'
+
+    PresencePreferenceResult:
+      type: object
+      additionalProperties: false
+      required: [presence_status, presence_preference]
+      properties:
+        presence_status:
+          $ref: '#/components/schemas/UserPresenceStatus'
+        presence_preference:
+          $ref: '#/components/schemas/UserPresencePreference'
+
+    RoleCatalogEntry:
+      type: object
+      additionalProperties: false
+      required: [code, description, permissions]
+      properties:
+        code:
+          $ref: '#/components/schemas/RoleCode'
+        description:
+          type: string
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+
+    PermissionCatalogEntry:
+      type: object
+      additionalProperties: false
+      required: [code, capability]
+      properties:
+        code:
+          $ref: '#/components/schemas/PermissionCode'
+        capability:
+          type: string
+
+    RoleCode:
+      type: string
+      enum: [IT_ADMIN, OPERATOR, TECHNICIAN]
+
+    UserStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+
+    PermissionCode:
+      type: string
+      enum:
+        - user:read
+        - user:manage
+        - user:grant
+        - asset:read
+        - asset:manage
+        - monitoring:read
+        - monitoring:manage
+        - incident:read
+        - incident:investigate
+        - incident:manage
+        - ticket:read
+        - ticket:create
+        - ticket:manage
+        - ticket:close
+        - maintenance:read
+        - maintenance:manage
+        - maintenance:execute
+        - maintenance:verify
+        - audit:read
+
+  responses:
+    RateLimited:
+      description: Rate limit exceeded; retry after the interval indicated by Retry-After.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/problem+json:
+          schema:
+            $ref: ../baseline.yaml#/components/schemas/ErrorResponse

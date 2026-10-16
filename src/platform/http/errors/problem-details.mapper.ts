@@ -87,8 +87,13 @@ const HTTP_ERROR_PRESENTATIONS = new Map<number, HttpErrorPresentation>([
   ],
 ]);
 
-/**
- * Converts application exceptions into the public Problem Details contract.
+/** Converts exceptions into the public Problem Details response shape.
+ * @param exception Exception or unknown value raised while handling a request.
+ * @param instance Request path used as the Problem Details instance.
+ * @param requestId Correlation ID generated for this request.
+ * @param isDevelopment Whether safe-to-display unexpected error messages are enabled.
+ * @returns A stable HTTP error response with mapped validation details when applicable.
+ * @example `mapExceptionToProblemDetails(error, '/api/v1/assets', requestId, false)`
  */
 export function mapExceptionToProblemDetails(
   exception: unknown,

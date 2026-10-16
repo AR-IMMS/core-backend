@@ -7,5 +7,6 @@ import { MongoDatabaseModule } from './mongodb/mongodb.module';
  */
 @Module({
   imports: [MongoDatabaseModule],
+  exports: [MongoDatabaseModule],
 })
 export class DatabaseModule {}

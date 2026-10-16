@@ -70,15 +70,15 @@ Application code depends on event contracts and ports, while MongoDB adapters im
 
 ## ⚡ Cheat Sheet
 
-| Common Task                          | Service/Port to Inject                  | Method/Usage                                                      |
-| ------------------------------------ | --------------------------------------- | ----------------------------------------------------------------- |
-| Persist a fact with producer changes | `UnitOfWorkPort` and `OutboxWriterPort` | `unitOfWork.run(async (context) => outbox.append(fact, context))` |
-| Define a consumer                    | `EventConsumerPort<TFact>`              | Implement `consumerId`, exact `subscriptions`, and `handle(fact)` |
-| Inspect registered consumers         | `EventConsumerDispatchPort`             | `registrations()`                                                 |
-| Dispatch a fact directly             | `EventConsumerDispatchPort`             | `dispatch(consumerId, fact)`; normally called by the relay        |
-| Process eligible delivery work       | `OutboxRelayService`                    | `runOnce(now?)`; schedule from the host application               |
-| Create a typed contract version      | `businessFactVersion`                   | `businessFactVersion(1)`                                          |
-| Validate shared Audit payload        | `parseAuditFactPayload`                 | `parseAuditFactPayload(payload)` before persistence               |
+| Common Task                          | Service/Port to Inject                  | Method/Usage                                                                          |
+| ------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------- |
+| Persist a fact with producer changes | `UnitOfWorkPort` and `OutboxWriterPort` | `unitOfWork.run(async (context) => outbox.append(fact, context))`                     |
+| Define a consumer                    | `EventConsumerPort<TFact>`              | Implement `consumerId`, exact `subscriptions`, and `handle(fact)`                     |
+| Inspect registered consumers         | `EventConsumerDispatchPort`             | `registrations()`                                                                     |
+| Dispatch a fact directly             | `EventConsumerDispatchPort`             | `dispatch(consumerId, fact)`; normally called by the relay                            |
+| Process eligible delivery work       | `OutboxRelayService`                    | `runOnce(now?)`; Core's `OutboxRelayScheduler` invokes it on startup and every second |
+| Create a typed contract version      | `businessFactVersion`                   | `businessFactVersion(1)`                                                              |
+| Validate shared Audit payload        | `parseAuditFactPayload`                 | `parseAuditFactPayload(payload)` before persistence                                   |
 
 ## ⚙️ Configuration Reference
 
@@ -96,7 +96,7 @@ Application code depends on event contracts and ports, while MongoDB adapters im
 ## ⚠️ Gotchas & Pitfalls
 
 - Keep domain persistence and `OutboxWriterPort.append` inside the same `UnitOfWorkPort.run` callback and pass the callback's `UnitOfWorkContext` to every participating adapter. The context is opaque; application code must not inspect or retain it.
-- A successful producer transaction only persists the fact. `OutboxRelayService.runOnce()` must be invoked repeatedly by a host scheduler or worker; `PlatformEventsModule` does not start a timer or background process.
+- A successful producer transaction persists the fact in the Outbox. The Core host's `OutboxRelayScheduler` invokes `OutboxRelayService.runOnce()` immediately after application bootstrap and every second afterward; `PlatformEventsModule` itself does not start a timer or background process. Do not add a second relay scheduler to the Core host.
 - Delivery is at least once. A consumer can commit its durable effect and fail before the outbox acknowledgement, so consumer handling must be idempotent.
 - Consumers have independent progress, and delivery for each resource is ordered by `resource.type`, `resource.id`, and `resource.sequence`. Producers must supply a monotonically increasing sequence for each resource.
 - A consumer module must both appear in `PlatformEventsModule.register({ imports })` and export the provider token listed in `consumers`. Wildcard event subscriptions are rejected.
