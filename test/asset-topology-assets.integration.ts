@@ -119,8 +119,13 @@ async function main(): Promise<void> {
       new EventConsumerRegistry([consumer]),
     );
     assert.deepEqual(await relay.runOnce(), {
-      claimed: 2,
-      delivered: 2,
+      claimed: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    assert.deepEqual(await relay.runOnce(), {
+      claimed: 1,
+      delivered: 1,
       failed: 0,
     });
     const records = await auditModel
@@ -135,9 +140,24 @@ async function main(): Promise<void> {
         ['asset_topology.asset.updated', asset.id],
       ],
     );
-    assert.equal(
-      records.every(({ actor: auditActor }) => auditActor.id === 'admin-1'),
-      true,
+    assert.deepEqual(
+      records.map(({ producer, actor: auditActor, occurredAt }) => [
+        producer,
+        auditActor,
+        occurredAt.toISOString(),
+      ]),
+      [
+        [
+          'asset-topology',
+          { type: 'user', id: 'admin-1' },
+          '2026-10-19T00:00:00.000Z',
+        ],
+        [
+          'asset-topology',
+          { type: 'user', id: 'admin-1' },
+          '2026-10-19T00:01:00.000Z',
+        ],
+      ],
     );
     const outboxFacts = (await connection
       .collection('platform_event_outbox')

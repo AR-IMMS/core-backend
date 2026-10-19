@@ -171,9 +171,9 @@ Allow Admins to register and maintain stable Node records, including before mode
 - [x] Updating descriptive data does not change Asset identity.
 - [x] Public reads expose the canonical Asset reference needed by the Dashboard and Agent Management.
 - [x] Focused tests cover registration, classification, identity stability, authorization, persistence, and API behavior.
-- [ ] Material Asset changes record actor, source, and time through the existing Audit mechanism.
+- [x] Material Asset changes record actor, source, and time through the existing Audit mechanism.
 
-**Progress:** Implemented locally. Full Jest, TypeScript, and Nest build checks pass. The Asset Audit Outbox integration test is present but remains unverified until `MONGODB_TEST_URI` is configured.
+**Progress:** Implemented and verified. The Asset Audit Outbox integration run confirms actor, producer/source, and occurrence time persist through the existing Audit consumer. The test also verifies per-Asset ordered delivery and transaction rollback.
 
 **Blocked by:** AT-00 and AT-12.
 
