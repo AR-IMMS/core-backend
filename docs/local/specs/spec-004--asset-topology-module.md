@@ -64,14 +64,14 @@ These are capability boundaries inside the module, not separate NestJS modules o
 
 | External context         | Owns                                   | Asset & Topology interaction                                                                                |
 | ------------------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Agent Management         | Agent identity and Agent–Node binding  | References Asset ID; supplies the retirement precondition through an agreed public boundary                 |
+| Agent Management         | Agent identity and Agent–Node binding  | References Asset ID; exposes binding commands and confirmed binding status through its public contract      |
 | Monitoring/Observability | Telemetry and observed health          | References Asset ID and confirmed topology                                                                  |
 | Maintenance              | Maintenance Activity state and records | Requests Asset state changes through an agreed public contract; Activity lifecycle rules are in section 5.5 |
 | Ticket Management        | Ticket assignment                      | Provides the current-assignee check required for manual maintenance-state authorization                     |
 | Incident, Inspection     | Their respective business records      | Store typed references to Asset/Rack IDs                                                                    |
 | AR Client                | Camera tracking and spatial anchors    | Scans a Rack or Node QR to resolve its canonical ID; consumes topology/placement data                       |
 
-No cross-module deep imports or direct reads/writes of another module's collections are allowed. The public-contract approach for Asset–Agent coordination is required, while its contract shape and interaction direction remain unresolved for AT-13.
+No cross-module deep imports or direct reads/writes of another module's collections are allowed. Flow-level application coordination owns operations that require both Asset & Topology and Agent Management public contracts; neither module calls the other directly. Each module remains authoritative for its own data and rules.
 
 ## 5. Domain concepts and logical data
 
@@ -254,6 +254,8 @@ Implement one NestJS module under src/modules/asset-topology/, following Modular
 
 This is a navigation proposal, not mandatory scaffolding. Add a folder only when it improves locality. Co-locate tests with code. Do not create empty contracts, ports, handlers, or generic base repositories.
 
+Cross-domain use cases that require both Asset & Topology and Agent Management contracts are coordinated at the Infrastructure Asset Management Flow application boundary. The coordinator does not own domain data or rules. Binding eligibility requires an `ACTIVE` Node with a current Asset Location; retirement requires a confirmed unbound result from Agent Management and fails closed when binding status is unavailable. This defines interaction ownership without selecting a concurrency mechanism: AT-10 must define and verify protection against concurrent bind/retire operations.
+
 ### 9.1 Layer responsibilities
 
 - **Domain:** identity, lifecycle transitions, placement/map value objects, business policies, and domain errors. No NestJS, Mongoose, HTTP, or external SDK dependency.
@@ -267,7 +269,7 @@ Potential domain roots and persistence mapping must be reviewed before implement
 ## 10. Cross-module and audit behavior
 
 - Asset & Topology is authoritative for its own IDs, topology, Rack/Node QR mappings, Asset lifecycle, and Asset Location records.
-- Agent Management is authoritative for Agent identity and Agent–Node binding. Retirement eligibility must be established through an agreed public-contract approach; the contract shape and Asset–Agent interaction direction remain unresolved for AT-13. No direct persistence access is allowed.
+- Agent Management is authoritative for Agent identity and Agent–Node binding. Its public contract supports binding commands and confirmed binding-status queries. The Flow-level application coordinator reads Asset lifecycle and current placement through the Asset & Topology contract before requesting binding; only `ACTIVE`, placed Nodes are eligible. For retirement, the coordinator confirms the Node is unbound through Agent Management before requesting retirement through Asset & Topology, and fails closed if that check is unavailable or unknown. Neither module accesses the other's persistence or directly calls the other.
 - Monitoring/Observability owns telemetry and observed health; Asset & Topology supplies stable IDs and confirmed topology.
 - Maintenance owns its Activities and requests Asset state changes through an agreed public contract; Ticket Management owns assignment and provides the current-assignee check for manual maintenance authorization.
 - Incident, Inspection, and AR clients reference IDs and use public queries/contracts as required.
@@ -276,7 +278,9 @@ Potential domain roots and persistence mapping must be reviewed before implement
 - The initial Asset query returns `id`, `name`, `assetTypeId`, `lifecycleState`, and `currentPlacement` (`null` or `{ rackId, uPosition }`). The Dashboard uses these fields for Asset inventory/detail and place/move/unmap workflows (Flow 1 use cases 9.1–9.3); `currentPlacement` is the sole placement indicator.
 - The initial Rack query returns `id`, `uCapacity`, and `currentLocation` (`null` or `{ roomId, xMm, yMm, widthMm, depthMm, rotation }`). The Dashboard uses these fields to select a canonical Rack, present U positions, and render its confirmed Room-map footprint (use cases 9.1–9.2). Coordinates use the lower-left anchor of the unrotated footprint.
 - The initial Room-map query returns `id`, `widthMm`, `depthMm`, and `gridSnapMm`, which the Dashboard uses to render the Room map and its placement grid (use cases 9.1–9.2). Fields are added only with a confirmed consumer use case; these query results do not currently include Site/Data Center IDs, model/serial metadata, QR mappings, Agent binding, or health.
-- Maintenance requests a target Asset state through `requestMaintenanceStateChange`; the Asset & Topology use case validates Asset-owned lifecycle rules. AT-13/AT-05 must settle how the application confirms that no other Activity remains in `EXECUTE` before a request returns an Asset to `ACTIVE`. This spec does not choose a coordinator, event, or query direction for that check.
+- Maintenance requests a target Asset state through `requestMaintenanceStateChange`; the Asset & Topology use case validates Asset-owned lifecycle rules. Maintenance remains authoritative for Activity state and must confirm no other Activity remains in `EXECUTE` before requesting `ACTIVE`; if that confirmation is unavailable, the transition is not successful. AT-05 must define retry/idempotency and consistency behavior when the Asset state command cannot be completed during an Activity transition.
+- Ticket Management remains authoritative for assignment and exposes a current-assignee check evaluated at action time. If the check is unavailable, a non-Admin manual maintenance-state change is rejected.
+- AT-13 interaction and failure requirements are tracked in [issue #37](https://github.com/AR-IMMS/core-backend/issues/37); the consuming Asset & Topology implementation tickets are [AT-05 / issue #42](https://github.com/AR-IMMS/core-backend/issues/42) and [AT-10 / issue #47](https://github.com/AR-IMMS/core-backend/issues/47). The repository and approved ticket material contain no separate owning-domain contract issues or accountable owners for Maintenance, Ticket Management, or Agent Management. Keep those missing agreements tracked in AT-13 until the owning teams and owners are identified; then link or create their issues.
 - Publish integration events only for a real downstream consumer. Do not introduce a generic event bus or event catalog solely for this module.
 
 ## 11. Validation, failure, and concurrency
