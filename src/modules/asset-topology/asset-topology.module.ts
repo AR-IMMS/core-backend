@@ -34,6 +34,11 @@ import {
 import { ASSET_TOPOLOGY_ASSET_QUERIES_PORT } from './contracts';
 import { AssetReadController } from './presentation/assets/asset-read.controller';
 import { AssetWriteController } from './presentation/assets/asset-write.controller';
+import { randomUUID } from 'node:crypto';
+import {
+  ASSET_CLOCK,
+  ASSET_ID_GENERATOR,
+} from './application/assets/asset-runtime.token';
 
 /** Asset & Topology's Dashboard API and owned persistence adapters. */
 @Module({
@@ -55,6 +60,8 @@ import { AssetWriteController } from './presentation/assets/asset-write.controll
     MongoAssetStore,
     { provide: ASSET_STORE, useExisting: MongoAssetStore },
     { provide: ASSET_CATALOG_STORE, useExisting: MongoAssetStore },
+    { provide: ASSET_CLOCK, useValue: () => new Date() },
+    { provide: ASSET_ID_GENERATOR, useValue: randomUUID },
     RegisterAssetUseCase,
     UpdateAssetUseCase,
     GetAssetUseCase,

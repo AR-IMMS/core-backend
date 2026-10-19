@@ -14,6 +14,7 @@ import type { AssetModelReference } from '../../domain/asset/asset';
 import type { AssetCatalogStorePort } from './asset-catalog.port';
 import type { AssetStorePort } from './asset-store.port';
 import { ASSET_CATALOG_STORE, ASSET_STORE } from './asset-store.token';
+import { ASSET_CLOCK, ASSET_ID_GENERATOR } from './asset-runtime.token';
 
 export interface AssetActor {
   readonly type: string;
@@ -44,7 +45,8 @@ export class RegisterAssetUseCase {
     private readonly catalog: AssetCatalogStorePort,
     @Inject(UNIT_OF_WORK_PORT) private readonly unitOfWork: UnitOfWorkPort,
     @Inject(OUTBOX_WRITER_PORT) private readonly outbox: OutboxWriterPort,
-    private readonly now: () => Date = () => new Date(),
+    @Inject(ASSET_CLOCK) private readonly now: () => Date = () => new Date(),
+    @Inject(ASSET_ID_GENERATOR)
     private readonly generateId: () => string = randomUUID,
   ) {}
 

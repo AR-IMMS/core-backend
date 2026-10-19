@@ -16,6 +16,7 @@ import type { AssetStorePort } from './asset-store.port';
 import type { AssetActor } from './asset-registration.use-case';
 import { AssetReferenceNotFoundError } from './asset-registration.use-case';
 import { ASSET_CATALOG_STORE, ASSET_STORE } from './asset-store.token';
+import { ASSET_CLOCK, ASSET_ID_GENERATOR } from './asset-runtime.token';
 
 export interface UpdateAssetInput {
   readonly name?: string;
@@ -31,7 +32,8 @@ export class UpdateAssetUseCase {
     private readonly catalog: AssetCatalogStorePort,
     @Inject(UNIT_OF_WORK_PORT) private readonly unitOfWork: UnitOfWorkPort,
     @Inject(OUTBOX_WRITER_PORT) private readonly outbox: OutboxWriterPort,
-    private readonly now: () => Date = () => new Date(),
+    @Inject(ASSET_CLOCK) private readonly now: () => Date = () => new Date(),
+    @Inject(ASSET_ID_GENERATOR)
     private readonly generateId: () => string = randomUUID,
   ) {}
 
