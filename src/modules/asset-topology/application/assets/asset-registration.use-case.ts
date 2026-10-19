@@ -31,7 +31,7 @@ export interface RegisterAssetInput {
   readonly serialNumber?: string;
 }
 export class AssetReferenceNotFoundError extends Error {
-  constructor(resource: 'Asset' | 'Asset Type' | 'Asset Model') {
+  constructor(resource: 'Asset' | 'Asset Type' | 'Asset Model' | 'Rack') {
     super(`${resource} was not found`);
     this.name = 'AssetReferenceNotFoundError';
   }

@@ -13,9 +13,11 @@ describe('AssetReadController', () => {
       }),
     };
     const list = {
-      execute: jest
-        .fn()
-        .mockResolvedValue({ assets: [], nextCursorAssetId: 'asset-2' }),
+      execute: jest.fn().mockResolvedValue({
+        assets: [],
+        currentPlacements: new Map(),
+        nextCursorAssetId: 'asset-2',
+      }),
     };
     const controller = new AssetReadController(get as never, list as never);
 
@@ -39,5 +41,32 @@ describe('AssetReadController', () => {
     await expect(controller.list({ filter: 'node' })).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+
+  it('returns Asset placement history using the REST field names', async () => {
+    const controller = new AssetReadController(
+      {
+        getAssetPlacementHistory: jest.fn().mockResolvedValue([
+          {
+            rackId: 'rack-1',
+            uPosition: 8,
+            validFrom: '2026-10-20T00:00:00.000Z',
+            validTo: null,
+          },
+        ]),
+      } as never,
+      { execute: jest.fn() } as never,
+    );
+
+    await expect(
+      controller.placementHistory({ asset_id: 'asset-1' }),
+    ).resolves.toEqual([
+      {
+        rack_id: 'rack-1',
+        u_position: 8,
+        valid_from: '2026-10-20T00:00:00.000Z',
+        valid_to: null,
+      },
+    ]);
   });
 });

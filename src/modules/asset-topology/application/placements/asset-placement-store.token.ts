@@ -1,0 +1,1 @@
+export const ASSET_PLACEMENT_STORE = Symbol('ASSET_PLACEMENT_STORE');

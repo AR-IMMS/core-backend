@@ -67,12 +67,17 @@ export class AssetReadController {
       pageSize: query.page_size,
       afterAssetId,
     });
-    return createPaginatedResult(page.assets.map(serializeAsset), {
-      type: 'cursor',
-      next_cursor: page.nextCursorAssetId
-        ? encodeAssetCursor(page.nextCursorAssetId)
-        : null,
-    });
+    return createPaginatedResult(
+      page.assets.map((asset) =>
+        serializeAsset(asset, page.currentPlacements.get(asset.id) ?? null),
+      ),
+      {
+        type: 'cursor',
+        next_cursor: page.nextCursorAssetId
+          ? encodeAssetCursor(page.nextCursorAssetId)
+          : null,
+      },
+    );
   }
 
   @Get(':asset_id')
@@ -96,12 +101,46 @@ export class AssetReadController {
       name: asset.name,
       asset_type_id: asset.assetTypeId,
       lifecycle_state: asset.lifecycleState,
-      current_placement: asset.currentPlacement,
+      current_placement: asset.currentPlacement
+        ? {
+            rack_id: asset.currentPlacement.rackId,
+            u_position: asset.currentPlacement.uPosition,
+          }
+        : null,
     };
+  }
+
+  @Get(':asset_id/placement-history')
+  @RequirePermissions('asset:read')
+  @ApiOperation({ summary: 'List historical Asset placements' })
+  @ApiOkResponse({ description: 'Time-bounded Asset Location history.' })
+  @ApiNotFoundResponse({ description: 'Asset was not found.' })
+  async placementHistory(@Param() rawParams: unknown) {
+    const params = parseAssetRequest(
+      assetParamsSchema,
+      rawParams,
+      'Invalid Asset ID',
+    );
+    const history = await this.getAsset.getAssetPlacementHistory(
+      params.asset_id as never,
+    );
+    if (!history) throw new NotFoundException('Asset was not found');
+    return history.map((item) => ({
+      rack_id: item.rackId,
+      u_position: item.uPosition,
+      valid_from: item.validFrom,
+      valid_to: item.validTo,
+    }));
   }
 }
 
-function serializeAsset(asset: Asset) {
+function serializeAsset(
+  asset: Asset,
+  currentPlacement: {
+    readonly rackId: string;
+    readonly uPosition: number;
+  } | null,
+) {
   return {
     id: asset.id,
     name: asset.name,
@@ -109,7 +148,12 @@ function serializeAsset(asset: Asset) {
     model_id: asset.assetModelId ?? null,
     manufacturer_serial_number: asset.serialNumber ?? null,
     lifecycle_state: asset.lifecycleState,
-    current_placement: null,
+    current_placement: currentPlacement
+      ? {
+          rack_id: currentPlacement.rackId,
+          u_position: currentPlacement.uPosition,
+        }
+      : null,
   };
 }
 

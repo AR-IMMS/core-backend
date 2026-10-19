@@ -1,9 +1,17 @@
 import { DomainError } from '../../shared/domain-error';
+import { Asset } from '../../asset/asset';
 import { Rack } from '../../topology/rack';
 import { AssetPlacement, StartAssetPlacementProps } from '.././asset-placement';
 import { AssetPlacementPolicy } from '.././asset-placement-policy';
 
 describe('AssetPlacementPolicy', () => {
+  const asset = (lifecycleState: 'ACTIVE' | 'MAINTENANCE' | 'RETIRED') =>
+    Asset.restore({
+      id: 'asset-1',
+      name: 'Node 01',
+      assetTypeId: 'node',
+      lifecycleState,
+    });
   const start = (overrides: Partial<StartAssetPlacementProps> = {}) => ({
     id: 'placement-new',
     assetId: 'asset-1',
@@ -16,6 +24,21 @@ describe('AssetPlacementPolicy', () => {
     Rack.create({ id, uCapacity });
   const placement = (props: Partial<StartAssetPlacementProps> = {}) =>
     AssetPlacement.start(start(props));
+
+  it.each(['ACTIVE', 'MAINTENANCE'] as const)(
+    'allows placement changes for %s Assets',
+    (lifecycleState) => {
+      expect(() =>
+        AssetPlacementPolicy.assertAssetEligible(asset(lifecycleState)),
+      ).not.toThrow();
+    },
+  );
+
+  it('rejects placement changes for retired Assets', () => {
+    expect(() =>
+      AssetPlacementPolicy.assertAssetEligible(asset('RETIRED')),
+    ).toThrow(DomainError);
+  });
 
   it('places an unassigned Asset in a valid available Rack U', () => {
     const placed = AssetPlacementPolicy.place(start(), [], [rack()]);

@@ -46,6 +46,14 @@ import {
 } from './contracts';
 import { AssetReadController } from './presentation/assets/asset-read.controller';
 import { AssetWriteController } from './presentation/assets/asset-write.controller';
+import { AssetPlacementController } from './presentation/assets/asset-placement.controller';
+import {
+  ASSET_TOPOLOGY_ASSET_LOCATION_MODEL,
+  AssetLocationSchema,
+} from './infrastructure/mongodb/asset-placement.schema';
+import { ASSET_PLACEMENT_STORE } from './application/placements/asset-placement-store.token';
+import { MongoAssetPlacementStore } from './infrastructure/mongodb/mongo-asset-placement.store';
+import { AssetPlacementManagementUseCases } from './application/placements/asset-placement-management.use-case';
 import { randomUUID } from 'node:crypto';
 import {
   ASSET_CLOCK,
@@ -67,6 +75,10 @@ import {
       { name: ASSET_TYPE_MODEL, schema: AssetTypeSchema },
       { name: ASSET_MODEL_MODEL, schema: AssetModelSchema },
       { name: ASSET_MODEL, schema: AssetSchema },
+      {
+        name: ASSET_TOPOLOGY_ASSET_LOCATION_MODEL,
+        schema: AssetLocationSchema,
+      },
     ]),
   ],
   controllers: [
@@ -74,6 +86,7 @@ import {
     RackController,
     AssetReadController,
     AssetWriteController,
+    AssetPlacementController,
   ],
   providers: [
     MongoTopologyStore,
@@ -84,12 +97,15 @@ import {
     RackManagementUseCases,
     RackQueryUseCase,
     MongoAssetStore,
+    MongoAssetPlacementStore,
+    { provide: ASSET_PLACEMENT_STORE, useExisting: MongoAssetPlacementStore },
     { provide: ASSET_STORE, useExisting: MongoAssetStore },
     { provide: ASSET_CATALOG_STORE, useExisting: MongoAssetStore },
     { provide: ASSET_CLOCK, useValue: () => new Date() },
     { provide: ASSET_ID_GENERATOR, useValue: randomUUID },
     RegisterAssetUseCase,
     UpdateAssetUseCase,
+    AssetPlacementManagementUseCases,
     GetAssetUseCase,
     {
       provide: ASSET_TOPOLOGY_ASSET_QUERIES_PORT,

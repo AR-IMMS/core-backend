@@ -24,21 +24,16 @@ import {
   AssetReferenceNotFoundError,
   RegisterAssetUseCase,
 } from '../../application/assets/asset-registration.use-case';
-import type { AssetActor } from '../../application/assets/asset-registration.use-case';
 import { UpdateAssetUseCase } from '../../application/assets/asset-update.use-case';
-import { RequirePermissions, type RoleCode } from '@modules/iam';
+import { GetAssetUseCase } from '../../application/assets/asset-query.use-case';
+import { RequirePermissions } from '@modules/iam';
 import {
   assetParamsSchema,
   parseAssetRequest,
   registerAssetSchema,
   updateAssetSchema,
 } from './asset-registry.schemas';
-
-interface AssetHttpRequest {
-  readonly user: { readonly userId: string; readonly role: RoleCode };
-  readonly id?: string;
-  readonly requestId?: string;
-}
+import { requireAssetAdmin, type AssetHttpRequest } from './asset-http-support';
 
 @ApiTags('Asset Registry')
 @ApiBearerAuth('HumanAccessToken')
@@ -48,6 +43,7 @@ export class AssetWriteController {
   constructor(
     private readonly registerAsset: RegisterAssetUseCase,
     private readonly updateAsset: UpdateAssetUseCase,
+    private readonly getAsset: GetAssetUseCase,
   ) {}
 
   @Post()
@@ -57,7 +53,7 @@ export class AssetWriteController {
   @ApiBadRequestResponse({ description: 'The Asset request is invalid.' })
   create(@Req() request: AssetHttpRequest, @Body() rawBody: unknown) {
     return this.execute(async () => {
-      const actor = requireAdmin(request);
+      const actor = requireAssetAdmin(request);
       const input = parseAssetRequest(
         registerAssetSchema,
         rawBody,
@@ -72,7 +68,7 @@ export class AssetWriteController {
         },
         actor,
       );
-      return serializeAsset(asset);
+      return serializeAsset(asset, null);
     });
   }
 
@@ -88,7 +84,7 @@ export class AssetWriteController {
     @Body() rawBody: unknown,
   ) {
     return this.execute(async () => {
-      const actor = requireAdmin(request);
+      const actor = requireAssetAdmin(request);
       const params = parseAssetRequest(
         assetParamsSchema,
         rawParams,
@@ -112,7 +108,8 @@ export class AssetWriteController {
         },
         actor,
       );
-      return serializeAsset(asset);
+      const reference = await this.getAsset.execute(params.asset_id as never);
+      return serializeAsset(asset, reference?.currentPlacement ?? null);
     });
   }
 
@@ -130,17 +127,13 @@ export class AssetWriteController {
   }
 }
 
-function requireAdmin(request: AssetHttpRequest): AssetActor {
-  if (request.user.role !== 'IT_ADMIN')
-    throw new ForbiddenException('Only IT Admins can manage Assets.');
-  return {
-    type: 'user',
-    id: request.user.userId,
-    context: request.requestId ? { request_id: request.requestId } : undefined,
-  };
-}
-
-function serializeAsset(asset: import('../../domain/asset/asset').Asset) {
+function serializeAsset(
+  asset: import('../../domain/asset/asset').Asset,
+  currentPlacement: {
+    readonly rackId: string;
+    readonly uPosition: number;
+  } | null,
+) {
   return {
     id: asset.id,
     name: asset.name,
@@ -148,6 +141,11 @@ function serializeAsset(asset: import('../../domain/asset/asset').Asset) {
     model_id: asset.assetModelId ?? null,
     manufacturer_serial_number: asset.serialNumber ?? null,
     lifecycle_state: asset.lifecycleState,
-    current_placement: null,
+    current_placement: currentPlacement
+      ? {
+          rack_id: currentPlacement.rackId,
+          u_position: currentPlacement.uPosition,
+        }
+      : null,
   };
 }

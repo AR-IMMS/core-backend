@@ -3,6 +3,7 @@ export { ASSET_TOPOLOGY_ASSET_QUERIES_PORT } from './asset-topology.contract.tok
 export { ASSET_TOPOLOGY_RACK_QUERIES_PORT } from './asset-topology.contract.token';
 export type {
   AssetCurrentPlacement,
+  AssetPlacementHistoryEntry,
   AssetId,
   AssetLifecycleState,
   AssetReference,

@@ -1,4 +1,5 @@
 import { DomainError } from '../shared/domain-error';
+import type { Asset } from '../asset/asset';
 import { Rack } from '../topology/rack';
 import { AssetPlacement, StartAssetPlacementProps } from './asset-placement';
 
@@ -10,6 +11,7 @@ export const AssetPlacementPolicyErrorCode = {
   ACTIVE_PLACEMENT_REQUIRED: 'ACTIVE_PLACEMENT_REQUIRED',
   ACTIVE_PLACEMENT_MISMATCH: 'ACTIVE_PLACEMENT_MISMATCH',
   DESTINATION_ASSET_MISMATCH: 'PLACEMENT_DESTINATION_ASSET_MISMATCH',
+  ASSET_NOT_ELIGIBLE: 'PLACEMENT_ASSET_NOT_ELIGIBLE',
 } as const;
 
 export interface MoveAssetPlacementResult {
@@ -19,6 +21,16 @@ export interface MoveAssetPlacementResult {
 
 /** Coordinates Asset placement operations against supplied domain state. */
 export class AssetPlacementPolicy {
+  /** Placement is independent of ACTIVE/MAINTENANCE state but retired Assets are terminal. */
+  static assertAssetEligible(asset: Asset): void {
+    if (asset.lifecycleState === 'RETIRED') {
+      throw new DomainError(
+        AssetPlacementPolicyErrorCode.ASSET_NOT_ELIGIBLE,
+        'A retired Asset cannot be placed or have its placement changed',
+      );
+    }
+  }
+
   /** Places an unassigned Asset into a valid, unoccupied Rack U. */
   static place(
     props: StartAssetPlacementProps,

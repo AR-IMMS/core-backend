@@ -26,6 +26,12 @@ export interface AssetCurrentPlacement {
   readonly uPosition: number;
 }
 
+/** Time-bounded historical Asset Location interval. */
+export interface AssetPlacementHistoryEntry extends AssetCurrentPlacement {
+  readonly validFrom: string;
+  readonly validTo: string | null;
+}
+
 /** Minimal canonical Asset reference for registry and placement consumers. */
 export interface AssetReference {
   readonly id: AssetId;
@@ -38,6 +44,9 @@ export interface AssetReference {
 /** Independently provided Asset lookup for consumers that do not need topology. */
 export interface AssetTopologyAssetQueries {
   getAsset(assetId: AssetId): Promise<AssetReference | null>;
+  getAssetPlacementHistory(
+    assetId: AssetId,
+  ): Promise<readonly AssetPlacementHistoryEntry[] | null>;
 }
 
 /** Current Room-map location of a Rack, or `null` when it has no location. */

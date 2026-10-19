@@ -122,6 +122,8 @@ No cross-module deep imports or direct reads/writes of another module's collecti
 
 - A Rack has declared u_capacity and one Rack Unit record per U position, numbered from the bottom.
 - An Asset may be unassigned or have one active placement.
+- `ACTIVE` and `MAINTENANCE` Assets may be placed, moved, or unmapped; placement does not change lifecycle state or Agent binding. `RETIRED` Assets cannot be placed or have placement changed.
+- Assign, move, and unmap are explicit operations recorded through Asset Location. Repeating a move to the current Rack U is a no-op and creates no history interval or Audit Fact.
 - One Asset Location references exactly one Rack Unit in v1; each managed Asset occupies 1U.
 - An occupied U cannot belong to another active Asset Location.
 - Moving or unmapping closes the current Asset Location and preserves its history. Unmapping does not delete or retire the Asset.
@@ -277,6 +279,7 @@ Potential domain roots and persistence mapping must be reviewed before implement
 - Reuse the existing Audit/platform mechanism for actor/source/time/material-change traceability. Do not add a separate audit repository or store.
 - The public Asset & Topology application contract exposes canonical IDs and confirmed topology/placement needed by authorized consumers, plus a validated command for requesting Asset maintenance-state changes. It does not expose domain internals or persistence models.
 - The initial Asset query returns `id`, `name`, `assetTypeId`, `lifecycleState`, and `currentPlacement` (`null` or `{ rackId, uPosition }`). The Dashboard uses these fields for Asset inventory/detail and place/move/unmap workflows (Flow 1 use cases 9.1–9.3); `currentPlacement` is the sole placement indicator.
+- The Asset query also exposes placement history as ordered Asset Location intervals containing Rack ID, U position, `validFrom`, and `validTo`; unassigned Assets return an empty history list.
 - The Rack and Room-map queries are exposed through a dedicated read-only Rack/Room-map port. Rack reads return canonical ID, U capacity, row/position labels, and current location (`{ roomId, column, row, rotation }`); Rack location history is queryable as ordered, time-bounded intervals. Room-map reads return `id`, `widthMm`, `depthMm`, `gridSnapMm`, complete-cell counts, and confirmed active Rack placements. The existing Asset query provider remains independently available; the broader consumer port remains unbound until its remaining queries are implemented. These results do not include model/serial metadata, QR mappings, Agent binding, or health.
 - Maintenance requests a target Asset state through `requestMaintenanceStateChange`; the Asset & Topology use case validates Asset-owned lifecycle rules. Maintenance remains authoritative for Activity state and must confirm no other Activity remains in `EXECUTE` before requesting `ACTIVE`; if that confirmation is unavailable, the transition is not successful. AT-05 must define retry/idempotency and consistency behavior when the Asset state command cannot be completed during an Activity transition.
 - Ticket Management remains authoritative for assignment and exposes a current-assignee check evaluated at action time. If the check is unavailable, a non-Admin manual maintenance-state change is rejected.
@@ -287,7 +290,7 @@ Potential domain roots and persistence mapping must be reviewed before implement
 
 Expected failures include missing parent location, duplicate active QR, unknown Asset Type/Model, Type–Model mismatch, missing Asset Name, invalid Room dimensions, unsupported snap/rotation, Rack out of bounds, Rack overlap, insufficient Rack capacity, occupied U, invalid status transition, non-empty Rack retirement, and linked-Agent retirement.
 
-Application use cases must preserve prior valid state when a move or update fails. Concurrent placement requests must not allocate the same active Rack Unit. Enforce this with an atomic persistence strategy/constraint appropriate to the selected MongoDB model, not only a UI pre-check.
+Application use cases must preserve prior valid state when a move or update fails. Concurrent placement requests must not allocate the same active Rack Unit or create multiple active locations for one Asset. Enforce this with partial unique MongoDB indexes on active Asset ID and Rack/U, in addition to use-case validation, not only a UI pre-check.
 
 ## 12. Security and audit requirements
 

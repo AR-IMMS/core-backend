@@ -126,6 +126,94 @@ paths:
         '404':
           $ref: ../baseline.yaml#/components/responses/Problem
 
+  /api/v1/asset-topology/assets/{asset_id}/placement:
+    parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    post:
+      operationId: placeAsset
+      summary: Place an unassigned Asset in a Rack U
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssetPlacementRequest' }
+      responses:
+        '201':
+          description: Asset placement created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetPlacementResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+    patch:
+      operationId: moveAsset
+      summary: Move a placed Asset to another Rack U
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssetPlacementRequest' }
+      responses:
+        '200':
+          description: Asset placement moved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetPlacementResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+    delete:
+      operationId: unmapAsset
+      summary: Unmap an Asset and retain its placement history
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '204': { description: Asset unmapped. }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/assets/{asset_id}/placement-history:
+    parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    get:
+      operationId: getAssetPlacementHistory
+      summary: List historical Asset Location intervals
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Historical Asset placement intervals.
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/AssetPlacementHistoryResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
   /api/v1/asset-topology/data-centers/{data_center_id}/sites:
     parameters:
       - $ref: '#/components/parameters/DataCenterId'
@@ -525,7 +613,10 @@ components:
         model_id: { type: [string, 'null'] }
         manufacturer_serial_number: { type: [string, 'null'] }
         lifecycle_state: { type: string, enum: [ACTIVE, MAINTENANCE, RETIRED] }
-        current_placement: { type: [object, 'null'] }
+        current_placement:
+          oneOf:
+            - $ref: '#/components/schemas/CurrentAssetPlacement'
+            - type: 'null'
     AssetReference:
       type: object
       required: [id, name, asset_type_id, lifecycle_state, current_placement]
@@ -534,7 +625,10 @@ components:
         name: { type: string }
         asset_type_id: { type: string }
         lifecycle_state: { type: string, enum: [ACTIVE, MAINTENANCE, RETIRED] }
-        current_placement: { type: [object, 'null'] }
+        current_placement:
+          oneOf:
+            - $ref: '#/components/schemas/CurrentAssetPlacement'
+            - type: 'null'
     RegisterAssetRequest:
       type: object
       additionalProperties: false
@@ -564,6 +658,34 @@ components:
             description: Blank values clear the serial number.,
           }
   schemas:
+    CurrentAssetPlacement:
+      type: object
+      required: [rack_id, u_position]
+      properties:
+        rack_id: { type: string }
+        u_position: { type: integer, minimum: 1 }
+    AssetPlacementRequest:
+      type: object
+      additionalProperties: false
+      required: [rack_id, u_position]
+      properties:
+        rack_id: { type: string, minLength: 1, maxLength: 128 }
+        u_position: { type: integer, minimum: 1 }
+    AssetPlacement:
+      type: object
+      required: [asset_id, rack_id, u_position]
+      properties:
+        asset_id: { type: string }
+        rack_id: { type: string }
+        u_position: { type: integer, minimum: 1 }
+    AssetPlacementHistoryEntry:
+      allOf:
+        - $ref: '#/components/schemas/AssetPlacement'
+        - type: object
+          required: [valid_from, valid_to]
+          properties:
+            valid_from: { type: string, format: date-time }
+            valid_to: { type: [string, 'null'], format: date-time }
     CreateRackRequest:
       type: object
       additionalProperties: false
@@ -750,6 +872,20 @@ components:
         - type: object
           properties:
             data: { $ref: '#/components/schemas/AssetReference' }
+    AssetPlacementResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/AssetPlacement' }
+    AssetPlacementHistoryResponse:
+      allOf:
+        - $ref: '#/components/schemas/ListResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/AssetPlacementHistoryEntry' }
     AssetPageResponse:
       type: object
       required: [data, pagination]
