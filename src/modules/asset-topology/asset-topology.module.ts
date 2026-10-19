@@ -12,6 +12,28 @@ import {
   TopologySiteSchema,
 } from './infrastructure/mongodb/topology.schema';
 import { TopologyController } from './presentation/topology.controller';
+import {
+  ASSET_CATALOG_STORE,
+  ASSET_STORE,
+} from './application/assets/asset-store.token';
+import { MongoAssetStore } from './infrastructure/mongodb/mongo-asset.store';
+import {
+  ASSET_MODEL,
+  ASSET_MODEL_MODEL,
+  ASSET_TYPE_MODEL,
+  AssetModelSchema,
+  AssetSchema,
+  AssetTypeSchema,
+} from './infrastructure/mongodb/asset.schema';
+import { RegisterAssetUseCase } from './application/assets/asset-registration.use-case';
+import { UpdateAssetUseCase } from './application/assets/asset-update.use-case';
+import {
+  GetAssetUseCase,
+  ListAssetsUseCase,
+} from './application/assets/asset-query.use-case';
+import { ASSET_TOPOLOGY_ASSET_QUERIES_PORT } from './contracts';
+import { AssetReadController } from './presentation/assets/asset-read.controller';
+import { AssetWriteController } from './presentation/assets/asset-write.controller';
 
 /** Asset & Topology's Dashboard API and owned persistence adapters. */
 @Module({
@@ -20,17 +42,30 @@ import { TopologyController } from './presentation/topology.controller';
       { name: TOPOLOGY_DATA_CENTER_MODEL, schema: TopologyDataCenterSchema },
       { name: TOPOLOGY_SITE_MODEL, schema: TopologySiteSchema },
       { name: TOPOLOGY_ROOM_MODEL, schema: TopologyRoomSchema },
+      { name: ASSET_TYPE_MODEL, schema: AssetTypeSchema },
+      { name: ASSET_MODEL_MODEL, schema: AssetModelSchema },
+      { name: ASSET_MODEL, schema: AssetSchema },
     ]),
   ],
-  controllers: [TopologyController],
+  controllers: [TopologyController, AssetReadController, AssetWriteController],
   providers: [
     MongoTopologyStore,
     { provide: TOPOLOGY_STORE, useExisting: MongoTopologyStore },
     TopologyUseCases,
+    MongoAssetStore,
+    { provide: ASSET_STORE, useExisting: MongoAssetStore },
+    { provide: ASSET_CATALOG_STORE, useExisting: MongoAssetStore },
+    RegisterAssetUseCase,
+    UpdateAssetUseCase,
+    GetAssetUseCase,
+    {
+      provide: ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
+      useExisting: GetAssetUseCase,
+    },
+    ListAssetsUseCase,
   ],
 })
 export class AssetTopologyModule {}
 
-// AssetTopologyConsumerContract intentionally has no provider yet. Register a
-// complete provider only after the Asset and Rack query implementations exist;
-// Dashboard REST/OpenAPI remains a separate presentation contract.
+// The focused Asset query is available independently. The broad consumer
+// contract remains unbound until Rack and Room-map query providers are ready.

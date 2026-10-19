@@ -9,6 +9,102 @@ info:
     update operation. Parent references are chosen at creation and are immutable.
 
 paths:
+  /api/v1/asset-topology/assets:
+    get:
+      operationId: listAssets
+      summary: List Assets by canonical ID
+      description: Lists Assets in stable Asset ID order. AT-03 has no filters.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque cursor returned by the previous page.
+          schema: { type: string, minLength: 1 }
+        - name: page_size
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Cursor-paginated Asset list.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetPageResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+    post:
+      operationId: registerAsset
+      summary: Register a physical Asset
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterAssetRequest' }
+      responses:
+        '201':
+          description: Asset registered ACTIVE and unassigned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/assets/{asset_id}:
+    parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    get:
+      operationId: getAsset
+      summary: Retrieve an Asset by canonical ID
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Canonical Asset reference with current placement.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetReferenceResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+    patch:
+      operationId: updateAsset
+      summary: Update Asset descriptive information
+      description: Asset Type is immutable. Omitted fields remain unchanged; explicit null clears Model or serial number.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAssetRequest' }
+      responses:
+        '200':
+          description: Asset updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
   /api/v1/asset-topology/data-centers/default:
     get:
       operationId: getDefaultDataCenter
@@ -267,6 +363,63 @@ components:
         type: string
         minLength: 1
         maxLength: 128
+    Asset:
+      type: object
+      required:
+        [
+          id,
+          name,
+          asset_type_id,
+          model_id,
+          manufacturer_serial_number,
+          lifecycle_state,
+          current_placement,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        asset_type_id: { type: string }
+        model_id: { type: [string, 'null'] }
+        manufacturer_serial_number: { type: [string, 'null'] }
+        lifecycle_state: { type: string, enum: [ACTIVE, MAINTENANCE, RETIRED] }
+        current_placement: { type: [object, 'null'] }
+    AssetReference:
+      type: object
+      required: [id, name, asset_type_id, lifecycle_state, current_placement]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        asset_type_id: { type: string }
+        lifecycle_state: { type: string, enum: [ACTIVE, MAINTENANCE, RETIRED] }
+        current_placement: { type: [object, 'null'] }
+    RegisterAssetRequest:
+      type: object
+      additionalProperties: false
+      required: [name, asset_type_id]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        asset_type_id: { type: string }
+        model_id: { type: string }
+        manufacturer_serial_number:
+          {
+            type: string,
+            maxLength: 128,
+            description: Blank values are normalized to absent.,
+          }
+    UpdateAssetRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        model_id: { type: string, nullable: true }
+        manufacturer_serial_number:
+          {
+            type: string,
+            maxLength: 128,
+            nullable: true,
+            description: Blank values clear the serial number.,
+          }
   schemas:
     Meta:
       type: object
@@ -363,3 +516,29 @@ components:
             data:
               type: array
               items: { $ref: '#/components/schemas/Room' }
+    AssetResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Asset' }
+    AssetReferenceResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/AssetReference' }
+    AssetPageResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Asset' }
+        pagination:
+          type: object
+          required: [type, next_cursor]
+          properties:
+            type: { type: string, const: cursor }
+            next_cursor: { type: [string, 'null'] }
+        meta: { $ref: '#/components/schemas/Meta' }

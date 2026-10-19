@@ -11,6 +11,14 @@ export const AssetErrorCode = {
   MODEL_TYPE_MISMATCH: 'ASSET_MODEL_TYPE_MISMATCH',
 } as const;
 
+export type AssetLifecycleState = 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
+
+export interface UpdateAssetDescriptionProps {
+  readonly name?: string;
+  readonly model?: AssetModelReference | null;
+  readonly serialNumber?: string | null;
+}
+
 /**
  * Reference to an Asset Type.
  */
@@ -37,6 +45,15 @@ export interface RegisterAssetProps {
   readonly serialNumber?: string;
 }
 
+export interface RestoreAssetProps {
+  readonly id: string;
+  readonly name: string;
+  readonly assetTypeId: string;
+  readonly assetModelId?: string;
+  readonly serialNumber?: string;
+  readonly lifecycleState: AssetLifecycleState;
+}
+
 /**
  * Represents the Asset Domain Entity.
  * Contains all business logic and domain invariants for assets.
@@ -48,6 +65,7 @@ export class Asset {
     public readonly assetTypeId: string,
     public readonly assetModelId: string | undefined,
     public readonly serialNumber: string | undefined,
+    public readonly lifecycleState: AssetLifecycleState,
   ) {}
 
   /**
@@ -90,7 +108,35 @@ export class Asset {
 
     const serialNumber = props.serialNumber?.trim() || undefined;
 
-    return new Asset(id, name, assetTypeId, props.model?.id, serialNumber);
+    return new Asset(
+      id,
+      name,
+      assetTypeId,
+      props.model?.id,
+      serialNumber,
+      'ACTIVE',
+    );
+  }
+
+  /** Reconstitutes a persisted Asset without applying a lifecycle transition. */
+  static restore(props: RestoreAssetProps): Asset {
+    const asset = Asset.register({
+      id: props.id,
+      name: props.name,
+      type: { id: props.assetTypeId },
+      model: props.assetModelId
+        ? { id: props.assetModelId, assetTypeId: props.assetTypeId }
+        : undefined,
+      serialNumber: props.serialNumber,
+    });
+    return new Asset(
+      asset.id,
+      asset.name,
+      asset.assetTypeId,
+      asset.assetModelId,
+      asset.serialNumber,
+      props.lifecycleState,
+    );
   }
 
   /**
@@ -116,6 +162,40 @@ export class Asset {
       this.assetTypeId,
       this.assetModelId,
       this.serialNumber,
+      this.lifecycleState,
+    );
+  }
+
+  /** Updates descriptive fields while preserving canonical identity and Type. */
+  updateDescription(props: UpdateAssetDescriptionProps): Asset {
+    const name = props.name === undefined ? this.name : props.name.trim();
+    if (!name) {
+      throw new DomainError(
+        AssetErrorCode.NAME_REQUIRED,
+        'Asset name is required',
+      );
+    }
+    if (props.model && props.model.assetTypeId !== this.assetTypeId) {
+      throw new DomainError(
+        AssetErrorCode.MODEL_TYPE_MISMATCH,
+        'Asset Model must belong to the Asset Type',
+      );
+    }
+
+    const assetModelId = Object.hasOwn(props, 'model')
+      ? props.model?.id
+      : this.assetModelId;
+    const serialNumber = Object.hasOwn(props, 'serialNumber')
+      ? props.serialNumber?.trim() || undefined
+      : this.serialNumber;
+
+    return new Asset(
+      this.id,
+      name,
+      this.assetTypeId,
+      assetModelId,
+      serialNumber,
+      this.lifecycleState,
     );
   }
 }

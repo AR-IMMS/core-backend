@@ -1,3 +1,5 @@
+import type { AssetLifecycleState } from '../domain/asset/asset';
+
 /** Opaque canonical Asset identity exposed to module consumers. */
 export type AssetId = string & { readonly __assetTopologyId: 'AssetId' };
 
@@ -13,7 +15,7 @@ export type AssetTypeId = string & {
 };
 
 /** Lifecycle states relevant to Asset consumers. */
-export type AssetLifecycleState = 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
+export type { AssetLifecycleState } from '../domain/asset/asset';
 
 /** Asset lifecycle states Maintenance may request through its public contract. */
 export type AssetTopologyMaintenanceState = 'ACTIVE' | 'MAINTENANCE';
@@ -31,6 +33,11 @@ export interface AssetReference {
   readonly assetTypeId: AssetTypeId;
   readonly lifecycleState: AssetLifecycleState;
   readonly currentPlacement: AssetCurrentPlacement | null;
+}
+
+/** Independently provided Asset lookup for consumers that do not need topology. */
+export interface AssetTopologyAssetQueries {
+  getAsset(assetId: AssetId): Promise<AssetReference | null>;
 }
 
 /** Current Room-map location of a Rack, or `null` when it has no location. */
@@ -63,8 +70,7 @@ export interface RoomMapReference {
 }
 
 /** Read-only Asset & Topology queries exposed across module boundaries. */
-export interface AssetTopologyQueries {
-  getAsset(assetId: AssetId): Promise<AssetReference | null>;
+export interface AssetTopologyQueries extends AssetTopologyAssetQueries {
   getRack(rackId: RackId): Promise<RackReference | null>;
   getRoomMap(roomId: RoomId): Promise<RoomMapReference | null>;
 }

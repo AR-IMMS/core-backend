@@ -163,15 +163,17 @@ Allow Admins to register and maintain stable Node records, including before mode
 
 **Acceptance Criteria**
 
-- [ ] IT Admin can register an Asset with a required name and Type; Model and manufacturer serial number are optional.
-- [ ] New Assets receive a stable AR-IMMS ID and start in `ACTIVE`.
-- [ ] A newly created Asset has no active placement and is shown as unassigned; `ACTIVE` is independent of this placement state.
-- [ ] A supplied Model must exist and match the Asset Type.
-- [ ] A fresh environment has the Node Type needed to create the first Node.
-- [ ] Updating descriptive data does not change Asset identity.
-- [ ] Public reads expose the canonical Asset reference needed by the Dashboard and Agent Management.
-- [ ] Focused tests cover registration, classification, identity stability, authorization, persistence, and API behavior.
+- [x] IT Admin can register an Asset with a required name and Type; Model and manufacturer serial number are optional.
+- [x] New Assets receive a stable AR-IMMS ID and start in `ACTIVE`.
+- [x] A newly created Asset has no active placement and is shown as unassigned; `ACTIVE` is independent of this placement state.
+- [x] A supplied Model must exist and match the Asset Type.
+- [x] A fresh environment has the Node Type needed to create the first Node.
+- [x] Updating descriptive data does not change Asset identity.
+- [x] Public reads expose the canonical Asset reference needed by the Dashboard and Agent Management.
+- [x] Focused tests cover registration, classification, identity stability, authorization, persistence, and API behavior.
 - [ ] Material Asset changes record actor, source, and time through the existing Audit mechanism.
+
+**Progress:** Implemented locally. Full Jest, TypeScript, and Nest build checks pass. The Asset Audit Outbox integration test is present but remains unverified until `MONGODB_TEST_URI` is configured.
 
 **Blocked by:** AT-00 and AT-12.
 
