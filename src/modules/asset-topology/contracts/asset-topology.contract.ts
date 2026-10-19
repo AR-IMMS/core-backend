@@ -43,21 +43,23 @@ export interface AssetTopologyAssetQueries {
 /** Current Room-map location of a Rack, or `null` when it has no location. */
 export interface RackCurrentLocation {
   readonly roomId: RoomId;
-  /** Rack map X coordinate in millimeters. */
-  readonly xMm: number;
-  /** Rack map Y coordinate in millimeters. */
-  readonly yMm: number;
-  /** Unrotated Rack width in millimeters. */
-  readonly widthMm: number;
-  /** Unrotated Rack depth in millimeters. */
-  readonly depthMm: number;
+  readonly column: number;
+  readonly row: number;
   readonly rotation: 0 | 90 | 180 | 270;
+}
+
+/** Historical Room-map location interval for a Rack. */
+export interface RackLocationHistoryEntry extends RackCurrentLocation {
+  readonly validFrom: string;
+  readonly validTo: string | null;
 }
 
 /** Minimal canonical Rack reference for topology and placement consumers. */
 export interface RackReference {
   readonly id: RackId;
   readonly uCapacity: number;
+  readonly rowLabel?: string;
+  readonly positionInRow?: string;
   readonly currentLocation: RackCurrentLocation | null;
 }
 
@@ -67,13 +69,23 @@ export interface RoomMapReference {
   readonly widthMm: number;
   readonly depthMm: number;
   readonly gridSnapMm: number;
+  readonly columns: number;
+  readonly rows: number;
+  readonly racks: readonly RackReference[];
+}
+
+/** Rack and Room-map queries exposed separately from the Asset query. */
+export interface AssetTopologyRackQueries {
+  getRack(rackId: RackId): Promise<RackReference | null>;
+  getRoomMap(roomId: RoomId): Promise<RoomMapReference | null>;
+  getRackLocationHistory(
+    rackId: RackId,
+  ): Promise<readonly RackLocationHistoryEntry[] | null>;
 }
 
 /** Read-only Asset & Topology queries exposed across module boundaries. */
-export interface AssetTopologyQueries extends AssetTopologyAssetQueries {
-  getRack(rackId: RackId): Promise<RackReference | null>;
-  getRoomMap(roomId: RoomId): Promise<RoomMapReference | null>;
-}
+export interface AssetTopologyQueries
+  extends AssetTopologyAssetQueries, AssetTopologyRackQueries {}
 
 /** A request for the Asset-owned maintenance lifecycle transition. */
 export interface RequestAssetMaintenanceStateChange {

@@ -332,6 +332,149 @@ paths:
         '404':
           $ref: ../baseline.yaml#/components/responses/Problem
 
+  /api/v1/asset-topology/rooms/{room_id}/map:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    get:
+      operationId: getRoomMap
+      summary: Retrieve a Room grid and its confirmed Rack cells
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Generated full-cell grid and active Rack placements.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoomMapResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/rooms/{room_id}/racks:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      operationId: createRack
+      summary: Create a Rack with its initial one-cell location
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRackRequest' }
+      responses:
+        '201':
+          description: Rack and initial location created atomically.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RackResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/racks/{rack_id}:
+    parameters:
+      - name: rack_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    get:
+      operationId: getRack
+      summary: Retrieve a Rack and its confirmed location
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Canonical Rack reference.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RackResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+    patch:
+      operationId: updateRack
+      summary: Update Rack capacity and row/position labels
+      description: Rack ID is immutable. Location changes use the location operation; QR is managed by AT-07.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateRackRequest' }
+      responses:
+        '200':
+          description: Rack updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RackResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/racks/{rack_id}/location:
+    parameters:
+      - name: rack_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    patch:
+      operationId: moveRack
+      summary: Move or rotate a Rack
+      description: An unchanged Room, cell, and rotation is a no-op with no history or Audit Fact.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MoveRackRequest' }
+      responses:
+        '200':
+          description: Rack and location history updated atomically, or current location returned for a no-op.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RackResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/racks/{rack_id}/locations:
+    parameters:
+      - name: rack_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    get:
+      operationId: getRackLocationHistory
+      summary: Retrieve time-bounded Rack location history
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Historical and active Rack Room-map locations.
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/RackLocationHistoryResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
 components:
   securitySchemes:
     HumanAccessToken:
@@ -421,6 +564,85 @@ components:
             description: Blank values clear the serial number.,
           }
   schemas:
+    CreateRackRequest:
+      type: object
+      additionalProperties: false
+      required: [column, row, rotation, u_capacity]
+      properties:
+        column: { type: integer, minimum: 0 }
+        row: { type: integer, minimum: 0 }
+        rotation: { type: integer, enum: [0, 90, 180, 270] }
+        u_capacity: { type: integer, minimum: 1 }
+        row_label: { type: string, minLength: 1, maxLength: 128 }
+        position_in_row: { type: string, minLength: 1, maxLength: 128 }
+    UpdateRackRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        u_capacity: { type: integer, minimum: 1 }
+        row_label: { type: [string, 'null'], minLength: 1, maxLength: 128 }
+        position_in_row:
+          { type: [string, 'null'], minLength: 1, maxLength: 128 }
+    MoveRackRequest:
+      type: object
+      additionalProperties: false
+      required: [room_id, column, row, rotation]
+      properties:
+        room_id: { type: string, minLength: 1, maxLength: 128 }
+        column: { type: integer, minimum: 0 }
+        row: { type: integer, minimum: 0 }
+        rotation: { type: integer, enum: [0, 90, 180, 270] }
+    RackLocation:
+      type: object
+      required: [room_id, column, row, rotation]
+      properties:
+        room_id: { type: string }
+        column: { type: integer, minimum: 0 }
+        row: { type: integer, minimum: 0 }
+        rotation: { type: integer, enum: [0, 90, 180, 270] }
+    RackResponse:
+      type: object
+      required: [id, u_capacity, current_location]
+      properties:
+        id: { type: string }
+        u_capacity: { type: integer, minimum: 1 }
+        row_label: { type: [string, 'null'] }
+        position_in_row: { type: [string, 'null'] }
+        current_location:
+          {
+            oneOf:
+              [{ $ref: '#/components/schemas/RackLocation' }, { type: 'null' }],
+          }
+    RackLocationHistoryEntry:
+      allOf:
+        - $ref: '#/components/schemas/RackLocation'
+        - type: object
+          required: [valid_from, valid_to]
+          properties:
+            valid_from: { type: string, format: date-time }
+            valid_to: { type: [string, 'null'], format: date-time }
+    RackLocationHistoryResponse:
+      type: object
+      required: [rack_id, locations]
+      properties:
+        rack_id: { type: string }
+        locations:
+          type: array
+          items: { $ref: '#/components/schemas/RackLocationHistoryEntry' }
+    RoomMapResponse:
+      type: object
+      required: [id, width_mm, depth_mm, grid_snap_mm, columns, rows, racks]
+      properties:
+        id: { type: string }
+        width_mm: { type: integer, minimum: 1 }
+        depth_mm: { type: integer, minimum: 1 }
+        grid_snap_mm: { type: integer, minimum: 1 }
+        columns: { type: integer, minimum: 0 }
+        rows: { type: integer, minimum: 0 }
+        racks:
+          type: array
+          items: { $ref: '#/components/schemas/RackResponse' }
     Meta:
       type: object
       properties:

@@ -5,6 +5,7 @@ import type {
   AssetTopologyConsumerContract,
   AssetTopologyMaintenanceState,
   AssetTopologyQueries,
+  AssetTopologyRackQueries,
   RackId,
   RoomId,
 } from '../../index';
@@ -26,6 +27,7 @@ describe('Asset & Topology consumer contract', () => {
         }),
       getRack: () => Promise.resolve(null),
       getRoomMap: () => Promise.resolve(null),
+      getRackLocationHistory: () => Promise.resolve(null),
     };
 
     await expect(query.getAsset('asset-1' as AssetId)).resolves.toMatchObject({
@@ -51,10 +53,8 @@ describe('Asset & Topology consumer contract', () => {
           uCapacity: 42,
           currentLocation: {
             roomId: 'room-1' as RoomId,
-            xMm: 100,
-            yMm: 200,
-            widthMm: 600,
-            depthMm: 1000,
+            column: 1,
+            row: 2,
             rotation: 90,
           },
         }),
@@ -64,17 +64,32 @@ describe('Asset & Topology consumer contract', () => {
           widthMm: 8000,
           depthMm: 6000,
           gridSnapMm: 100,
+          columns: 80,
+          rows: 60,
+          racks: [],
         }),
+      getRackLocationHistory: () => Promise.resolve([]),
     };
 
     await expect(query.getRack('rack-1' as RackId)).resolves.toMatchObject({
       currentLocation: {
         roomId: 'room-1',
-        xMm: 100,
-        yMm: 200,
+        column: 1,
+        row: 2,
         rotation: 90,
       },
     });
+  });
+
+  it('keeps the Rack query contract independently implementable', async () => {
+    const rackQueries: AssetTopologyRackQueries = {
+      getRack: () => Promise.resolve(null),
+      getRoomMap: () => Promise.resolve(null),
+      getRackLocationHistory: () => Promise.resolve([]),
+    };
+    await expect(
+      rackQueries.getRoomMap('room-1' as RoomId),
+    ).resolves.toBeNull();
   });
 
   it('exposes a maintenance-state request without caller supplied eligibility claims', () => {

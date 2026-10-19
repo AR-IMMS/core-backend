@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
   AUDIT_FACT_EVENT_TYPE,
@@ -18,6 +18,9 @@ import { Site } from '../../domain/topology/site';
 import type { SiteId } from '../../domain/topology/site';
 import type { TopologyStorePort } from './topology-store.port';
 import { TOPOLOGY_STORE } from './topology-store.token';
+import { RoomMapChangePolicy } from '../../domain/topology/room-map-change-policy';
+import type { RackStorePort } from '../racks/rack-store.port';
+import { RACK_STORE } from '../racks/rack-store.token';
 
 export interface TopologyActor {
   readonly type: string;
@@ -73,6 +76,7 @@ export class TopologyUseCases {
     private readonly outbox: OutboxWriterPort,
     private readonly now: () => Date = () => new Date(),
     private readonly generateId: () => string = randomUUID,
+    @Optional() @Inject(RACK_STORE) private readonly racks?: RackStorePort,
   ) {}
 
   async getDefaultDataCenter() {
@@ -206,9 +210,16 @@ export class TopologyUseCases {
     actor: TopologyActor,
   ): Promise<Room> {
     return this.unitOfWork.run(async (context) => {
-      const current = await this.store.getRoom(roomId);
+      const current = await this.store.getRoom(roomId, context);
       if (!current) throw new TopologyResourceNotFoundError('Room');
       const roomMap = RoomMap.create(input);
+      const activeRackLocations =
+        (await this.racks?.listActiveLocationsInRoom(roomId, context)) ?? [];
+      RoomMapChangePolicy.validate(
+        current.roomMap,
+        roomMap,
+        activeRackLocations.map((location) => location.placement),
+      );
       const updated = current.update({ name: input.name, roomMap });
       const changes = [
         ...(current.name === updated.name

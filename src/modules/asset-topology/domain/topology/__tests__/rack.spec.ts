@@ -22,6 +22,24 @@ describe('Rack', () => {
     ).not.toThrow();
   });
 
+  it('updates only permitted Rack fields and can clear labels without changing identity', () => {
+    const rack = Rack.create({
+      id: 'rack-1',
+      uCapacity: 42,
+      rowLabel: ' A ',
+      positionInRow: ' 03 ',
+    });
+
+    const updated = rack.update({ rowLabel: null, positionInRow: '04' });
+
+    expect(updated).toMatchObject({
+      id: 'rack-1',
+      uCapacity: 42,
+      rowLabel: undefined,
+      positionInRow: '04',
+    });
+  });
+
   it('rejects U positions above capacity', () => {
     const rack = Rack.create({ id: 'rack-1', uCapacity: 42 });
 

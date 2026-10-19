@@ -1,5 +1,6 @@
 export { ASSET_TOPOLOGY_CONSUMER_PORT } from './contracts';
 export { ASSET_TOPOLOGY_ASSET_QUERIES_PORT } from './contracts';
+export { ASSET_TOPOLOGY_RACK_QUERIES_PORT } from './contracts';
 export type * from './contracts';
 export { Asset } from './domain/asset/asset';
 export type {

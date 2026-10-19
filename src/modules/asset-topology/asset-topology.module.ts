@@ -7,11 +7,20 @@ import {
   TOPOLOGY_DATA_CENTER_MODEL,
   TOPOLOGY_ROOM_MODEL,
   TOPOLOGY_SITE_MODEL,
+  TOPOLOGY_RACK_MODEL,
+  TOPOLOGY_RACK_LOCATION_MODEL,
   TopologyDataCenterSchema,
   TopologyRoomSchema,
   TopologySiteSchema,
+  TopologyRackSchema,
+  TopologyRackLocationSchema,
 } from './infrastructure/mongodb/topology.schema';
 import { TopologyController } from './presentation/topology.controller';
+import { RackController } from './presentation/racks/rack.controller';
+import { RackManagementUseCases } from './application/racks/rack-management.use-case';
+import { RackQueryUseCase } from './application/racks/rack-query.use-case';
+import { RACK_STORE } from './application/racks/rack-store.token';
+import { MongoRackStore } from './infrastructure/mongodb/mongo-rack.store';
 import {
   ASSET_CATALOG_STORE,
   ASSET_STORE,
@@ -31,7 +40,10 @@ import {
   GetAssetUseCase,
   ListAssetsUseCase,
 } from './application/assets/asset-query.use-case';
-import { ASSET_TOPOLOGY_ASSET_QUERIES_PORT } from './contracts';
+import {
+  ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
+  ASSET_TOPOLOGY_RACK_QUERIES_PORT,
+} from './contracts';
 import { AssetReadController } from './presentation/assets/asset-read.controller';
 import { AssetWriteController } from './presentation/assets/asset-write.controller';
 import { randomUUID } from 'node:crypto';
@@ -47,16 +59,30 @@ import {
       { name: TOPOLOGY_DATA_CENTER_MODEL, schema: TopologyDataCenterSchema },
       { name: TOPOLOGY_SITE_MODEL, schema: TopologySiteSchema },
       { name: TOPOLOGY_ROOM_MODEL, schema: TopologyRoomSchema },
+      { name: TOPOLOGY_RACK_MODEL, schema: TopologyRackSchema },
+      {
+        name: TOPOLOGY_RACK_LOCATION_MODEL,
+        schema: TopologyRackLocationSchema,
+      },
       { name: ASSET_TYPE_MODEL, schema: AssetTypeSchema },
       { name: ASSET_MODEL_MODEL, schema: AssetModelSchema },
       { name: ASSET_MODEL, schema: AssetSchema },
     ]),
   ],
-  controllers: [TopologyController, AssetReadController, AssetWriteController],
+  controllers: [
+    TopologyController,
+    RackController,
+    AssetReadController,
+    AssetWriteController,
+  ],
   providers: [
     MongoTopologyStore,
     { provide: TOPOLOGY_STORE, useExisting: MongoTopologyStore },
     TopologyUseCases,
+    MongoRackStore,
+    { provide: RACK_STORE, useExisting: MongoRackStore },
+    RackManagementUseCases,
+    RackQueryUseCase,
     MongoAssetStore,
     { provide: ASSET_STORE, useExisting: MongoAssetStore },
     { provide: ASSET_CATALOG_STORE, useExisting: MongoAssetStore },
@@ -69,10 +95,14 @@ import {
       provide: ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
       useExisting: GetAssetUseCase,
     },
+    {
+      provide: ASSET_TOPOLOGY_RACK_QUERIES_PORT,
+      useExisting: RackQueryUseCase,
+    },
     ListAssetsUseCase,
   ],
 })
 export class AssetTopologyModule {}
 
-// The focused Asset query is available independently. The broad consumer
-// contract remains unbound until Rack and Room-map query providers are ready.
+// Asset and Rack/Room-map query ports are available independently. The broad
+// consumer contract remains unbound until all methods are implemented.

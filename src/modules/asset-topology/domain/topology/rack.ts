@@ -11,6 +11,14 @@ export const RackErrorCode = {
 export interface CreateRackProps {
   readonly id: string;
   readonly uCapacity: number;
+  readonly rowLabel?: string;
+  readonly positionInRow?: string;
+}
+
+export interface UpdateRackProps {
+  readonly uCapacity?: number;
+  readonly rowLabel?: string | null;
+  readonly positionInRow?: string | null;
 }
 
 /** Rack identity and declared U capacity. */
@@ -18,6 +26,8 @@ export class Rack {
   private constructor(
     public readonly id: string,
     public readonly uCapacity: number,
+    public readonly rowLabel: string | undefined,
+    public readonly positionInRow: string | undefined,
   ) {}
 
   static create(props: CreateRackProps): Rack {
@@ -33,7 +43,27 @@ export class Rack {
       );
     }
 
-    return new Rack(id, props.uCapacity);
+    return new Rack(
+      id,
+      props.uCapacity,
+      normalizeLabel(props.rowLabel, 'Rack row label'),
+      normalizeLabel(props.positionInRow, 'Rack position label'),
+    );
+  }
+
+  update(props: UpdateRackProps): Rack {
+    return Rack.create({
+      id: this.id,
+      uCapacity: props.uCapacity ?? this.uCapacity,
+      rowLabel:
+        props.rowLabel === undefined
+          ? this.rowLabel
+          : (props.rowLabel ?? undefined),
+      positionInRow:
+        props.positionInRow === undefined
+          ? this.positionInRow
+          : (props.positionInRow ?? undefined),
+    });
   }
 
   /** @throws {DomainError} If the position is above this Rack's capacity. */
@@ -45,4 +75,13 @@ export class Rack {
       );
     }
   }
+}
+
+function normalizeLabel(value: string | undefined, field: string) {
+  if (value === undefined) return undefined;
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new DomainError('INVALID_RACK_LABEL', `${field} cannot be empty`);
+  }
+  return normalized;
 }

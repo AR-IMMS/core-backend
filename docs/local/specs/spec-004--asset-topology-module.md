@@ -26,7 +26,7 @@ This specification consolidates the agreed Flow 1 behavior and the current logic
 
 - Use the Data Center provisioned by seed/bootstrap as the root of the Flow 1 hierarchy. Admins can view it but do not create or update Data Centers through Flow 1. Manage Site → Room/Hall → Rack beneath it.
 - Treat Site as the AR-IMMS concept corresponding to Building in the reference DC ERD; do not add a separate Building entity.
-- Maintain a 2D Room map using physical dimensions, a generated grid, Rack footprints, coordinates, and rotation.
+- Maintain a 2D Room map using physical dimensions, a generated full-cell grid, one-cell Rack coordinates, and rotation.
 - Manage Rack capacity and individual Rack U positions.
 - Register and maintain Asset records. The Node Asset Type is available through seed/bootstrap; an Asset Model is optional and may only reference an existing Model.
 - Place, move, and unmap Assets in Rack U positions while retaining location history.
@@ -80,13 +80,13 @@ No cross-module deep imports or direct reads/writes of another module's collecti
 | **Data Center**    | Seeded default facility root for Sites; retrievable and read-only through Flow 1                               |
 | **Site**           | Managed site/building-level location within a Data Center                                                      |
 | **Room/Hall**      | Rectangular floor-plan area in the current 2D map scope                                                        |
-| **Rack**           | Physical cabinet within a Room, with floor footprint, U capacity, QR marker, and lifecycle                     |
+| **Rack**           | Physical cabinet within a Room, occupying one logical Room-map cell in AT-02, with U capacity, QR marker, and lifecycle |
 | **Rack Unit**      | One numbered U position within a Rack                                                                          |
 | **Asset**          | Managed physical equipment instance with a stable AR-IMMS identity; currently supported kind is a compute Node |
 | **Asset Type**     | Classification such as Node; allows an Asset to be typed before its exact Model is known                       |
 | **Asset Model**    | Catalog definition with standard specifications                                                                |
 | **Asset Location** | Time-bounded placement of one Asset into exactly one Rack Unit in v1                                           |
-| **Rack Location**  | Time-bounded placement of a Rack in a Room, including its 2D footprint and orientation                         |
+| **Rack Location**  | Time-bounded placement of a Rack in a Room, including its grid cell coordinates and orientation               |
 | **QR Mapping**     | Active or historical mapping from a QR value to one Rack or Asset                                              |
 
 ### 5.1 Identity and classification
@@ -108,13 +108,13 @@ No cross-module deep imports or direct reads/writes of another module's collecti
 - Parent chain: Data Center → Site → Room/Hall → Rack.
 - No Row or Aisle entity is required for the current use case. Rack can carry row_label and position_in_row as readable location labels.
 - Room map v1 assumes a rectangular boundary with width_mm and depth_mm.
-- A grid is generated from Room dimensions and grid_snap_mm; individual grid cells are not persisted as domain records.
-- Coordinate origin is the Room's lower-left corner. X increases right; Y increases up.
-- Rack position (pos_x_mm, pos_y_mm) identifies the lower-left anchor of the unrotated footprint.
-- Rack footprint is width_mm × depth_mm. Rotation is limited to supported cardinal orientations; 90°/270° swap effective footprint dimensions.
-- Room dimensions and Rack footprints use millimeters. UI snapping and major grid lines are presentation behavior based on Room configuration.
-- Layout validation checks that the full footprint is inside the Room and does not overlap another Rack.
-- Reject a Room size or grid-snap update if it would invalidate any current Rack placement.
+- A grid is generated from Room dimensions and grid_snap_mm; individual grid cells are not persisted. Only full cells exist: columns = floor(width_mm / grid_snap_mm) and rows = floor(depth_mm / grid_snap_mm). Remainder strips do not create partial cells.
+- Rack coordinates are integer column and row indices from the Room's lower-left origin. Columns increase right and rows increase up.
+- Each Rack occupies exactly one logical grid cell in AT-02; physical width/depth are not modeled. Rotation is limited to 0, 90, 180, or 270 degrees and is retained as location metadata; it does not change one-cell occupancy.
+- Core validates that the selected cell exists and is unoccupied.
+- Reject any grid_snap_mm change while the Room has an active Rack location. A width/depth change is allowed only if every active Rack cell remains inside the new full-cell grid; otherwise reject it without changing the Room or Rack layout.
+- Rack location history is retained and queryable when a Rack moves between Rooms; a request with the same Room, cell coordinates, and rotation is a no-op and creates neither history nor an Audit Fact.
+- Rack u_capacity, row_label, and position_in_row may be updated in AT-02. Rack identity is immutable. Room/cell/rotation are changed only through the move operation. Physical dimensions and QR mappings are not AT-02 update fields; QR management is covered by AT-07.
 - Rack location history is retained when a Rack moves between Rooms; the existing Audit mechanism records actor/source/time attribution, while topology history provides prior and current location values.
 - Aisle clearance, doors, columns, irregular Room polygons, and hot/cold aisle semantics are deferred.
 
@@ -151,20 +151,20 @@ No cross-module deep imports or direct reads/writes of another module's collecti
 | **Data Center** | Seeded/bootstrap-provisioned facility root, read-only through Flow 1              | Default record is available; Flow 1 does not create or update it; child Sites reference it              |
 | **Site**        | Site identity and Data Center reference                                           | Valid parent reference; no separate Building entity                                                     |
 | **Room/Hall**   | Room identity, dimensions, and grid configuration                                 | Positive dimensions and valid grid; reject size/grid changes that invalidate any current Rack placement |
-| **Rack**        | Rack identity, U capacity, current physical placement, and lifecycle              | U positions fit capacity; retirement requires no placed Assets                                          |
+| **Rack**        | Rack identity, U capacity, current one-cell Room placement, and lifecycle          | U positions fit capacity; retirement requires no placed Assets                                          |
 | **Asset**       | Stable Asset identity, name, type/model references, status, and placement history | Type/Model compatibility; at most one active placement; status transition rules                         |
 | **QR Mapping**  | QR value, target type/ID, active/history interval                                 | Active QR is unique across Rack and Asset targets; one active QR per target                             |
 
-Treat these as logical boundaries, not a requirement for one collection per aggregate. A placement use case coordinates the Asset and target Rack Unit so two concurrent requests cannot claim the same U. A Room layout use case coordinates the Room and Rack locations to reject out-of-bounds or overlapping Rack footprints. Do not combine all Racks into the Room aggregate solely to enforce map geometry.
+Treat these as logical boundaries, not a requirement for one collection per aggregate. A placement use case coordinates the Asset and target Rack Unit so two concurrent requests cannot claim the same U. A Room layout use case coordinates the Room and Rack locations to reject invalid or occupied grid cells. Do not combine all Racks into the Room aggregate solely to enforce map geometry.
 
 ## 6. Functional requirements
 
 | ID           | Requirement                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **AT-FR-01** | Seed/bootstrap provisions the default Data Center. An authorized IT Admin can view it and create/update Site and Room/Hall records beneath it with valid parent references; Flow 1 cannot create or update Data Centers.                                                                                                                                                                                                                               |
-| **AT-FR-02** | A Room records physical width, depth, and grid snap. The map grid is generated from these values; grid cells are not stored individually. Reject Room size/grid changes that invalidate current Rack placements.                                                                                                                                                                                                                                       |
-| **AT-FR-03** | An authorized IT Admin can create/update Rack records under an existing Room, including footprint, map position/orientation, U capacity, readable row/position labels, and Rack QR.                                                                                                                                                                                                                                                                    |
-| **AT-FR-04** | Rack placement is rejected if its footprint is outside the Room, violates snap rules, has invalid rotation, or overlaps another Rack.                                                                                                                                                                                                                                                                                                                  |
+| **AT-FR-02** | A Room records physical width, depth, and grid snap. The map grid contains only complete cells: columns = `floor(width_mm / grid_snap_mm)` and rows = `floor(depth_mm / grid_snap_mm)`; remainder strips do not form cells. Grid cells are not stored individually. Reject grid-snap changes while any Rack is placed in the Room; reject width/depth changes if any Rack cell would fall outside the new grid. |
+| **AT-FR-03** | An authorized IT Admin can create a Rack under an existing Room with its initial one-cell placement, U capacity, and optional row/position labels; update U capacity and row/position labels; and move/rotate it through its location operation. Rack QR is managed by AT-07.                                                                                                                                                                      |
+| **AT-FR-04** | A Rack occupies one logical grid cell. Placement is rejected if its integer cell is outside the generated full-cell grid, is occupied, or has an invalid cardinal rotation.                                                                                                                                                                                                                                                                             |
 | **AT-FR-05** | An Asset can be created with a required human-readable name, stable identity, and the seeded Node Asset Type even when its optional, already-existing Model or manufacturer serial number is not known. Flow 1 does not manage Type or Model catalogs.                                                                                                                                                                                                 |
 | **AT-FR-06** | A new Asset starts `ACTIVE` and unassigned; it may be placed in exactly one available Rack Unit (1U) in v1.                                                                                                                                                                                                                                                                                                                                            |
 | **AT-FR-07** | Assign, move, and unmap are explicit operations recorded through Asset Location. Move/unmap retain the prior placement record and do not silently retire the Asset or alter Agent binding, which Agent Management owns.                                                                                                                                                                                                                                |
@@ -201,12 +201,11 @@ Treat these as logical boundaries, not a requirement for one collection per aggr
 
 ### 8.2 Add and position a Rack
 
-1. IT Admin creates or selects a Rack, providing its floor footprint and U capacity.
-2. UI displays the footprint as a preview attached to the pointer.
-3. Admin selects the lower-left anchor of the unrotated Rack footprint and a rotation.
-4. UI provides immediate feedback; Core independently validates bounds, grid alignment, rotation, and overlap.
-5. If valid, Core saves Rack layout fields. If invalid, it returns the failed constraint and leaves the existing layout unchanged.
-6. Human-readable row/position labels can be maintained independently of coordinates.
+1. IT Admin creates a Rack in an existing Room with its initial cell, rotation, U capacity, and optional row/position labels in one operation.
+2. UI previews one logical cell at the selected grid coordinate; the backend independently validates the Room, cell bounds, rotation, and occupancy.
+3. On success, Core atomically saves the Rack and its initial location. On failure, neither is created.
+4. IT Admin may update U capacity and row/position labels independently from the location.
+5. IT Admin may move or rotate the Rack. A request identical to its current Room, cell, and rotation is a no-op; a real move atomically closes the prior location and saves the new location. Invalid moves preserve the current location and history.
 
 ### 8.3 Register and place an Asset
 
@@ -278,8 +277,7 @@ Potential domain roots and persistence mapping must be reviewed before implement
 - Reuse the existing Audit/platform mechanism for actor/source/time/material-change traceability. Do not add a separate audit repository or store.
 - The public Asset & Topology application contract exposes canonical IDs and confirmed topology/placement needed by authorized consumers, plus a validated command for requesting Asset maintenance-state changes. It does not expose domain internals or persistence models.
 - The initial Asset query returns `id`, `name`, `assetTypeId`, `lifecycleState`, and `currentPlacement` (`null` or `{ rackId, uPosition }`). The Dashboard uses these fields for Asset inventory/detail and place/move/unmap workflows (Flow 1 use cases 9.1–9.3); `currentPlacement` is the sole placement indicator.
-- The initial Rack query returns `id`, `uCapacity`, and `currentLocation` (`null` or `{ roomId, xMm, yMm, widthMm, depthMm, rotation }`). The Dashboard uses these fields to select a canonical Rack, present U positions, and render its confirmed Room-map footprint (use cases 9.1–9.2). Coordinates use the lower-left anchor of the unrotated footprint.
-- The initial Room-map query returns `id`, `widthMm`, `depthMm`, and `gridSnapMm`, which the Dashboard uses to render the Room map and its placement grid (use cases 9.1–9.2). Fields are added only with a confirmed consumer use case; these query results do not currently include Site/Data Center IDs, model/serial metadata, QR mappings, Agent binding, or health.
+- The Rack and Room-map queries are exposed through a dedicated read-only Rack/Room-map port. Rack reads return canonical ID, U capacity, row/position labels, and current location (`{ roomId, column, row, rotation }`); Rack location history is queryable as ordered, time-bounded intervals. Room-map reads return `id`, `widthMm`, `depthMm`, `gridSnapMm`, complete-cell counts, and confirmed active Rack placements. The existing Asset query provider remains independently available; the broader consumer port remains unbound until its remaining queries are implemented. These results do not include model/serial metadata, QR mappings, Agent binding, or health.
 - Maintenance requests a target Asset state through `requestMaintenanceStateChange`; the Asset & Topology use case validates Asset-owned lifecycle rules. Maintenance remains authoritative for Activity state and must confirm no other Activity remains in `EXECUTE` before requesting `ACTIVE`; if that confirmation is unavailable, the transition is not successful. AT-05 must define retry/idempotency and consistency behavior when the Asset state command cannot be completed during an Activity transition.
 - Ticket Management remains authoritative for assignment and exposes a current-assignee check evaluated at action time. If the check is unavailable, a non-Admin manual maintenance-state change is rejected.
 - AT-13 interaction and failure requirements are tracked in [issue #37](https://github.com/AR-IMMS/core-backend/issues/37); the consuming Asset & Topology implementation tickets are [AT-05 / issue #42](https://github.com/AR-IMMS/core-backend/issues/42) and [AT-10 / issue #47](https://github.com/AR-IMMS/core-backend/issues/47). The repository and approved ticket material contain no separate owning-domain contract issues or accountable owners for Maintenance, Ticket Management, or Agent Management. Keep those missing agreements tracked in AT-13 until the owning teams and owners are identified; then link or create their issues.
@@ -304,8 +302,8 @@ Application use cases must preserve prior valid state when a move or update fail
 The module is ready for its first integration when:
 
 - The seeded default Data Center can be retrieved, and its Site → Room → Rack hierarchy can be created and queried without Flow 1 Data Center create/update operations.
-- Room size/grid changes that invalidate current Rack placements are rejected; the Room grid is generated from dimensions/snap without persisting individual floor cells.
-- A Rack can be placed and moved on the Room map; invalid bounds, overlap, snap, and rotation are rejected by Core.
+- Room grids contain only complete cells and are generated without persisting individual floor cells. Grid-snap changes are rejected while any Rack is placed; width/depth changes are rejected if a Rack would fall outside the resulting grid.
+- A Rack can be created atomically with its initial one-cell location and moved on the Room map; invalid bounds, occupied cells, and rotation are rejected by Core. Repeating the current location is a no-op without history or an Audit Fact.
 - An Asset can be registered without a Model, and Type–Model mismatch is rejected when a Model is supplied.
 - An Asset can remain unassigned, be placed in one available U, be moved, and be unmapped with location history retained.
 - Two concurrent operations cannot commit the same U to different active placements.
@@ -327,7 +325,7 @@ The module is ready for its first integration when:
 
 1. **Room geometry:** v1 supports rectangular Rooms only; irregular boundaries and obstacles are deferred.
 2. **Grid configuration:** use per-Room grid_snap_mm; visual major grid lines are UI configuration.
-3. **Rack dimensions:** store width/depth in millimeters on Rack until a Rack Model catalog is justified.
+3. **Rack map occupancy:** AT-02 models each Rack as exactly one logical grid cell and does not model physical width/depth. Only complete Room cells exist: `floor(dimension / grid_snap_mm)`; partial remainder strips are not cells.
 4. **U occupancy:** v1 places each Asset in one U; occupied/free is derived from active Asset Location; no reservation state.
 5. **Asset size:** multi-U, multi-Rack, and fragmented placement are deferred.
 6. **QR history:** Rack and Node have QR mappings. Active resolution must be unambiguous; historical QR lookup is not confirmed. Preserve history and attribution.

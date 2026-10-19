@@ -11,7 +11,7 @@ export interface TopologyStorePort {
   /** Saves the Site and increments its Audit sequence in the active transaction. */
   saveSite(site: Site, context: UnitOfWorkContext): Promise<number>;
   listRooms(siteId: string): Promise<readonly Room[]>;
-  getRoom(id: string): Promise<Room | null>;
+  getRoom(id: string, context?: UnitOfWorkContext): Promise<Room | null>;
   /** Saves the Room and increments its Audit sequence in the active transaction. */
   saveRoom(room: Room, context: UnitOfWorkContext): Promise<number>;
 }

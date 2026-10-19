@@ -44,6 +44,14 @@ export class RoomMap {
     public readonly gridSnapMm: number,
   ) {}
 
+  get columns(): number {
+    return Math.floor(this.widthMm / this.gridSnapMm);
+  }
+
+  get rows(): number {
+    return Math.floor(this.depthMm / this.gridSnapMm);
+  }
+
   /**
    * Creates a new RoomMap instance based on the provided properties.
    * Validates that width, depth, and grid snap are positive integers.

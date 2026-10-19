@@ -8,6 +8,8 @@ import type {
 import { Room } from '../../../domain/topology/room';
 import { RoomMap } from '../../../domain/topology/room-map';
 import { Site } from '../../../domain/topology/site';
+import { RackMapPlacement } from '../../../domain/topology/rack-map-placement';
+import type { RackStorePort } from '../../racks/rack-store.port';
 import type { TopologyStorePort } from '.././topology-store.port';
 import { TopologyUseCases } from '.././topology-use-cases';
 
@@ -20,11 +22,13 @@ describe('TopologyUseCases', () => {
   let outbox: jest.Mocked<OutboxWriterPort>;
   let useCases: TopologyUseCases;
   let facts: AuditFactV2[];
+  let rackStore: jest.Mocked<Pick<RackStorePort, 'listActiveLocationsInRoom'>>;
 
   beforeEach(() => {
     sites = [];
     rooms = [];
     facts = [];
+    rackStore = { listActiveLocationsInRoom: jest.fn(async () => []) };
     store = {
       getDataCenter: jest.fn(async () => ({
         id: 'dc-default' as never,
@@ -72,6 +76,7 @@ describe('TopologyUseCases', () => {
         let nextId = 0;
         return () => `generated-${++nextId}`;
       })(),
+      rackStore as RackStorePort,
     );
   });
 
@@ -165,6 +170,51 @@ describe('TopologyUseCases', () => {
     );
 
     expect(updated).toEqual(room);
+    expect(store.saveRoom).not.toHaveBeenCalled();
+    expect(facts).toHaveLength(0);
+  });
+
+  it('rejects grid-snap changes while the Room has an active Rack location', async () => {
+    const site = Site.create({
+      id: 'site-1' as never,
+      name: 'Building A',
+      dataCenterId: 'dc-default' as never,
+    });
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Room A',
+      siteId: site.id,
+      roomMap: RoomMap.create({
+        widthMm: 10_000,
+        depthMm: 8_000,
+        gridSnapMm: 100,
+      }),
+    });
+    sites.push(site);
+    rooms.push(room);
+    rackStore.listActiveLocationsInRoom.mockResolvedValue([
+      {
+        placement: RackMapPlacement.create({
+          rackId: 'rack-1',
+          column: 1,
+          row: 2,
+          rotation: 0,
+        }),
+      },
+    ] as never);
+
+    await expect(
+      useCases.updateRoom(
+        room.id,
+        {
+          name: room.name,
+          widthMm: 10_000,
+          depthMm: 8_000,
+          gridSnapMm: 200,
+        },
+        actor,
+      ),
+    ).rejects.toThrow('grid snap cannot change');
     expect(store.saveRoom).not.toHaveBeenCalled();
     expect(facts).toHaveLength(0);
   });

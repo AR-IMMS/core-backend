@@ -14,10 +14,8 @@ export const RackLocationErrorCode = {
 export interface StartRackLocationProps {
   readonly rackId: string;
   readonly roomId: string;
-  readonly xMm: number;
-  readonly yMm: number;
-  readonly widthMm: number;
-  readonly depthMm: number;
+  readonly column: number;
+  readonly row: number;
   readonly rotation: RackRotation;
   readonly locatedAt: Date;
 }
@@ -60,10 +58,8 @@ export class RackLocation {
 
     const placement = RackMapPlacement.create({
       rackId,
-      xMm: props.xMm,
-      yMm: props.yMm,
-      widthMm: props.widthMm,
-      depthMm: props.depthMm,
+      column: props.column,
+      row: props.row,
       rotation: props.rotation,
     });
     RackLayoutPolicy.validate(roomMap, placement, otherRacksInRoom);
@@ -74,6 +70,48 @@ export class RackLocation {
       placement,
       new Date(props.locatedAt),
       undefined,
+    );
+  }
+
+  static fromHistory(props: {
+    readonly rackId: string;
+    readonly roomId: string;
+    readonly column: number;
+    readonly row: number;
+    readonly rotation: RackRotation;
+    readonly validFrom: Date;
+    readonly validTo?: Date;
+  }): RackLocation {
+    const rackId = props.rackId.trim();
+    const roomId = props.roomId.trim();
+    if (!rackId || !roomId || Number.isNaN(props.validFrom.getTime())) {
+      throw new DomainError(
+        RackLocationErrorCode.IDENTITY_REQUIRED,
+        'Rack location history is invalid',
+      );
+    }
+    if (
+      props.validTo &&
+      (Number.isNaN(props.validTo.getTime()) ||
+        props.validTo <= props.validFrom)
+    ) {
+      throw new DomainError(
+        RackLocationErrorCode.INVALID_TIME,
+        'Rack location interval is invalid',
+      );
+    }
+    const placement = RackMapPlacement.create({
+      rackId,
+      column: props.column,
+      row: props.row,
+      rotation: props.rotation,
+    });
+    return new RackLocation(
+      rackId,
+      roomId,
+      placement,
+      new Date(props.validFrom),
+      props.validTo ? new Date(props.validTo) : undefined,
     );
   }
 

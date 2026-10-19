@@ -157,8 +157,10 @@ export class MongoTopologyStore implements TopologyStorePort {
     return rooms.map(toRoom);
   }
 
-  async getRoom(id: string): Promise<Room | null> {
-    const room = await this.rooms.findOne({ id }).lean().exec();
+  async getRoom(id: string, context?: UnitOfWorkContext): Promise<Room | null> {
+    let query = this.rooms.findOne({ id });
+    if (context) query = query.session(context as unknown as ClientSession);
+    const room = await query.lean().exec();
     return room ? toRoom(room) : null;
   }
 

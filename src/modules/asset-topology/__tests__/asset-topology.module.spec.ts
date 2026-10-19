@@ -9,6 +9,9 @@ import { GetAssetUseCase } from '.././application/assets/asset-query.use-case';
 import { AssetReadController } from '.././presentation/assets/asset-read.controller';
 import { AssetWriteController } from '.././presentation/assets/asset-write.controller';
 import { ASSET_TOPOLOGY_ASSET_QUERIES_PORT } from '.././contracts';
+import { ASSET_TOPOLOGY_RACK_QUERIES_PORT } from '.././contracts';
+import { RackController } from '.././presentation/racks/rack.controller';
+import { RackQueryUseCase } from '.././application/racks/rack-query.use-case';
 
 describe('AssetTopologyModule', () => {
   it('composes Dashboard topology routes and Asset & Topology-owned persistence', () => {
@@ -22,6 +25,7 @@ describe('AssetTopologyModule', () => {
     ) as unknown[];
 
     expect(controllers).toContain(TopologyController);
+    expect(controllers).toContain(RackController);
     expect(controllers).toContain(AssetReadController);
     expect(controllers).toContain(AssetWriteController);
     expect(providers).toContain(MongoTopologyStore);
@@ -38,9 +42,14 @@ describe('AssetTopologyModule', () => {
       AssetTopologyModule,
     ) as unknown[];
     expect(providers).toContain(GetAssetUseCase);
+    expect(providers).toContain(RackQueryUseCase);
     expect(providers).toContainEqual({
       provide: ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
       useExisting: GetAssetUseCase,
+    });
+    expect(providers).toContainEqual({
+      provide: ASSET_TOPOLOGY_RACK_QUERIES_PORT,
+      useExisting: RackQueryUseCase,
     });
   });
 
