@@ -1,7 +1,7 @@
-import { DomainError } from '../shared/domain-error';
-import { RackMapPlacement, RackRotation } from './rack-map-placement';
-import { RackLocation, StartRackLocationProps } from './rack-location';
-import { RoomMap } from './room-map';
+import { DomainError } from '../../shared/domain-error';
+import { RackMapPlacement, RackRotation } from '.././rack-map-placement';
+import { RackLocation, StartRackLocationProps } from '.././rack-location';
+import { RoomMap } from '.././room-map';
 
 describe('RackLocation', () => {
   const room = RoomMap.create({

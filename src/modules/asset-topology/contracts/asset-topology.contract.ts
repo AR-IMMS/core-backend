@@ -86,6 +86,10 @@ export interface AssetTopologyMaintenanceCommands {
   ): Promise<void>;
 }
 
-/** Internal module-to-module application contract for Asset & Topology. */
+/**
+ * Internal module-to-module application contract for Asset & Topology.
+ * Keep its provider unbound until Asset and Rack query implementations are
+ * complete; Dashboard REST/OpenAPI DTOs do not belong in this contract.
+ */
 export interface AssetTopologyConsumerContract
   extends AssetTopologyQueries, AssetTopologyMaintenanceCommands {}

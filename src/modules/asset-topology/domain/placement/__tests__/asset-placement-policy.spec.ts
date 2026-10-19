@@ -1,7 +1,7 @@
-import { DomainError } from '../shared/domain-error';
-import { Rack } from '../topology/rack';
-import { AssetPlacement, StartAssetPlacementProps } from './asset-placement';
-import { AssetPlacementPolicy } from './asset-placement-policy';
+import { DomainError } from '../../shared/domain-error';
+import { Rack } from '../../topology/rack';
+import { AssetPlacement, StartAssetPlacementProps } from '.././asset-placement';
+import { AssetPlacementPolicy } from '.././asset-placement-policy';
 
 describe('AssetPlacementPolicy', () => {
   const start = (overrides: Partial<StartAssetPlacementProps> = {}) => ({

@@ -1,0 +1,291 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import {
+  AUDIT_FACT_EVENT_TYPE,
+  AUDIT_FACT_EVENT_VERSION_V2,
+  OUTBOX_WRITER_PORT,
+  UNIT_OF_WORK_PORT,
+  type AuditFactV2,
+  type OutboxWriterPort,
+  type UnitOfWorkPort,
+} from '@platform/events';
+import { Room } from '../../domain/topology/room';
+import { RoomMap } from '../../domain/topology/room-map';
+import type { RoomId } from '../../domain/topology/room';
+import { DEFAULT_DATA_CENTER_ID } from '../../domain/topology/data-center';
+import type { DataCenterId } from '../../domain/topology/data-center';
+import { Site } from '../../domain/topology/site';
+import type { SiteId } from '../../domain/topology/site';
+import type { TopologyStorePort } from './topology-store.port';
+import { TOPOLOGY_STORE } from './topology-store.token';
+
+export interface TopologyActor {
+  readonly type: string;
+  readonly id: string;
+  readonly context?: TopologyRequestContext;
+}
+
+export interface TopologyRequestContext {
+  readonly request_id?: string;
+  readonly trace_id?: string;
+}
+
+export class TopologyResourceNotFoundError extends Error {
+  constructor(resource: 'Data Center' | 'Site' | 'Room') {
+    super(`${resource} was not found`);
+    this.name = 'TopologyResourceNotFoundError';
+  }
+}
+
+export interface CreateSiteInput {
+  readonly name: string;
+  readonly dataCenterId: DataCenterId;
+}
+
+export interface UpdateSiteInput {
+  readonly name: string;
+}
+
+export interface CreateRoomInput {
+  readonly name: string;
+  readonly siteId: SiteId;
+  readonly widthMm: number;
+  readonly depthMm: number;
+  readonly gridSnapMm: number;
+}
+
+export interface UpdateRoomInput {
+  readonly name: string;
+  readonly widthMm: number;
+  readonly depthMm: number;
+  readonly gridSnapMm: number;
+}
+
+/** Application use cases for the Flow 1 Data Center → Site → Room hierarchy. */
+@Injectable()
+export class TopologyUseCases {
+  constructor(
+    @Inject(TOPOLOGY_STORE)
+    private readonly store: TopologyStorePort,
+    @Inject(UNIT_OF_WORK_PORT)
+    private readonly unitOfWork: UnitOfWorkPort,
+    @Inject(OUTBOX_WRITER_PORT)
+    private readonly outbox: OutboxWriterPort,
+    private readonly now: () => Date = () => new Date(),
+    private readonly generateId: () => string = randomUUID,
+  ) {}
+
+  async getDefaultDataCenter() {
+    const dataCenter = await this.store.getDataCenter(DEFAULT_DATA_CENTER_ID);
+    if (!dataCenter) throw new TopologyResourceNotFoundError('Data Center');
+    return dataCenter;
+  }
+
+  async listSites(dataCenterId: DataCenterId): Promise<readonly Site[]> {
+    const dataCenter = await this.store.getDataCenter(dataCenterId);
+    if (!dataCenter) throw new TopologyResourceNotFoundError('Data Center');
+    return this.store.listSites(dataCenterId);
+  }
+
+  async createSite(
+    input: CreateSiteInput,
+    actor: TopologyActor,
+  ): Promise<Site> {
+    return this.unitOfWork.run(async (context) => {
+      const dataCenter = await this.store.getDataCenter(input.dataCenterId);
+      if (!dataCenter) throw new TopologyResourceNotFoundError('Data Center');
+      const site = Site.create({
+        id: this.generateId() as SiteId,
+        name: input.name,
+        dataCenterId: dataCenter.id,
+      });
+      const sequence = await this.store.saveSite(site, context);
+      await this.outbox.append(
+        this.createAuditFact({
+          actor,
+          action: 'asset_topology.site.created',
+          resourceType: 'asset-topology.site',
+          resourceId: site.id,
+          sequence,
+          changes: [
+            { field: 'name', after: site.name },
+            { field: 'data_center_id', after: site.dataCenterId },
+          ],
+        }),
+        context,
+      );
+      return site;
+    });
+  }
+
+  async getSite(siteId: SiteId): Promise<Site> {
+    const site = await this.store.getSite(siteId);
+    if (!site) throw new TopologyResourceNotFoundError('Site');
+    return site;
+  }
+
+  async updateSite(
+    siteId: SiteId,
+    input: UpdateSiteInput,
+    actor: TopologyActor,
+  ): Promise<Site> {
+    return this.unitOfWork.run(async (context) => {
+      const current = await this.store.getSite(siteId);
+      if (!current) throw new TopologyResourceNotFoundError('Site');
+      const updated = current.rename(input.name);
+      if (updated.name === current.name) return current;
+
+      const sequence = await this.store.saveSite(updated, context);
+      await this.outbox.append(
+        this.createAuditFact({
+          actor,
+          action: 'asset_topology.site.updated',
+          resourceType: 'asset-topology.site',
+          resourceId: updated.id,
+          sequence,
+          changes: [
+            { field: 'name', before: current.name, after: updated.name },
+          ],
+        }),
+        context,
+      );
+      return updated;
+    });
+  }
+
+  async listRooms(siteId: SiteId): Promise<readonly Room[]> {
+    const site = await this.store.getSite(siteId);
+    if (!site) throw new TopologyResourceNotFoundError('Site');
+    return this.store.listRooms(siteId);
+  }
+
+  async createRoom(
+    input: CreateRoomInput,
+    actor: TopologyActor,
+  ): Promise<Room> {
+    return this.unitOfWork.run(async (context) => {
+      const site = await this.store.getSite(input.siteId);
+      if (!site) throw new TopologyResourceNotFoundError('Site');
+      const room = Room.create({
+        id: this.generateId() as RoomId,
+        name: input.name,
+        siteId: site.id,
+        roomMap: RoomMap.create(input),
+      });
+      const sequence = await this.store.saveRoom(room, context);
+      await this.outbox.append(
+        this.createAuditFact({
+          actor,
+          action: 'asset_topology.room.created',
+          resourceType: 'asset-topology.room',
+          resourceId: room.id,
+          sequence,
+          changes: [
+            { field: 'name', after: room.name },
+            { field: 'site_id', after: room.siteId },
+            { field: 'width_mm', after: room.roomMap.widthMm },
+            { field: 'depth_mm', after: room.roomMap.depthMm },
+            { field: 'grid_snap_mm', after: room.roomMap.gridSnapMm },
+          ],
+        }),
+        context,
+      );
+      return room;
+    });
+  }
+
+  async getRoom(roomId: RoomId): Promise<Room> {
+    const room = await this.store.getRoom(roomId);
+    if (!room) throw new TopologyResourceNotFoundError('Room');
+    return room;
+  }
+
+  async updateRoom(
+    roomId: RoomId,
+    input: UpdateRoomInput,
+    actor: TopologyActor,
+  ): Promise<Room> {
+    return this.unitOfWork.run(async (context) => {
+      const current = await this.store.getRoom(roomId);
+      if (!current) throw new TopologyResourceNotFoundError('Room');
+      const roomMap = RoomMap.create(input);
+      const updated = current.update({ name: input.name, roomMap });
+      const changes = [
+        ...(current.name === updated.name
+          ? []
+          : [{ field: 'name', before: current.name, after: updated.name }]),
+        ...(current.roomMap.widthMm === roomMap.widthMm
+          ? []
+          : [
+              {
+                field: 'width_mm',
+                before: current.roomMap.widthMm,
+                after: roomMap.widthMm,
+              },
+            ]),
+        ...(current.roomMap.depthMm === roomMap.depthMm
+          ? []
+          : [
+              {
+                field: 'depth_mm',
+                before: current.roomMap.depthMm,
+                after: roomMap.depthMm,
+              },
+            ]),
+        ...(current.roomMap.gridSnapMm === roomMap.gridSnapMm
+          ? []
+          : [
+              {
+                field: 'grid_snap_mm',
+                before: current.roomMap.gridSnapMm,
+                after: roomMap.gridSnapMm,
+              },
+            ]),
+      ];
+      if (changes.length === 0) return current;
+
+      const sequence = await this.store.saveRoom(updated, context);
+      await this.outbox.append(
+        this.createAuditFact({
+          actor,
+          action: 'asset_topology.room.updated',
+          resourceType: 'asset-topology.room',
+          resourceId: updated.id,
+          sequence,
+          changes,
+        }),
+        context,
+      );
+      return updated;
+    });
+  }
+
+  private createAuditFact(input: {
+    readonly actor: TopologyActor;
+    readonly action: string;
+    readonly resourceType: string;
+    readonly resourceId: string;
+    readonly sequence: number;
+    readonly changes: AuditFactV2['payload']['changes'];
+  }): AuditFactV2 {
+    const occurredAt = this.now();
+    return {
+      event_id: this.generateId(),
+      event_type: AUDIT_FACT_EVENT_TYPE,
+      event_version: AUDIT_FACT_EVENT_VERSION_V2,
+      producer: 'asset-topology',
+      occurred_at: occurredAt.toISOString(),
+      resource: {
+        type: input.resourceType,
+        id: input.resourceId,
+        sequence: input.sequence,
+      },
+      payload: {
+        actor: input.actor,
+        action: input.action,
+        changes: input.changes,
+      },
+      context: input.actor.context ?? {},
+    };
+  }
+}

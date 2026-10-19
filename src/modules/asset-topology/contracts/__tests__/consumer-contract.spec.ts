@@ -1,4 +1,4 @@
-import { ASSET_TOPOLOGY_CONSUMER_PORT } from '../index';
+import { ASSET_TOPOLOGY_CONSUMER_PORT } from '../../index';
 import type {
   AssetId,
   AssetTypeId,
@@ -7,7 +7,7 @@ import type {
   AssetTopologyQueries,
   RackId,
   RoomId,
-} from '../index';
+} from '../../index';
 
 describe('Asset & Topology consumer contract', () => {
   it('exports a runtime token for application-level dependency injection', () => {

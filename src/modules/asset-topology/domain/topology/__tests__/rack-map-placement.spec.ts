@@ -1,9 +1,9 @@
-import { DomainError } from '../shared/domain-error';
+import { DomainError } from '../../shared/domain-error';
 import {
   RackMapPlacement,
   RackMapPlacementErrorCode,
   RackRotation,
-} from './rack-map-placement';
+} from '.././rack-map-placement';
 
 describe('RackMapPlacement', () => {
   const createPlacement = (rotation: RackRotation) =>

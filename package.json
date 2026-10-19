@@ -24,6 +24,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:pass": "jest --passWithNoTests",
     "test:ci": "jest --runInBand --coverage",
+    "asset-topology:integration": "node -r ts-node/register -r tsconfig-paths/register test/asset-topology.integration.ts",
     "iam:seed-admin": "node -r ts-node/register -r tsconfig-paths/register src/modules/iam/scripts/seed-initial-admin.ts",
     "prepare": "husky"
   },

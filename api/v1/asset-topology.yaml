@@ -1,0 +1,365 @@
+openapi: 3.1.2
+info:
+  title: AR-IMMS Core Asset & Topology API
+  version: 1.0.0
+  description: |
+    Dashboard HTTP contract for the seeded Data Center and its Sites and Rooms.
+    This REST/OpenAPI surface is separate from the Asset & Topology application
+    contracts used by backend modules. Flow 1 provides no Data Center create or
+    update operation. Parent references are chosen at creation and are immutable.
+
+paths:
+  /api/v1/asset-topology/data-centers/default:
+    get:
+      operationId: getDefaultDataCenter
+      summary: Retrieve the default Data Center
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: The seeded, read-only Data Center.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataCenterResponse'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/asset-topology/data-centers/{data_center_id}/sites:
+    parameters:
+      - $ref: '#/components/parameters/DataCenterId'
+    get:
+      operationId: listSites
+      summary: List Sites beneath a Data Center
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Sites under the requested Data Center.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteListResponse'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+    post:
+      operationId: createSite
+      summary: Create a Site beneath a Data Center
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSiteRequest'
+      responses:
+        '201':
+          description: Site created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteResponse'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/asset-topology/sites/{site_id}:
+    parameters:
+      - $ref: '#/components/parameters/SiteId'
+    get:
+      operationId: getSite
+      summary: Retrieve a Site
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Site details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteResponse'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+    patch:
+      operationId: updateSite
+      summary: Update a Site name
+      description: The Data Center parent reference is immutable after creation.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSiteRequest'
+      responses:
+        '200':
+          description: Site updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteResponse'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/asset-topology/sites/{site_id}/rooms:
+    parameters:
+      - $ref: '#/components/parameters/SiteId'
+    get:
+      operationId: listRooms
+      summary: List Rooms beneath a Site
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Rooms under the requested Site.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomListResponse'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+    post:
+      operationId: createRoom
+      summary: Create a Room beneath a Site
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+      responses:
+        '201':
+          description: Room created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/asset-topology/rooms/{room_id}:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    get:
+      operationId: getRoom
+      summary: Retrieve a Room and map configuration
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Room details and map configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+    patch:
+      operationId: updateRoom
+      summary: Update a Room name and map configuration
+      description: The Site parent reference is immutable after creation. Dimensions and grid snap are millimeters.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoomRequest'
+      responses:
+        '200':
+          description: Room updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+components:
+  securitySchemes:
+    HumanAccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    DataCenterId:
+      name: data_center_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    SiteId:
+      name: site_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    RoomId:
+      name: room_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+  schemas:
+    Meta:
+      type: object
+      properties:
+        request_id: { type: string }
+        trace_id: { type: string }
+    SingleResponse:
+      type: object
+      required: [data]
+      properties:
+        data: {}
+        meta: { $ref: '#/components/schemas/Meta' }
+    ListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: {}
+        meta: { $ref: '#/components/schemas/Meta' }
+    DataCenter:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, example: dc-default }
+        name: { type: string, example: Default Data Center }
+    Site:
+      type: object
+      required: [id, name, data_center_id]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        data_center_id: { type: string }
+    Room:
+      type: object
+      required: [id, name, site_id, width_mm, depth_mm, grid_snap_mm]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        site_id: { type: string, format: uuid }
+        width_mm: { type: integer, minimum: 1 }
+        depth_mm: { type: integer, minimum: 1 }
+        grid_snap_mm: { type: integer, minimum: 1 }
+    CreateSiteRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+    UpdateSiteRequest:
+      $ref: '#/components/schemas/CreateSiteRequest'
+    CreateRoomRequest:
+      type: object
+      additionalProperties: false
+      required: [name, width_mm, depth_mm, grid_snap_mm]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        width_mm: { type: integer, minimum: 1 }
+        depth_mm: { type: integer, minimum: 1 }
+        grid_snap_mm: { type: integer, minimum: 1 }
+    UpdateRoomRequest:
+      $ref: '#/components/schemas/CreateRoomRequest'
+    DataCenterResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/DataCenter' }
+    SiteResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Site' }
+    SiteListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ListResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/Site' }
+    RoomResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Room' }
+    RoomListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ListResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/Room' }

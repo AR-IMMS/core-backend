@@ -1,6 +1,6 @@
-import { DomainError } from '../shared/domain-error';
-import { RackUnitPosition } from '../placement/rack-unit-position';
-import { Rack } from './rack';
+import { DomainError } from '../../shared/domain-error';
+import { RackUnitPosition } from '../../placement/rack-unit-position';
+import { Rack } from '.././rack';
 
 describe('Rack', () => {
   it.each([0, -1, 1.5])('rejects U capacity %s', (uCapacity) => {

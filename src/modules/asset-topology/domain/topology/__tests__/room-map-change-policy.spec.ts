@@ -1,7 +1,7 @@
-import { DomainError } from '../shared/domain-error';
-import { RackMapPlacement } from './rack-map-placement';
-import { RoomMap } from './room-map';
-import { RoomMapChangePolicy } from './room-map-change-policy';
+import { DomainError } from '../../shared/domain-error';
+import { RackMapPlacement } from '.././rack-map-placement';
+import { RoomMap } from '.././room-map';
+import { RoomMapChangePolicy } from '.././room-map-change-policy';
 
 describe('RoomMapChangePolicy', () => {
   const rack = (xMm: number, yMm: number) =>

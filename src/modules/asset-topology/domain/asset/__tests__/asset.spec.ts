@@ -1,5 +1,5 @@
-import { Asset } from './asset';
-import { DomainError } from '../shared/domain-error';
+import { Asset } from '.././asset';
+import { DomainError } from '../../shared/domain-error';
 
 describe('Asset', () => {
   const nodeType = { id: 'type-node' };

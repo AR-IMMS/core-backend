@@ -1,5 +1,5 @@
-import { AssetPlacement } from './asset-placement';
-import { DomainError } from '../shared/domain-error';
+import { AssetPlacement } from '.././asset-placement';
+import { DomainError } from '../../shared/domain-error';
 
 describe('AssetPlacement', () => {
   const startTime = new Date('2026-01-01T10:00:00.000Z');
