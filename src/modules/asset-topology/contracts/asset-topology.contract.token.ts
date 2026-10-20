@@ -12,3 +12,8 @@ export const ASSET_TOPOLOGY_ASSET_QUERIES_PORT = Symbol(
 export const ASSET_TOPOLOGY_RACK_QUERIES_PORT = Symbol(
   'ASSET_TOPOLOGY_RACK_QUERIES_PORT',
 );
+
+/** Nest provider token for Asset maintenance-state commands. */
+export const ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT = Symbol(
+  'ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT',
+);

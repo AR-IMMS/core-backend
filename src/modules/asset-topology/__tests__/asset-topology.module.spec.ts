@@ -10,8 +10,10 @@ import { AssetReadController } from '.././presentation/assets/asset-read.control
 import { AssetWriteController } from '.././presentation/assets/asset-write.controller';
 import { ASSET_TOPOLOGY_ASSET_QUERIES_PORT } from '.././contracts';
 import { ASSET_TOPOLOGY_RACK_QUERIES_PORT } from '.././contracts';
+import { ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT } from '.././contracts';
 import { RackController } from '.././presentation/racks/rack.controller';
 import { RackQueryUseCase } from '.././application/racks/rack-query.use-case';
+import { ChangeAssetMaintenanceStateUseCase } from '.././application/assets/asset-maintenance-state.use-case';
 
 describe('AssetTopologyModule', () => {
   it('composes Dashboard topology routes and Asset & Topology-owned persistence', () => {
@@ -67,5 +69,23 @@ describe('AssetTopologyModule', () => {
           provider.provide === ASSET_TOPOLOGY_CONSUMER_PORT,
       ),
     ).toBe(false);
+  });
+
+  it('exports the Asset maintenance command independently of the broad query contract', () => {
+    const providers = Reflect.getMetadata(
+      MODULE_METADATA.PROVIDERS,
+      AssetTopologyModule,
+    ) as unknown[];
+    const exports = Reflect.getMetadata(
+      MODULE_METADATA.EXPORTS,
+      AssetTopologyModule,
+    ) as unknown[];
+
+    expect(providers).toContain(ChangeAssetMaintenanceStateUseCase);
+    expect(providers).toContainEqual({
+      provide: ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT,
+      useExisting: ChangeAssetMaintenanceStateUseCase,
+    });
+    expect(exports).toContain(ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT);
   });
 });

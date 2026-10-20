@@ -9,6 +9,8 @@ export const AssetErrorCode = {
   NAME_REQUIRED: 'ASSET_NAME_REQUIRED',
   TYPE_REQUIRED: 'ASSET_TYPE_REQUIRED',
   MODEL_TYPE_MISMATCH: 'ASSET_MODEL_TYPE_MISMATCH',
+  INVALID_MAINTENANCE_STATE_TRANSITION:
+    'ASSET_INVALID_MAINTENANCE_STATE_TRANSITION',
 } as const;
 
 export type AssetLifecycleState = 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
@@ -196,6 +198,26 @@ export class Asset {
       assetModelId,
       serialNumber,
       this.lifecycleState,
+    );
+  }
+
+  /** Changes only the maintenance portion of the lifecycle state. */
+  changeMaintenanceState(target: 'ACTIVE' | 'MAINTENANCE'): Asset {
+    if (this.lifecycleState === 'RETIRED') {
+      throw new DomainError(
+        AssetErrorCode.INVALID_MAINTENANCE_STATE_TRANSITION,
+        'Retired Assets cannot change maintenance state',
+      );
+    }
+    if (this.lifecycleState === target) return this;
+
+    return new Asset(
+      this.id,
+      this.name,
+      this.assetTypeId,
+      this.assetModelId,
+      this.serialNumber,
+      target,
     );
   }
 }

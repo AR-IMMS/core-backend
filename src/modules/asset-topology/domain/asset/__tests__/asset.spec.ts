@@ -77,6 +77,45 @@ describe('Asset', () => {
     });
   });
 
+  it('changes between ACTIVE and MAINTENANCE without changing Asset identity', () => {
+    const asset = Asset.register({
+      id: 'asset-1',
+      name: 'Node 01',
+      type: nodeType,
+    });
+
+    const inMaintenance = asset.changeMaintenanceState('MAINTENANCE');
+    const active = inMaintenance.changeMaintenanceState('ACTIVE');
+
+    expect(inMaintenance).toMatchObject({
+      id: asset.id,
+      assetTypeId: asset.assetTypeId,
+      lifecycleState: 'MAINTENANCE',
+    });
+    expect(active.lifecycleState).toBe('ACTIVE');
+    expect(asset.lifecycleState).toBe('ACTIVE');
+  });
+
+  it('treats a repeated maintenance state as a no-op and rejects retired Assets', () => {
+    const asset = Asset.register({
+      id: 'asset-1',
+      name: 'Node 01',
+      type: nodeType,
+    });
+
+    expect(asset.changeMaintenanceState('ACTIVE')).toBe(asset);
+    const retired = Asset.restore({
+      id: asset.id,
+      name: asset.name,
+      assetTypeId: asset.assetTypeId,
+      lifecycleState: 'RETIRED',
+    });
+
+    expect(() => retired.changeMaintenanceState('MAINTENANCE')).toThrow(
+      'Retired Assets cannot change maintenance state',
+    );
+  });
+
   it('allows clearing optional Model and serial values', () => {
     const asset = Asset.register({
       id: 'asset-1',

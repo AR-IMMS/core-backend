@@ -1,6 +1,7 @@
 export { ASSET_TOPOLOGY_CONSUMER_PORT } from './asset-topology.contract.token';
 export { ASSET_TOPOLOGY_ASSET_QUERIES_PORT } from './asset-topology.contract.token';
 export { ASSET_TOPOLOGY_RACK_QUERIES_PORT } from './asset-topology.contract.token';
+export { ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT } from './asset-topology.contract.token';
 export type {
   AssetCurrentPlacement,
   AssetPlacementHistoryEntry,
@@ -12,6 +13,7 @@ export type {
   AssetTopologyRackQueries,
   AssetTopologyMaintenanceCommands,
   AssetTopologyMaintenanceState,
+  AssetTopologyCommandActor,
   AssetTopologyQueries,
   RackCurrentLocation,
   RackLocationHistoryEntry,

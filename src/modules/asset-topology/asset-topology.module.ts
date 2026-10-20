@@ -42,8 +42,10 @@ import {
 } from './application/assets/asset-query.use-case';
 import {
   ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
+  ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT,
   ASSET_TOPOLOGY_RACK_QUERIES_PORT,
 } from './contracts';
+import { ChangeAssetMaintenanceStateUseCase } from './application/assets/asset-maintenance-state.use-case';
 import { AssetReadController } from './presentation/assets/asset-read.controller';
 import { AssetWriteController } from './presentation/assets/asset-write.controller';
 import { AssetPlacementController } from './presentation/assets/asset-placement.controller';
@@ -105,6 +107,7 @@ import {
     { provide: ASSET_ID_GENERATOR, useValue: randomUUID },
     RegisterAssetUseCase,
     UpdateAssetUseCase,
+    ChangeAssetMaintenanceStateUseCase,
     AssetPlacementManagementUseCases,
     GetAssetUseCase,
     {
@@ -112,11 +115,16 @@ import {
       useExisting: GetAssetUseCase,
     },
     {
+      provide: ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT,
+      useExisting: ChangeAssetMaintenanceStateUseCase,
+    },
+    {
       provide: ASSET_TOPOLOGY_RACK_QUERIES_PORT,
       useExisting: RackQueryUseCase,
     },
     ListAssetsUseCase,
   ],
+  exports: [ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT],
 })
 export class AssetTopologyModule {}
 

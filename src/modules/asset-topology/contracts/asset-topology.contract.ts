@@ -100,16 +100,31 @@ export interface AssetTopologyQueries
 export interface RequestAssetMaintenanceStateChange {
   readonly assetId: AssetId;
   readonly targetState: AssetTopologyMaintenanceState;
+  readonly source:
+    | { readonly type: 'maintenance_activity'; readonly id: string }
+    | { readonly type: 'manual'; readonly ticketId?: string };
+}
+
+/** Actor attribution passed by the authorized calling use case. */
+export interface AssetTopologyCommandActor {
+  readonly type: string;
+  readonly id: string;
+  readonly context?: {
+    readonly request_id?: string;
+    readonly trace_id?: string;
+  };
 }
 
 /**
  * Validated command boundary used by Maintenance.
- * The implementation validates Asset-owned lifecycle rules; cross-Activity
- * coordination remains an explicit integration decision for AT-13 / AT-05.
+ * The implementation validates Asset-owned lifecycle rules. Callers must
+ * authorize manual requests and confirm Maintenance Activity coordination
+ * before requesting `ACTIVE`; those records remain owned by their modules.
  */
 export interface AssetTopologyMaintenanceCommands {
   requestMaintenanceStateChange(
     request: RequestAssetMaintenanceStateChange,
+    actor: AssetTopologyCommandActor,
   ): Promise<void>;
 }
 
