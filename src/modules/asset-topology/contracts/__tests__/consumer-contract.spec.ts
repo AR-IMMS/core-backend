@@ -103,6 +103,10 @@ describe('Asset & Topology consumer contract', () => {
       source: { type: 'manual' },
     };
 
-    expect(request).toEqual({ assetId: 'asset-1', targetState: 'MAINTENANCE' });
+    expect(request).toEqual({
+      assetId: 'asset-1',
+      source: { type: 'manual' },
+      targetState: 'MAINTENANCE',
+    });
   });
 });
