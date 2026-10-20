@@ -29,7 +29,7 @@ describe('AssetReadController', () => {
       current_placement: null,
     });
     await expect(
-      controller.list({ cursor: 'not-json' }),
+      controller.list({ cursor: 'not-json' } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -38,9 +38,9 @@ describe('AssetReadController', () => {
       { execute: jest.fn() } as never,
       { execute: jest.fn() } as never,
     );
-    await expect(controller.list({ filter: 'node' })).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      controller.list({ filter: 'node' } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('returns Asset placement history using the REST field names', async () => {

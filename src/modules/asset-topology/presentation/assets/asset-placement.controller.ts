@@ -33,6 +33,8 @@ import {
 import { AssetReferenceNotFoundError } from '../../application/assets/asset-registration.use-case';
 import { AssetPlacementManagementUseCases } from '../../application/placements/asset-placement-management.use-case';
 import {
+  AssetPlacementParamsDto,
+  AssetPlacementRequestDto,
   assetPlacementParamsSchema,
   assetPlacementRequestSchema,
   parseAssetPlacementRequest,
@@ -55,8 +57,8 @@ export class AssetPlacementController {
   @ApiNotFoundResponse({ description: 'Asset or Rack was not found.' })
   place(
     @Req() request: AssetHttpRequest,
-    @Param() rawParams: unknown,
-    @Body() rawBody: unknown,
+    @Param() rawParams: AssetPlacementParamsDto,
+    @Body() rawBody: AssetPlacementRequestDto,
   ) {
     return this.execute(async () => {
       const params = parseAssetPlacementRequest(
@@ -90,8 +92,8 @@ export class AssetPlacementController {
   })
   move(
     @Req() request: AssetHttpRequest,
-    @Param() rawParams: unknown,
-    @Body() rawBody: unknown,
+    @Param() rawParams: AssetPlacementParamsDto,
+    @Body() rawBody: AssetPlacementRequestDto,
   ) {
     return this.execute(async () => {
       const params = parseAssetPlacementRequest(
@@ -124,7 +126,7 @@ export class AssetPlacementController {
   })
   async unmap(
     @Req() request: AssetHttpRequest,
-    @Param() rawParams: unknown,
+    @Param() rawParams: AssetPlacementParamsDto,
   ): Promise<void> {
     await this.execute(async () => {
       const params = parseAssetPlacementRequest(

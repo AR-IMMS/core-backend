@@ -33,6 +33,11 @@ import { RackQueryUseCase } from '../../application/racks/rack-query.use-case';
 import { TopologyResourceNotFoundError } from '../../application/topology/topology-use-cases';
 import { parseTopologyRequest } from '../topology.schemas';
 import {
+  CreateRackRequestDto,
+  MoveRackRequestDto,
+  RackIdParamsDto,
+  RackRoomParamsDto,
+  UpdateRackRequestDto,
   createRackSchema,
   moveRackSchema,
   rackIdParamsSchema,
@@ -63,7 +68,7 @@ export class RackController {
   @ApiOperation({ summary: 'Retrieve a Room map and confirmed Rack cells' })
   @ApiOkResponse({ description: 'Room grid and active Rack cells.' })
   @ApiNotFoundResponse({ description: 'Room was not found.' })
-  getRoomMap(@Param() paramsValue: unknown) {
+  getRoomMap(@Param() paramsValue: RackRoomParamsDto) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
         rackRoomParamsSchema,
@@ -94,8 +99,8 @@ export class RackController {
   @ApiNotFoundResponse({ description: 'Room was not found.' })
   create(
     @Req() request: RackRequest,
-    @Param() paramsValue: unknown,
-    @Body() bodyValue: unknown,
+    @Param() paramsValue: RackRoomParamsDto,
+    @Body() bodyValue: CreateRackRequestDto,
   ) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
@@ -132,7 +137,7 @@ export class RackController {
     description: 'Canonical Rack reference and current location.',
   })
   @ApiNotFoundResponse({ description: 'Rack was not found.' })
-  get(@Param() paramsValue: unknown) {
+  get(@Param() paramsValue: RackIdParamsDto) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
         rackIdParamsSchema,
@@ -151,8 +156,8 @@ export class RackController {
   @ApiOkResponse({ description: 'Rack updated.' })
   update(
     @Req() request: RackRequest,
-    @Param() paramsValue: unknown,
-    @Body() bodyValue: unknown,
+    @Param() paramsValue: RackIdParamsDto,
+    @Body() bodyValue: UpdateRackRequestDto,
   ) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
@@ -191,8 +196,8 @@ export class RackController {
   @ApiNotFoundResponse({ description: 'Rack or Room was not found.' })
   move(
     @Req() request: RackRequest,
-    @Param() paramsValue: unknown,
-    @Body() bodyValue: unknown,
+    @Param() paramsValue: RackIdParamsDto,
+    @Body() bodyValue: MoveRackRequestDto,
   ) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
@@ -225,7 +230,7 @@ export class RackController {
   @ApiOperation({ summary: 'Retrieve Rack Room-map location history' })
   @ApiOkResponse({ description: 'Time-bounded Rack location history.' })
   @ApiNotFoundResponse({ description: 'Rack was not found.' })
-  getLocationHistory(@Param() paramsValue: unknown) {
+  getLocationHistory(@Param() paramsValue: RackIdParamsDto) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
         rackIdParamsSchema,

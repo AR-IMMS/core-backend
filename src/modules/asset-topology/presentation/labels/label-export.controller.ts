@@ -14,6 +14,7 @@ import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -26,7 +27,10 @@ import {
   LabelExportRequestError,
   LabelExportTargetNotFoundError,
 } from '../../application/labels/export-asset-labels.use-case';
-import { parseLabelExportRequest } from './label-export.schemas';
+import {
+  LabelExportFormatParamsDto,
+  parseLabelExportRequest,
+} from './label-export.schemas';
 
 interface LabelExportRequest {
   readonly user: { readonly role: RoleCode };
@@ -44,6 +48,7 @@ export class LabelExportController {
   @Post(':format')
   @RequirePermissions('asset:manage')
   @ApiOperation({ summary: 'Export selected Rack and Node QR labels' })
+  @ApiParam({ name: 'format', enum: ['pdf', 'svg'] })
   @ApiBadRequestResponse({
     description: 'Format or target selection is invalid.',
   })
@@ -52,15 +57,13 @@ export class LabelExportController {
   })
   async export(
     @Req() request: LabelExportRequest,
-    @Param('format') formatValue: string,
+    @Param() formatParams: LabelExportFormatParamsDto,
     @Res() response: Response,
   ): Promise<void> {
     if (request.user.role !== 'IT_ADMIN') {
       throw new ForbiddenException('Only IT Admins can export labels.');
     }
-    if (formatValue !== 'pdf' && formatValue !== 'svg') {
-      throw new BadRequestException('Format must be pdf or svg.');
-    }
+    const formatValue = formatParams.format;
     const body = parseLabelExportRequest(request.body);
     try {
       const result = await this.exports.execute(

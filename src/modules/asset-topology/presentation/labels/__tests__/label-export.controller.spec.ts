@@ -4,7 +4,9 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { CoreZodValidationPipe } from '@platform/http/validation/zod-validation.pipe';
 import { LabelExportController } from '../label-export.controller';
+import { LabelExportFormatParamsDto } from '../label-export.schemas';
 import {
   ExportAssetLabelsUseCase,
   LabelExportTargetNotFoundError,
@@ -37,7 +39,7 @@ describe('LabelExportController', () => {
 
     await controller.export(
       { user: { role: 'IT_ADMIN' }, body: { asset_ids: ['asset-1'] } },
-      'pdf',
+      { format: 'pdf' },
       response as never,
     );
 
@@ -58,7 +60,7 @@ describe('LabelExportController', () => {
     exports.execute.mockResolvedValue({ format: 'svg', bytes: '<svg/>' });
     await controller.export(
       { user: { role: 'IT_ADMIN' }, body: { rack_ids: ['rack-1'] } },
-      'svg',
+      { format: 'svg' },
       response as never,
     );
     expect(response.set).toHaveBeenCalledWith(
@@ -71,21 +73,20 @@ describe('LabelExportController', () => {
     await expect(
       controller.export(
         { user: { role: 'TECHNICIAN' }, body: { asset_ids: ['asset-1'] } },
-        'pdf',
+        { format: 'pdf' },
         response as never,
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(
-      controller.export(
-        { user: { role: 'IT_ADMIN' }, body: { asset_ids: ['asset-1'] } },
-        'png',
-        response as never,
-      ),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(() => {
+      new CoreZodValidationPipe().transform(
+        { format: 'png' },
+        { type: 'param', metatype: LabelExportFormatParamsDto },
+      );
+    }).toThrow(BadRequestException);
     await expect(
       controller.export(
         { user: { role: 'IT_ADMIN' }, body: {} },
-        'pdf',
+        { format: 'pdf' },
         response as never,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -95,7 +96,7 @@ describe('LabelExportController', () => {
     await expect(
       controller.export(
         { user: { role: 'IT_ADMIN' }, body: { rack_ids: ['rack-404'] } },
-        'pdf',
+        { format: 'pdf' },
         response as never,
       ),
     ).rejects.toBeInstanceOf(NotFoundException);

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { createZodDto } from 'nestjs-zod';
 
 const id = z.string().trim().min(1).max(128);
 const label = z.string().trim().min(1).max(128).nullable().optional();
@@ -38,3 +39,9 @@ export const moveRackSchema = z.strictObject({
     z.literal(270),
   ]),
 });
+
+export class RackIdParamsDto extends createZodDto(rackIdParamsSchema) {}
+export class RackRoomParamsDto extends createZodDto(rackRoomParamsSchema) {}
+export class CreateRackRequestDto extends createZodDto(createRackSchema) {}
+export class UpdateRackRequestDto extends createZodDto(updateRackSchema) {}
+export class MoveRackRequestDto extends createZodDto(moveRackSchema) {}

@@ -8,12 +8,14 @@ import {
 } from '@nestjs/common';
 import { PATH_METADATA, METHOD_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
+import { CoreZodValidationPipe } from '@platform/http/validation/zod-validation.pipe';
 import { HTTP_ROUTE_POLICY_METADATA } from '@platform/http/api';
 import type { TopologyUseCases } from '../../application/topology/topology-use-cases';
 import { TopologyResourceNotFoundError } from '../../application/topology/topology-use-cases';
 import { Room } from '../../domain/topology/room';
 import { RoomMap } from '../../domain/topology/room-map';
 import { Site } from '../../domain/topology/site';
+import { DataCenterParamsDto } from '../topology.schemas';
 import { TopologyController } from '.././topology.controller';
 
 describe('TopologyController', () => {
@@ -34,6 +36,22 @@ describe('TopologyController', () => {
       updateRoom: jest.fn(),
     } as unknown as jest.Mocked<TopologyUseCases>;
     controller = new TopologyController(useCases);
+  });
+
+  it('declares the Data Center path schema to the strict global Zod pipe', () => {
+    const parameterTypes = Reflect.getMetadata(
+      'design:paramtypes',
+      TopologyController.prototype,
+      'listSites',
+    ) as (typeof DataCenterParamsDto)[];
+    const pathParams = { data_center_id: 'dc-default' };
+
+    expect(
+      new CoreZodValidationPipe().transform(pathParams, {
+        type: 'param',
+        metatype: parameterTypes[0],
+      }),
+    ).toEqual(pathParams);
   });
 
   it('returns the read-only default Data Center', async () => {
@@ -78,7 +96,7 @@ describe('TopologyController', () => {
       controller.updateSite(
         { user: { userId: actor.id, role: 'IT_ADMIN' } },
         { site_id: 'site-1' },
-        { name: 'Building B', data_center_id: 'another-dc' },
+        { name: 'Building B', data_center_id: 'another-dc' } as never,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(useCases.updateSite).not.toHaveBeenCalled();

@@ -34,7 +34,7 @@ describe('AssetPlacementController', () => {
       expect.objectContaining({ id: 'admin-1' }),
     );
     await expect(
-      controller.place(admin, params, { ...body, ignored: true }),
+      controller.place(admin, params, { ...body, ignored: true } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 

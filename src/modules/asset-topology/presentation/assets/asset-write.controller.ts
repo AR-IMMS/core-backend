@@ -29,6 +29,9 @@ import { UpdateAssetUseCase } from '../../application/assets/asset-update.use-ca
 import { GetAssetUseCase } from '../../application/assets/asset-query.use-case';
 import { RequirePermissions } from '@modules/iam';
 import {
+  AssetParamsDto,
+  RegisterAssetRequestDto,
+  UpdateAssetRequestDto,
   assetParamsSchema,
   parseAssetRequest,
   registerAssetSchema,
@@ -53,7 +56,10 @@ export class AssetWriteController {
   @ApiOperation({ summary: 'Register a physical Asset' })
   @ApiCreatedResponse({ description: 'Asset registered.' })
   @ApiBadRequestResponse({ description: 'The Asset request is invalid.' })
-  create(@Req() request: AssetHttpRequest, @Body() rawBody: unknown) {
+  create(
+    @Req() request: AssetHttpRequest,
+    @Body() rawBody: RegisterAssetRequestDto,
+  ) {
     return this.execute(async () => {
       const actor = requireAssetAdmin(request);
       const input = parseAssetRequest(
@@ -82,8 +88,8 @@ export class AssetWriteController {
   @ApiNotFoundResponse({ description: 'Asset was not found.' })
   update(
     @Req() request: AssetHttpRequest,
-    @Param() rawParams: unknown,
-    @Body() rawBody: unknown,
+    @Param() rawParams: AssetParamsDto,
+    @Body() rawBody: UpdateAssetRequestDto,
   ) {
     return this.execute(async () => {
       const actor = requireAssetAdmin(request);

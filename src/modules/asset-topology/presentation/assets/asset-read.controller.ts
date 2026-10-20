@@ -24,6 +24,8 @@ import {
   ListAssetsUseCase,
 } from '../../application/assets/asset-query.use-case';
 import {
+  AssetListQueryDto,
+  AssetParamsDto,
   assetListQuerySchema,
   assetParamsSchema,
   parseAssetRequest,
@@ -54,7 +56,7 @@ export class AssetReadController {
   })
   @ApiOkResponse({ description: 'Cursor-paginated Assets.' })
   @ApiBadRequestResponse({ description: 'The cursor or page size is invalid.' })
-  async list(@Query() rawQuery: unknown) {
+  async list(@Query() rawQuery: AssetListQueryDto) {
     const query = parseAssetRequest(
       assetListQuerySchema,
       rawQuery,
@@ -88,7 +90,7 @@ export class AssetReadController {
   })
   @ApiBadRequestResponse({ description: 'The Asset ID is invalid.' })
   @ApiNotFoundResponse({ description: 'Asset was not found.' })
-  async get(@Param() rawParams: unknown) {
+  async get(@Param() rawParams: AssetParamsDto) {
     const params = parseAssetRequest(
       assetParamsSchema,
       rawParams,
@@ -115,7 +117,7 @@ export class AssetReadController {
   @ApiOperation({ summary: 'List historical Asset placements' })
   @ApiOkResponse({ description: 'Time-bounded Asset Location history.' })
   @ApiNotFoundResponse({ description: 'Asset was not found.' })
-  async placementHistory(@Param() rawParams: unknown) {
+  async placementHistory(@Param() rawParams: AssetParamsDto) {
     const params = parseAssetRequest(
       assetParamsSchema,
       rawParams,

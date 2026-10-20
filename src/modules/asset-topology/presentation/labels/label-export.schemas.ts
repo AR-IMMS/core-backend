@@ -1,7 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
+import { createZodDto } from 'nestjs-zod';
 import { z, ZodError } from 'zod';
 
 const id = z.string().trim().min(1).max(128);
+export const labelExportFormatParamsSchema = z.strictObject({
+  format: z.enum(['pdf', 'svg']),
+});
 
 export const labelExportSchema = z
   .strictObject({
@@ -12,6 +16,10 @@ export const labelExportSchema = z
     const count = request.rack_ids.length + request.asset_ids.length;
     return count >= 1 && count <= 100;
   }, 'Select between 1 and 100 labels');
+
+export class LabelExportFormatParamsDto extends createZodDto(
+  labelExportFormatParamsSchema,
+) {}
 
 export function parseLabelExportRequest(value: unknown) {
   try {

@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { createZodDto } from 'nestjs-zod';
 import { z, ZodError } from 'zod';
 
 const id = z.string().trim().min(1).max(128);
@@ -16,6 +17,14 @@ export const createRoomSchema = z.strictObject({
   grid_snap_mm: z.number().int().positive(),
 });
 export const updateRoomSchema = createRoomSchema;
+
+export class DataCenterParamsDto extends createZodDto(dataCenterParamsSchema) {}
+export class SiteParamsDto extends createZodDto(siteParamsSchema) {}
+export class RoomParamsDto extends createZodDto(roomParamsSchema) {}
+export class CreateSiteRequestDto extends createZodDto(createSiteSchema) {}
+export class UpdateSiteRequestDto extends createZodDto(updateSiteSchema) {}
+export class CreateRoomRequestDto extends createZodDto(createRoomSchema) {}
+export class UpdateRoomRequestDto extends createZodDto(updateRoomSchema) {}
 
 /** Parses an HTTP value and maps Zod failures to the platform's 400 response. */
 export function parseTopologyRequest<TSchema extends z.ZodType>(

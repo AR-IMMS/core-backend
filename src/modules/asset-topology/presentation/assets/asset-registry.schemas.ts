@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { createZodDto } from 'nestjs-zod';
 import { z, ZodError } from 'zod';
 
 const id = z.string().trim().min(1).max(128);
@@ -26,6 +27,13 @@ export const assetListQuerySchema = z.strictObject({
   cursor: z.string().trim().min(1).max(512).optional(),
   page_size: z.coerce.number().int().min(1).max(100).default(20),
 });
+
+export class AssetParamsDto extends createZodDto(assetParamsSchema) {}
+export class RegisterAssetRequestDto extends createZodDto(
+  registerAssetSchema,
+) {}
+export class UpdateAssetRequestDto extends createZodDto(updateAssetSchema) {}
+export class AssetListQueryDto extends createZodDto(assetListQuerySchema) {}
 
 export function parseAssetRequest<TSchema extends z.ZodType>(
   schema: TSchema,

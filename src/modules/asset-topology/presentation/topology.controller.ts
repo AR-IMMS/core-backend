@@ -33,6 +33,13 @@ import type { TopologyActor } from '../application/topology/topology-use-cases';
 import { RequirePermissions } from '@modules/iam';
 import type { RoleCode } from '@modules/iam';
 import {
+  CreateRoomRequestDto,
+  CreateSiteRequestDto,
+  DataCenterParamsDto,
+  RoomParamsDto,
+  SiteParamsDto,
+  UpdateRoomRequestDto,
+  UpdateSiteRequestDto,
   createRoomSchema,
   createSiteSchema,
   dataCenterParamsSchema,
@@ -75,7 +82,7 @@ export class TopologyController {
   @ApiParam({ name: 'data_center_id', required: true, type: String })
   @ApiOkResponse({ description: 'Sites beneath the requested Data Center.' })
   @ApiNotFoundResponse({ description: 'Data Center was not found.' })
-  listSites(@Param() rawParams: unknown) {
+  listSites(@Param() rawParams: DataCenterParamsDto) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
         dataCenterParamsSchema,
@@ -98,8 +105,8 @@ export class TopologyController {
   @ApiNotFoundResponse({ description: 'Data Center was not found.' })
   createSite(
     @Req() request: TopologyHttpRequest,
-    @Param() rawParams: unknown,
-    @Body() rawBody: unknown,
+    @Param() rawParams: DataCenterParamsDto,
+    @Body() rawBody: CreateSiteRequestDto,
   ) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
@@ -126,7 +133,7 @@ export class TopologyController {
   @ApiParam({ name: 'site_id', required: true, type: String })
   @ApiOkResponse({ description: 'Site details.' })
   @ApiNotFoundResponse({ description: 'Site was not found.' })
-  getSite(@Param() rawParams: unknown) {
+  getSite(@Param() rawParams: SiteParamsDto) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
         siteParamsSchema,
@@ -148,8 +155,8 @@ export class TopologyController {
   @ApiNotFoundResponse({ description: 'Site was not found.' })
   updateSite(
     @Req() request: TopologyHttpRequest,
-    @Param() rawParams: unknown,
-    @Body() rawBody: unknown,
+    @Param() rawParams: SiteParamsDto,
+    @Body() rawBody: UpdateSiteRequestDto,
   ) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
@@ -178,7 +185,7 @@ export class TopologyController {
   @ApiParam({ name: 'site_id', required: true, type: String })
   @ApiOkResponse({ description: 'Rooms beneath the requested Site.' })
   @ApiNotFoundResponse({ description: 'Site was not found.' })
-  listRooms(@Param() rawParams: unknown) {
+  listRooms(@Param() rawParams: SiteParamsDto) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
         siteParamsSchema,
@@ -199,8 +206,8 @@ export class TopologyController {
   @ApiNotFoundResponse({ description: 'Site was not found.' })
   createRoom(
     @Req() request: TopologyHttpRequest,
-    @Param() rawParams: unknown,
-    @Body() rawBody: unknown,
+    @Param() rawParams: SiteParamsDto,
+    @Body() rawBody: CreateRoomRequestDto,
   ) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
@@ -233,7 +240,7 @@ export class TopologyController {
   @ApiParam({ name: 'room_id', required: true, type: String })
   @ApiOkResponse({ description: 'Room details and Room map.' })
   @ApiNotFoundResponse({ description: 'Room was not found.' })
-  getRoom(@Param() rawParams: unknown) {
+  getRoom(@Param() rawParams: RoomParamsDto) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
         roomParamsSchema,
@@ -255,8 +262,8 @@ export class TopologyController {
   @ApiNotFoundResponse({ description: 'Room was not found.' })
   updateRoom(
     @Req() request: TopologyHttpRequest,
-    @Param() rawParams: unknown,
-    @Body() rawBody: unknown,
+    @Param() rawParams: RoomParamsDto,
+    @Body() rawBody: UpdateRoomRequestDto,
   ) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
