@@ -58,10 +58,10 @@ export interface CreateRoomInput {
 }
 
 export interface UpdateRoomInput {
-  readonly name: string;
-  readonly widthMm: number;
-  readonly depthMm: number;
-  readonly gridSnapMm: number;
+  readonly name?: string;
+  readonly widthMm?: number;
+  readonly depthMm?: number;
+  readonly gridSnapMm?: number;
 }
 
 /** Application use cases for the Flow 1 Data Center → Site → Room hierarchy. */
@@ -212,7 +212,11 @@ export class TopologyUseCases {
     return this.unitOfWork.run(async (context) => {
       const current = await this.store.getRoom(roomId, context);
       if (!current) throw new TopologyResourceNotFoundError('Room');
-      const roomMap = RoomMap.create(input);
+      const roomMap = RoomMap.create({
+        widthMm: input.widthMm ?? current.roomMap.widthMm,
+        depthMm: input.depthMm ?? current.roomMap.depthMm,
+        gridSnapMm: input.gridSnapMm ?? current.roomMap.gridSnapMm,
+      });
       const activeRackLocations =
         (await this.racks?.listActiveLocationsInRoom(roomId, context)) ?? [];
       RoomMapChangePolicy.validate(
@@ -220,7 +224,10 @@ export class TopologyUseCases {
         roomMap,
         activeRackLocations.map((location) => location.placement),
       );
-      const updated = current.update({ name: input.name, roomMap });
+      const updated = current.update({
+        name: input.name ?? current.name,
+        roomMap,
+      });
       const changes = [
         ...(current.name === updated.name
           ? []

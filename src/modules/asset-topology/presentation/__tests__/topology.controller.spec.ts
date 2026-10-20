@@ -8,10 +8,14 @@ import {
 } from '@nestjs/common';
 import { PATH_METADATA, METHOD_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
+import { Test } from '@nestjs/testing';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { CoreZodValidationPipe } from '@platform/http/validation/zod-validation.pipe';
 import { HTTP_ROUTE_POLICY_METADATA } from '@platform/http/api';
-import type { TopologyUseCases } from '../../application/topology/topology-use-cases';
-import { TopologyResourceNotFoundError } from '../../application/topology/topology-use-cases';
+import {
+  TopologyResourceNotFoundError,
+  TopologyUseCases,
+} from '../../application/topology/topology-use-cases';
 import { Room } from '../../domain/topology/room';
 import { RoomMap } from '../../domain/topology/room-map';
 import { Site } from '../../domain/topology/site';
@@ -52,6 +56,47 @@ describe('TopologyController', () => {
         metatype: parameterTypes[0],
       }),
     ).toEqual(pathParams);
+  });
+
+  it('publishes request body schemas for topology create routes in Swagger', async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [TopologyController],
+      providers: [{ provide: TopologyUseCases, useValue: useCases }],
+    }).compile();
+    const app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api/v1');
+    await app.init();
+
+    try {
+      const document = SwaggerModule.createDocument(
+        app,
+        new DocumentBuilder().setTitle('test').setVersion('1').build(),
+      );
+
+      const siteRequestBody =
+        document.paths[
+          '/api/v1/asset-topology/data-centers/{data_center_id}/sites'
+        ]?.post?.requestBody;
+      const roomRequestBody =
+        document.paths['/api/v1/asset-topology/sites/{site_id}/rooms']?.post
+          ?.requestBody;
+
+      expect(siteRequestBody).toBeDefined();
+      expect(JSON.stringify(siteRequestBody)).toContain('application/json');
+      expect(
+        JSON.stringify(document.components?.schemas?.CreateSiteRequestDto),
+      ).toContain('"name"');
+      expect(roomRequestBody).toBeDefined();
+      expect(JSON.stringify(roomRequestBody)).toContain('application/json');
+      expect(
+        JSON.stringify(document.components?.schemas?.CreateRoomRequestDto),
+      ).toContain('"width_mm"');
+      expect(
+        JSON.stringify(document.components?.schemas?.CreateRoomRequestDto),
+      ).toContain('"grid_snap_mm"');
+    } finally {
+      await app.close();
+    }
   });
 
   it('returns the read-only default Data Center', async () => {
@@ -116,6 +161,41 @@ describe('TopologyController', () => {
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(useCases.createRoom).not.toHaveBeenCalled();
+  });
+
+  it('accepts a Room update with only the name and rejects an empty update', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Server Room B',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 10_000,
+        depthMm: 8_000,
+        gridSnapMm: 100,
+      }),
+    });
+    useCases.updateRoom.mockResolvedValue(room);
+
+    await expect(
+      controller.updateRoom(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { room_id: 'room-1' },
+        { name: 'Server Room B' },
+      ),
+    ).resolves.toMatchObject({ name: 'Server Room B' });
+    expect(useCases.updateRoom).toHaveBeenCalledWith(
+      'room-1',
+      { name: 'Server Room B' },
+      actor,
+    );
+
+    await expect(
+      controller.updateRoom(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { room_id: 'room-1' },
+        {},
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects non-Admin mutation even when route permission is granted', async () => {

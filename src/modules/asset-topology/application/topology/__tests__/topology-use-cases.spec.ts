@@ -180,6 +180,34 @@ describe('TopologyUseCases', () => {
     expect(facts).toHaveLength(0);
   });
 
+  it('updates only the supplied Room name and retains omitted map values', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Server Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 10_000,
+        depthMm: 8_000,
+        gridSnapMm: 100,
+      }),
+    });
+    rooms.push(room);
+
+    const updated = await useCases.updateRoom(
+      room.id,
+      { name: 'Server Room B' },
+      actor,
+    );
+
+    expect(updated).toMatchObject({
+      name: 'Server Room B',
+      roomMap: { widthMm: 10_000, depthMm: 8_000, gridSnapMm: 100 },
+    });
+    expect(facts[0]?.payload.changes).toEqual([
+      { field: 'name', before: 'Server Room A', after: 'Server Room B' },
+    ]);
+  });
+
   it('rejects grid-snap changes while the Room has an active Rack location', async () => {
     const site = Site.create({
       id: 'site-1' as never,

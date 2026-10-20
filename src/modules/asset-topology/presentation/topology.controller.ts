@@ -280,10 +280,12 @@ export class TopologyController {
         await this.topology.updateRoom(
           params.room_id as never,
           {
-            name: body.name,
-            widthMm: body.width_mm,
-            depthMm: body.depth_mm,
-            gridSnapMm: body.grid_snap_mm,
+            ...(body.name === undefined ? {} : { name: body.name }),
+            ...(body.width_mm === undefined ? {} : { widthMm: body.width_mm }),
+            ...(body.depth_mm === undefined ? {} : { depthMm: body.depth_mm }),
+            ...(body.grid_snap_mm === undefined
+              ? {}
+              : { gridSnapMm: body.grid_snap_mm }),
           },
           actorFrom(request),
         ),

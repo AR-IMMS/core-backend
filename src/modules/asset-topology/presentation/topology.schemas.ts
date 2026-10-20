@@ -16,7 +16,16 @@ export const createRoomSchema = z.strictObject({
   depth_mm: z.number().int().positive(),
   grid_snap_mm: z.number().int().positive(),
 });
-export const updateRoomSchema = createRoomSchema;
+export const updateRoomSchema = z
+  .strictObject({
+    name: name.optional(),
+    width_mm: z.number().int().positive().optional(),
+    depth_mm: z.number().int().positive().optional(),
+    grid_snap_mm: z.number().int().positive().optional(),
+  })
+  .refine((input) => Object.keys(input).length > 0, {
+    message: 'At least one Room field must be provided',
+  });
 
 export class DataCenterParamsDto extends createZodDto(dataCenterParamsSchema) {}
 export class SiteParamsDto extends createZodDto(siteParamsSchema) {}
