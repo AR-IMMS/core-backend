@@ -15,6 +15,12 @@ import type { AssetCatalogStorePort } from './asset-catalog.port';
 import type { AssetStorePort } from './asset-store.port';
 import { ASSET_CATALOG_STORE, ASSET_STORE } from './asset-store.token';
 import { ASSET_CLOCK, ASSET_ID_GENERATOR } from './asset-runtime.token';
+import { QR_MAPPING_STORE } from '../qr/qr-mapping-store.token';
+import type { QrMappingStorePort } from '../qr/qr-mapping-store.port';
+import {
+  isQrDuplicateKeyError,
+  QrMappingConflictError,
+} from '../qr/qr-mapping.errors';
 
 export interface AssetActor {
   readonly type: string;
@@ -48,6 +54,10 @@ export class RegisterAssetUseCase {
     @Inject(ASSET_CLOCK) private readonly now: () => Date = () => new Date(),
     @Inject(ASSET_ID_GENERATOR)
     private readonly generateId: () => string = randomUUID,
+    @Inject(QR_MAPPING_STORE)
+    private readonly qrMappings: QrMappingStorePort,
+    @Inject(ASSET_ID_GENERATOR)
+    private readonly generateQrValue: () => string = randomUUID,
   ) {}
 
   execute(input: RegisterAssetInput, actor: AssetActor): Promise<Asset> {
@@ -68,6 +78,23 @@ export class RegisterAssetUseCase {
         serialNumber: input.serialNumber,
       });
       const sequence = await this.assets.save(asset, context);
+      const qrValue = this.generateQrValue();
+      try {
+        await this.qrMappings.replaceActive(
+          {
+            id: this.generateId(),
+            value: qrValue,
+            targetType: 'asset',
+            targetId: asset.id,
+            active: true,
+            validFrom: this.now(),
+          },
+          context,
+        );
+      } catch (error) {
+        if (isQrDuplicateKeyError(error)) throw new QrMappingConflictError();
+        throw error;
+      }
       await this.outbox.append(
         this.auditFact(actor, asset, sequence, [
           { field: 'name', after: asset.name },
@@ -84,6 +111,8 @@ export class RegisterAssetUseCase {
                 },
               ]
             : []),
+          { field: 'qr_mapping_source', after: 'system_generated' },
+          { field: 'qr_value', after: qrValue },
         ]),
         context,
       );

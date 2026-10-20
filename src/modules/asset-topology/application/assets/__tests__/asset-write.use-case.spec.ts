@@ -1,7 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return -- Jest call records and generic UoW callback use dynamic mock signatures. */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return -- Jest call records and generic UoW callback use dynamic mock signatures. */
 import { Asset } from '../../../domain/asset/asset';
 import { RegisterAssetUseCase } from '../asset-registration.use-case';
 import { UpdateAssetUseCase } from '../asset-update.use-case';
+import { QrMappingConflictError } from '../../qr/qr-mapping.errors';
 
 describe('Asset registry write use cases', () => {
   const context = {} as never;
@@ -9,6 +10,7 @@ describe('Asset registry write use cases', () => {
   let catalog: { findType: jest.Mock; findModel: jest.Mock };
   let outbox: { append: jest.Mock };
   let unitOfWork: { run: jest.Mock };
+  let qrMappings: { replaceActive: jest.Mock };
   const actor = { type: 'user', id: 'admin-1' };
 
   beforeEach(() => {
@@ -25,6 +27,7 @@ describe('Asset registry write use cases', () => {
     };
     outbox = { append: jest.fn().mockResolvedValue(undefined) };
     unitOfWork = { run: jest.fn((callback) => callback(context)) };
+    qrMappings = { replaceActive: jest.fn().mockResolvedValue(undefined) };
   });
 
   it('registers ACTIVE Assets with canonical identity and appends an Audit fact', async () => {
@@ -35,6 +38,8 @@ describe('Asset registry write use cases', () => {
       outbox,
       () => new Date('2026-10-19T00:00:00.000Z'),
       () => 'asset-1',
+      qrMappings as never,
+      () => 'node-qr-1',
     );
 
     const asset = await useCase.execute(
@@ -48,12 +53,32 @@ describe('Asset registry write use cases', () => {
       assetModelId: undefined,
     });
     expect(assets.save).toHaveBeenCalledWith(asset, context);
+    expect(qrMappings.replaceActive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        value: 'node-qr-1',
+        targetType: 'asset',
+        targetId: 'asset-1',
+      }),
+      context,
+    );
     expect(outbox.append.mock.calls[0][0]).toMatchObject({
       producer: 'asset-topology',
       occurred_at: '2026-10-19T00:00:00.000Z',
       resource: { id: 'asset-1', sequence: 1 },
-      payload: { action: 'asset_topology.asset.created', actor },
+      payload: {
+        action: 'asset_topology.asset.created',
+        actor,
+        changes: expect.arrayContaining([
+          { field: 'qr_value', after: 'node-qr-1' },
+        ]),
+      },
     });
+    expect(assets.save.mock.invocationCallOrder[0]).toBeLessThan(
+      qrMappings.replaceActive.mock.invocationCallOrder[0],
+    );
+    expect(qrMappings.replaceActive.mock.invocationCallOrder[0]).toBeLessThan(
+      outbox.append.mock.invocationCallOrder[0],
+    );
   });
 
   it('rejects an unknown or mismatched Model before saving', async () => {
@@ -63,6 +88,9 @@ describe('Asset registry write use cases', () => {
       catalog,
       unitOfWork,
       outbox,
+      undefined,
+      undefined,
+      qrMappings as never,
     );
 
     await expect(
@@ -72,6 +100,25 @@ describe('Asset registry write use cases', () => {
       ),
     ).rejects.toThrow('Asset Model was not found');
     expect(assets.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects a generated QR value that conflicts with active or historical values', async () => {
+    qrMappings.replaceActive.mockRejectedValue({ code: 11000 });
+    const useCase = new RegisterAssetUseCase(
+      assets,
+      catalog,
+      unitOfWork,
+      outbox,
+      undefined,
+      () => 'asset-1',
+      qrMappings as never,
+      () => 'previously-used-qr',
+    );
+
+    await expect(
+      useCase.execute({ name: 'Node 01', assetTypeId: 'type-node' }, actor),
+    ).rejects.toBeInstanceOf(QrMappingConflictError);
+    expect(outbox.append).not.toHaveBeenCalled();
   });
 
   it('does not write or audit a no-op descriptive update', async () => {

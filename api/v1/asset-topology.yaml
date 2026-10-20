@@ -58,6 +58,7 @@ paths:
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
 
   /api/v1/asset-topology/assets/{asset_id}:
     parameters:
@@ -563,6 +564,95 @@ paths:
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
 
+  /api/v1/asset-topology/assets/{asset_id}/qr:
+    parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    post:
+      operationId: assignAssetQr
+      summary: Generate or replace an Asset QR mapping
+      security: [{ HumanAccessToken: [] }]
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '200':
+          description: System-generated QR mapping.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QrMappingResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+    delete:
+      operationId: deactivateAssetQr
+      summary: Deactivate the active Asset QR mapping
+      security: [{ HumanAccessToken: [] }]
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '200': { description: Active mapping deactivated. }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/racks/{rack_id}/qr:
+    parameters:
+      - name: rack_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    post:
+      operationId: assignRackQr
+      summary: Generate or replace a Rack QR mapping
+      security: [{ HumanAccessToken: [] }]
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '200':
+          description: System-generated QR mapping.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QrMappingResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+    delete:
+      operationId: deactivateRackQr
+      summary: Deactivate the active Rack QR mapping
+      security: [{ HumanAccessToken: [] }]
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '200': { description: Active mapping deactivated. }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/qr/{value}:
+    parameters:
+      - name: value
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    get:
+      operationId: resolveQr
+      summary: Resolve an active QR to current target data
+      security: [{ HumanAccessToken: [] }]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Current Asset or Rack data for the active mapping.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QrResolutionResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
 components:
   securitySchemes:
     HumanAccessToken:
@@ -736,6 +826,24 @@ components:
             oneOf:
               [{ $ref: '#/components/schemas/RackLocation' }, { type: 'null' }],
           }
+    QrMappingResponse:
+      type: object
+      required: [target_type, target_id, qr_value, active]
+      properties:
+        target_type: { type: string, enum: [asset, rack] }
+        target_id: { type: string }
+        qr_value: { type: string }
+        active: { type: boolean }
+    QrResolutionResponse:
+      type: object
+      required: [target_type, target_id, target]
+      properties:
+        target_type: { type: string, enum: [asset, rack] }
+        target_id: { type: string }
+        target:
+          oneOf:
+            - $ref: '#/components/schemas/AssetReference'
+            - $ref: '#/components/schemas/RackResponse'
     RackLocationHistoryEntry:
       allOf:
         - $ref: '#/components/schemas/RackLocation'

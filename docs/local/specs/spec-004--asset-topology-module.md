@@ -133,9 +133,9 @@ No cross-module deep imports or direct reads/writes of another module's collecti
 ### 5.4 QR identification
 
 - QR can identify either a Rack or a Node/Asset. It is a lookup marker, not the canonical Rack/Asset ID, Agent ID, or AR spatial anchor.
-- A Rack or Asset has at most one active QR mapping; an active QR value maps to at most one target across both target types.
-- Flow 1 calls for automatic QR generation for a Node after its creation; Rack QR can be assigned or changed by an authorized Admin.
-- QR changes do not change Rack or Asset identity. Marker history and attribution are retained; lookup of inactive historical QR values is not part of current resolution unless separately confirmed.
+- A Rack or Asset has at most one active QR mapping. QR values are globally unique across active and inactive mapping history and can never be reassigned to another target.
+- The system generates opaque QR values for both Nodes and Racks. Node creation and its initial QR mapping are atomic; an authorized Admin assigns or replaces a Rack or Node mapping by requesting a new generated value. Admins do not provide QR values.
+- QR changes do not change Rack or Asset identity. Mapping history retains the QR value, target, and active interval. Resolution ignores inactive mappings and reads the target's current data through the existing Asset or Rack query; mapping history does not snapshot target details.
 - Label generation produces printable PDF and SVG output; physical printing/application is outside Core's business transaction. Node label content includes QR, Node name, and placement. IP is omitted until an authoritative source and data freshness are defined.
 
 ### 5.5 Status and lifecycle
@@ -155,7 +155,7 @@ No cross-module deep imports or direct reads/writes of another module's collecti
 | **Room/Hall**   | Room identity, dimensions, and grid configuration                                 | Positive dimensions and valid grid; reject size/grid changes that invalidate any current Rack placement |
 | **Rack**        | Rack identity, U capacity, current one-cell Room placement, and lifecycle          | U positions fit capacity; retirement requires no placed Assets                                          |
 | **Asset**       | Stable Asset identity, name, type/model references, status, and placement history | Type/Model compatibility; at most one active placement; status transition rules                         |
-| **QR Mapping**  | QR value, target type/ID, active/history interval                                 | Active QR is unique across Rack and Asset targets; one active QR per target                             |
+| **QR Mapping**  | QR value, target type/ID, active/history interval                                 | QR value is unique across all history; one active mapping per target                                     |
 
 Treat these as logical boundaries, not a requirement for one collection per aggregate. A placement use case coordinates the Asset and target Rack Unit so two concurrent requests cannot claim the same U. A Room layout use case coordinates the Room and Rack locations to reject invalid or occupied grid cells. Do not combine all Racks into the Room aggregate solely to enforce map geometry.
 
@@ -170,7 +170,7 @@ Treat these as logical boundaries, not a requirement for one collection per aggr
 | **AT-FR-05** | An Asset can be created with a required human-readable name, stable identity, and the seeded Node Asset Type even when its optional, already-existing Model or manufacturer serial number is not known. Flow 1 does not manage Type or Model catalogs.                                                                                                                                                                                                 |
 | **AT-FR-06** | A new Asset starts `ACTIVE` and unassigned; it may be placed in exactly one available Rack Unit (1U) in v1.                                                                                                                                                                                                                                                                                                                                            |
 | **AT-FR-07** | Assign, move, and unmap are explicit operations recorded through Asset Location. Move/unmap retain the prior placement record and do not silently retire the Asset or alter Agent binding, which Agent Management owns.                                                                                                                                                                                                                                |
-| **AT-FR-08** | The system generates a QR for a newly created Node and supports assigning, replacing, deactivating, and resolving QR identifiers for both Rack and Node, subject to unambiguous active mapping.                                                                                                                                                                                                                                                        |
+| **AT-FR-08** | The system generates opaque QR values for new Nodes and for Admin-requested Rack/Node mapping assignments or replacements; supports deactivation and active-only resolution to current target data. QR values remain unique across all history, with at most one active mapping per target. Node creation and its initial mapping are atomic. |
 | **AT-FR-09** | The system can prepare individual or bulk Rack and Node labels in both PDF and SVG formats. Node labels omit IP until an authoritative source and freshness are defined.                                                                                                                                                                                                                                                                               |
 | **AT-FR-10** | An Asset or Rack cannot be retired when its retirement preconditions fail. Asset retirement conditions and terminal state are defined in section 5.5.                                                                                                                                                                                                                                                                                                  |
 | **AT-FR-11** | Authorized modules use the Asset & Topology application contract to reference canonical Asset/Rack IDs, query confirmed topology/placement, and request use-case-validated Asset maintenance-state changes. The Asset query returns canonical ID, name, Type ID, lifecycle state, and `currentPlacement: null` when unplaced; its provider is available independently of later Rack and Room-map queries. Contract types expose no domain or persistence types. Placement is not inferred from lifecycle state. Dashboard HTTP/OpenAPI contracts are defined by the corresponding feature tickets. |
@@ -228,10 +228,10 @@ Treat these as logical boundaries, not a requirement for one collection per aggr
 
 ### 8.5 Manage Rack and Node QR
 
-1. Core generates a QR mapping when a Node is created; an IT Admin can assign or change a Rack QR.
-2. Core validates that the active QR resolves to only one Rack or Node.
-3. The mapping change is recorded through the existing Audit mechanism with actor, source, and timestamp; the mapping points to the canonical target ID.
-4. A lookup resolves an active QR to the canonical Rack or Asset ID.
+1. Core generates an opaque QR mapping with a new Node in the same transaction; an IT Admin can request a generated QR mapping for a Rack or Node and replace/deactivate an existing mapping.
+2. Core enforces a globally unique QR value across all active and historical mappings and at most one active mapping per target.
+3. The mapping change is recorded through the existing Audit mechanism with actor, source, and timestamp; the mapping points to the canonical target ID and retains its active interval.
+4. A lookup resolves an active QR to its canonical Rack or Asset ID and returns current target data through the existing Rack or Asset query. Mapping history does not snapshot target data, and inactive historical values do not resolve.
 5. Label generation returns the requested single/bulk PDF or SVG output. Node labels include name and current placement; IP is omitted until its authoritative source and freshness are defined.
 
 ## 9. Module architecture

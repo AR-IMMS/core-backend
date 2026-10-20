@@ -4,6 +4,7 @@ import { RegisterAssetUseCase } from '../asset-registration.use-case';
 import { UpdateAssetUseCase } from '../asset-update.use-case';
 import { ASSET_CATALOG_STORE, ASSET_STORE } from '../asset-store.token';
 import { ASSET_CLOCK, ASSET_ID_GENERATOR } from '../asset-runtime.token';
+import { QR_MAPPING_STORE } from '../../qr/qr-mapping-store.token';
 
 describe('Asset write use case dependency injection', () => {
   it('resolves both write use cases from their declared port providers', async () => {
@@ -17,6 +18,7 @@ describe('Asset write use case dependency injection', () => {
         { provide: OUTBOX_WRITER_PORT, useValue: {} },
         { provide: ASSET_CLOCK, useValue: () => new Date() },
         { provide: ASSET_ID_GENERATOR, useValue: () => 'id' },
+        { provide: QR_MAPPING_STORE, useValue: {} },
       ],
     }).compile();
 

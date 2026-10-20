@@ -2,6 +2,7 @@ import { DEFAULT_DATA_CENTER_MIGRATION } from './infrastructure/mongodb/migratio
 import { ASSET_CATALOG_MIGRATION } from './infrastructure/mongodb/migrations/asset-catalog.migration';
 import { RACK_MANAGEMENT_MIGRATION } from './infrastructure/mongodb/migrations/rack-management.migration';
 import { ASSET_PLACEMENT_MIGRATION } from './infrastructure/mongodb/migrations/asset-placement.migration';
+import { QR_MAPPING_MIGRATION } from './infrastructure/mongodb/migrations/qr-mapping.migration';
 
 /** Asset & Topology-owned MongoDB migrations exposed to the application host. */
 export const ASSET_TOPOLOGY_MONGO_MIGRATIONS = [
@@ -9,4 +10,5 @@ export const ASSET_TOPOLOGY_MONGO_MIGRATIONS = [
   ASSET_CATALOG_MIGRATION,
   RACK_MANAGEMENT_MIGRATION,
   ASSET_PLACEMENT_MIGRATION,
+  QR_MAPPING_MIGRATION,
 ] as const;

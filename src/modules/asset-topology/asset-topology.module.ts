@@ -61,6 +61,14 @@ import {
   ASSET_CLOCK,
   ASSET_ID_GENERATOR,
 } from './application/assets/asset-runtime.token';
+import { QR_MAPPING_STORE } from './application/qr/qr-mapping-store.token';
+import { QrMappingUseCases } from './application/qr/qr-mapping.use-cases';
+import { MongoQrMappingStore } from './infrastructure/mongodb/mongo-qr-mapping.store';
+import {
+  QR_MAPPING_MODEL,
+  QrMappingSchema,
+} from './infrastructure/mongodb/qr-mapping.schema';
+import { QrMappingController } from './presentation/qr/qr-mapping.controller';
 
 /** Asset & Topology's Dashboard API and owned persistence adapters. */
 @Module({
@@ -77,6 +85,7 @@ import {
       { name: ASSET_TYPE_MODEL, schema: AssetTypeSchema },
       { name: ASSET_MODEL_MODEL, schema: AssetModelSchema },
       { name: ASSET_MODEL, schema: AssetSchema },
+      { name: QR_MAPPING_MODEL, schema: QrMappingSchema },
       {
         name: ASSET_TOPOLOGY_ASSET_LOCATION_MODEL,
         schema: AssetLocationSchema,
@@ -89,6 +98,7 @@ import {
     AssetReadController,
     AssetWriteController,
     AssetPlacementController,
+    QrMappingController,
   ],
   providers: [
     MongoTopologyStore,
@@ -99,6 +109,8 @@ import {
     RackManagementUseCases,
     RackQueryUseCase,
     MongoAssetStore,
+    MongoQrMappingStore,
+    { provide: QR_MAPPING_STORE, useExisting: MongoQrMappingStore },
     MongoAssetPlacementStore,
     { provide: ASSET_PLACEMENT_STORE, useExisting: MongoAssetPlacementStore },
     { provide: ASSET_STORE, useExisting: MongoAssetStore },
@@ -106,6 +118,7 @@ import {
     { provide: ASSET_CLOCK, useValue: () => new Date() },
     { provide: ASSET_ID_GENERATOR, useValue: randomUUID },
     RegisterAssetUseCase,
+    QrMappingUseCases,
     UpdateAssetUseCase,
     ChangeAssetMaintenanceStateUseCase,
     AssetPlacementManagementUseCases,

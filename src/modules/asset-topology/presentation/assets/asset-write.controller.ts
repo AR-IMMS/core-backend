@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   NotFoundException,
@@ -34,6 +35,7 @@ import {
   updateAssetSchema,
 } from './asset-registry.schemas';
 import { requireAssetAdmin, type AssetHttpRequest } from './asset-http-support';
+import { QrMappingConflictError } from '../../application/qr/qr-mapping.errors';
 
 @ApiTags('Asset Registry')
 @ApiBearerAuth('HumanAccessToken')
@@ -121,6 +123,8 @@ export class AssetWriteController {
         throw new NotFoundException(error.message);
       if (error instanceof DomainError)
         throw new BadRequestException({ message: error.message });
+      if (error instanceof QrMappingConflictError)
+        throw new ConflictException(error.message);
       if (error instanceof ForbiddenException) throw error;
       throw error;
     }

@@ -13,6 +13,12 @@ import {
 import { RegisterAssetUseCase } from '@modules/asset-topology/application/assets/asset-registration.use-case';
 import { UpdateAssetUseCase } from '@modules/asset-topology/application/assets/asset-update.use-case';
 import { ASSET_CATALOG_MIGRATION } from '@modules/asset-topology/infrastructure/mongodb/migrations/asset-catalog.migration';
+import { QR_MAPPING_MIGRATION } from '@modules/asset-topology/infrastructure/mongodb/migrations/qr-mapping.migration';
+import { MongoQrMappingStore } from '@modules/asset-topology/infrastructure/mongodb/mongo-qr-mapping.store';
+import {
+  QR_MAPPING_MODEL,
+  QrMappingSchema,
+} from '@modules/asset-topology/infrastructure/mongodb/qr-mapping.schema';
 import { MongoAssetStore } from '@modules/asset-topology/infrastructure/mongodb/mongo-asset.store';
 import {
   ASSET_MODEL,
@@ -44,9 +50,11 @@ async function main(): Promise<void> {
   try {
     await connection.dropDatabase();
     await ASSET_CATALOG_MIGRATION.up(connection);
+    await QR_MAPPING_MIGRATION.up(connection);
     const assets = connection.model(ASSET_MODEL, AssetSchema);
     const types = connection.model(ASSET_TYPE_MODEL, AssetTypeSchema);
     const models = connection.model(ASSET_MODEL_MODEL, AssetModelSchema);
+    const qrMappings = connection.model(QR_MAPPING_MODEL, QrMappingSchema);
     const outboxModel = connection.model(OUTBOX_ENTRY_MODEL, OutboxEntrySchema);
     const auditModel = connection.model<AuditRecord>(
       AUDIT_RECORD_MODEL,
@@ -56,6 +64,7 @@ async function main(): Promise<void> {
       assets.init(),
       types.init(),
       models.init(),
+      qrMappings.init(),
       outboxModel.init(),
       auditModel.init(),
     ]);
@@ -65,6 +74,7 @@ async function main(): Promise<void> {
       types as never,
       models as never,
     );
+    const qrMappingStore = new MongoQrMappingStore(qrMappings as never);
     const unitOfWork = new MongoUnitOfWork(connection);
     const outbox = new MongoOutboxStore(outboxModel as MongoOutboxModel);
     const failingRegistration = new RegisterAssetUseCase(
@@ -74,6 +84,7 @@ async function main(): Promise<void> {
       failingOutbox,
       undefined,
       () => 'rollback-asset',
+      qrMappingStore,
     );
     await assert.rejects(
       failingRegistration.execute(
@@ -83,6 +94,10 @@ async function main(): Promise<void> {
       /simulated Outbox failure/,
     );
     assert.equal(await assets.countDocuments({ id: 'rollback-asset' }), 0);
+    assert.equal(
+      await qrMappings.countDocuments({ targetId: 'rollback-asset' }),
+      0,
+    );
     assert.equal(await outboxModel.countDocuments({}), 0);
 
     let generated = 0;
@@ -93,6 +108,7 @@ async function main(): Promise<void> {
       outbox,
       () => new Date('2026-10-19T00:00:00.000Z'),
       () => `event-${++generated}`,
+      qrMappingStore,
     );
     const update = new UpdateAssetUseCase(
       store,
@@ -106,6 +122,54 @@ async function main(): Promise<void> {
       { name: 'Node', assetTypeId: 'type-node' },
       actor,
     );
+    assert.equal(
+      await qrMappings.countDocuments({ targetId: asset.id, active: true }),
+      1,
+    );
+    const firstQr = (await qrMappings.collection.findOne({
+      targetId: asset.id,
+      active: true,
+    })) as { id: string; value: string } | null;
+    assert.ok(firstQr);
+    const replacement = {
+      id: 'replacement-mapping',
+      value: 'replacement-qr',
+      targetType: 'asset' as const,
+      targetId: asset.id,
+      active: true,
+      validFrom: new Date('2026-10-20T00:00:00.000Z'),
+    };
+    await unitOfWork.run((context) =>
+      qrMappingStore.replaceActive(replacement, context),
+    );
+    const previousQr = await qrMappings.collection.findOne({ id: firstQr.id });
+    assert.equal(previousQr?.active, false);
+    assert.ok(previousQr?.validTo);
+    assert.equal(await qrMappingStore.findActiveByValue(firstQr.value), null);
+    await assert.rejects(
+      unitOfWork.run((context) =>
+        qrMappingStore.replaceActive(
+          {
+            ...replacement,
+            id: 'reused-value',
+            value: firstQr.value,
+            targetId: 'another-asset',
+          },
+          context,
+        ),
+      ),
+      (error: unknown) =>
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 11000,
+    );
+    await unitOfWork.run((context) =>
+      qrMappingStore.deactivateActive('asset', asset.id, context),
+    );
+    const finalQr = await qrMappings.collection.findOne({ id: replacement.id });
+    assert.equal(finalQr?.active, false);
+    assert.ok(finalQr?.validTo);
     await update.execute(asset.id, { name: 'Node 01' }, actor);
 
     const consumer = new AuditEventConsumer(
