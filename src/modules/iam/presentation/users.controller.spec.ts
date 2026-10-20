@@ -189,7 +189,7 @@ describe('UsersController', () => {
     );
 
     expect(() =>
-      controller.list({ page_size: '20', unexpected: 'value' }),
+      controller.list({ page_size: 20, unexpected: 'value' } as never),
     ).toThrow(BadRequestException);
     expect(listUsers).not.toHaveBeenCalled();
   });
@@ -204,7 +204,7 @@ describe('UsersController', () => {
       { listUsers } as unknown as UserAdministrationService,
     );
 
-    await expect(controller.list({ page_size: '10' })).resolves.toMatchObject({
+    await expect(controller.list({ page_size: 10 })).resolves.toMatchObject({
       items: [],
       pagination: { type: 'cursor', next_cursor: null },
     });

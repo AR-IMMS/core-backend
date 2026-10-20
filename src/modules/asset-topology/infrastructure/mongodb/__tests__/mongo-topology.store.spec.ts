@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion -- Mongoose query doubles are cast to the model query return type. */
 /* eslint-disable @typescript-eslint/unbound-method -- Jest matchers inspect mocked methods. */
-/* eslint-disable @typescript-eslint/no-unsafe-return -- Mongoose query doubles return generic mocked results. */
+
 import { DEFAULT_DATA_CENTER_ID } from '../../../domain/topology/data-center';
 import { Room } from '../../../domain/topology/room';
 import { RoomMap } from '../../../domain/topology/room-map';
@@ -142,12 +142,19 @@ describe('MongoTopologyStore', () => {
 });
 
 function query<TResult>(result: TResult) {
-  const chain = {
+  const chain: {
+    select: jest.Mock;
+    sort: jest.Mock;
+    session: jest.Mock;
+    lean: jest.Mock;
+    exec: jest.Mock;
+  } = {} as never;
+  Object.assign(chain, {
     select: jest.fn(() => chain),
     sort: jest.fn(() => chain),
     session: jest.fn(() => chain),
     lean: jest.fn(() => ({ exec: jest.fn().mockResolvedValue(result) })),
     exec: jest.fn().mockResolvedValue(result),
-  };
+  });
   return chain;
 }

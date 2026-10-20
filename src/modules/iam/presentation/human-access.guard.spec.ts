@@ -152,5 +152,5 @@ function createContext(
     getHandler: () => handler,
     getClass: () => class TestController {},
     switchToHttp: () => ({ getRequest: () => request }),
-  } as ExecutionContext;
+  } as unknown as ExecutionContext;
 }

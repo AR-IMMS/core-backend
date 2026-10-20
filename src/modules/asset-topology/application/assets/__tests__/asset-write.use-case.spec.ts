@@ -5,14 +5,18 @@ import { UpdateAssetUseCase } from '../asset-update.use-case';
 
 describe('Asset registry write use cases', () => {
   const context = {} as never;
-  let assets: { save: jest.Mock; findById: jest.Mock };
+  let assets: { save: jest.Mock; findById: jest.Mock; list: jest.Mock };
   let catalog: { findType: jest.Mock; findModel: jest.Mock };
   let outbox: { append: jest.Mock };
   let unitOfWork: { run: jest.Mock };
   const actor = { type: 'user', id: 'admin-1' };
 
   beforeEach(() => {
-    assets = { save: jest.fn().mockResolvedValue(1), findById: jest.fn() };
+    assets = {
+      save: jest.fn().mockResolvedValue(1),
+      findById: jest.fn(),
+      list: jest.fn(),
+    };
     catalog = {
       findType: jest.fn().mockResolvedValue({ id: 'type-node' }),
       findModel: jest

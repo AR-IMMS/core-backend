@@ -3,6 +3,8 @@
 /node_modules
 /build
 tsconfig.build.tsbuildinfo
+tsconfig.tsbuildinfo
+tsconfig.spec.tsbuildinfo
 
 # Logs
 logs

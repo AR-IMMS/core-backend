@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await -- Structural Mongoose query-chain doubles use fluent dynamic mocks. */
+/* eslint-disable @typescript-eslint/require-await -- Structural Mongoose query-chain doubles use fluent dynamic mocks. */
 import { MongoAssetStore } from '../mongo-asset.store';
 import { Asset } from '../../../domain/asset/asset';
 
@@ -57,11 +57,13 @@ describe('MongoAssetStore', () => {
         auditSequence: 0,
       },
     ];
-    const query = {
-      sort: jest.fn(() => query),
-      limit: jest.fn(() => query),
+    const query: { sort: jest.Mock; limit: jest.Mock; lean: jest.Mock } = {
+      sort: jest.fn(),
+      limit: jest.fn(),
       lean: jest.fn(() => ({ exec: async () => docs })),
     };
+    query.sort.mockReturnValue(query);
+    query.limit.mockReturnValue(query);
     const assets = { find: jest.fn(() => query) };
     const store = new MongoAssetStore(
       assets as never,
@@ -80,7 +82,12 @@ describe('MongoAssetStore', () => {
   it('increments the Audit sequence without rewriting the immutable Type', async () => {
     const updated = { auditSequence: 4 };
     const query = { lean: () => ({ exec: async () => updated }) };
-    const findOneAndUpdate = jest.fn(() => query);
+    const findOneAndUpdate = jest.fn(
+      (...args: [Record<string, unknown>, Record<string, unknown>]) => {
+        void args;
+        return query;
+      },
+    );
     const assets = { findOneAndUpdate };
     const store = new MongoAssetStore(
       assets as never,
@@ -101,7 +108,9 @@ describe('MongoAssetStore', () => {
       $setOnInsert: { id: 'asset-1', assetTypeId: 'type-node' },
       $inc: { auditSequence: 1 },
     });
-    expect(update.$set).not.toHaveProperty('assetTypeId');
+    expect(
+      (update as { $set?: Record<string, unknown> } | undefined)?.$set,
+    ).not.toHaveProperty('assetTypeId');
   });
 
   it('looks up Type and Model references by their canonical catalog IDs', async () => {
@@ -136,4 +145,4 @@ describe('MongoAssetStore', () => {
     });
   });
 });
-/* eslint-enable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
+/* eslint-enable @typescript-eslint/require-await */

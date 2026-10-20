@@ -1,7 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment -- Jest error matchers use callback signatures that the typed rule cannot infer. */
 import { Room } from '.././room';
 import { RoomMap } from '.././room-map';
-import type { RoomId, SiteId } from '.././site';
+import type { SiteId } from '.././site';
+import type { RoomId } from '.././room';
 
 describe('Room', () => {
   it('keeps its identity and Site reference when name and map are updated', () => {

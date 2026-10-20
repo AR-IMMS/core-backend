@@ -1,18 +1,14 @@
 import assert from 'node:assert/strict';
-import { createConnection, type Model } from 'mongoose';
+import { createConnection } from 'mongoose';
 
 import { AuditEventConsumer } from '@modules/audit/application/audit-event.consumer';
-import type { AuditRecord } from '@modules/audit/domain/audit-record';
 import {
   AUDIT_RECORD_MODEL,
+  AuditRecordEntry,
   AuditRecordSchema,
 } from '@modules/audit/infrastructure/mongodb/audit-record.schema';
-import {
-  MongoAuditRecordStore,
-  type MongoAuditRecordModel,
-} from '@modules/audit/infrastructure/mongodb/mongo-audit-record.store';
+import { MongoAuditRecordStore } from '@modules/audit/infrastructure/mongodb/mongo-audit-record.store';
 import { TopologyUseCases } from '@modules/asset-topology/application/topology/topology-use-cases';
-import type { TopologyStorePort } from '@modules/asset-topology/application/topology/topology-store.port';
 import { DEFAULT_DATA_CENTER_MIGRATION } from '@modules/asset-topology/infrastructure/mongodb/migrations/default-data-center.migration';
 import {
   MongoTopologyStore,
@@ -29,18 +25,19 @@ import {
   TopologySiteSchema,
 } from '@modules/asset-topology/infrastructure/mongodb/topology.schema';
 import { PermissionCatalogPort } from '@modules/iam/application/ports/permission-catalog.port';
+import { OutboxRelayService } from '@platform/events';
+import { EventConsumerRegistry } from '@platform/events/application/event-consumer.registry';
 import {
-  EventConsumerRegistry,
-  MongoUnitOfWork,
   MongoOutboxStore,
-  OutboxRelayService,
+  type MongoOutboxModel,
+} from '@platform/events/infrastructure/mongodb/mongo-outbox.store';
+import { MongoUnitOfWork } from '@platform/events/infrastructure/mongodb/mongo-unit-of-work';
+import {
   OUTBOX_ENTRY_MODEL,
+  OutboxEntry,
   OutboxEntrySchema,
-} from '@platform/events';
+} from '@platform/events/infrastructure/mongodb/outbox.schema';
 import type { OutboxWriterPort } from '@platform/events';
-import type { MongoOutboxModel } from '@platform/events/infrastructure/mongodb/mongo-outbox.store';
-import type { UnitOfWorkPort } from '@platform/events';
-import type { MongoConnection } from '@platform/events/infrastructure/mongodb/mongo-connection.types';
 import { resolveMongoTestConfig } from './mongodb-test-config';
 
 async function main(): Promise<void> {
@@ -60,8 +57,11 @@ async function main(): Promise<void> {
     );
     const sites = connection.model(TOPOLOGY_SITE_MODEL, TopologySiteSchema);
     const rooms = connection.model(TOPOLOGY_ROOM_MODEL, TopologyRoomSchema);
-    const outboxModel = connection.model(OUTBOX_ENTRY_MODEL, OutboxEntrySchema);
-    const auditModel = connection.model<AuditRecord>(
+    const outboxModel = connection.model<OutboxEntry>(
+      OUTBOX_ENTRY_MODEL,
+      OutboxEntrySchema,
+    );
+    const auditModel = connection.model<AuditRecordEntry>(
       AUDIT_RECORD_MODEL,
       AuditRecordSchema,
     );
@@ -78,9 +78,7 @@ async function main(): Promise<void> {
       sites as unknown as MongoTopologySiteModel,
       rooms as unknown as MongoTopologyRoomModel,
     );
-    const unitOfWork = new MongoUnitOfWork(
-      connection as unknown as MongoConnection,
-    );
+    const unitOfWork = new MongoUnitOfWork(connection);
     const outbox = new MongoOutboxStore(
       outboxModel as unknown as MongoOutboxModel,
     );
@@ -142,11 +140,12 @@ async function main(): Promise<void> {
         );
 
         const consumer = new AuditEventConsumer(
-          new MongoAuditRecordStore(
-            auditModel as unknown as MongoAuditRecordModel,
-          ),
+          new MongoAuditRecordStore(auditModel),
           {
-            isKnownPermissionCode: (_code: string) => false,
+            isKnownPermissionCode: (_code: string) => {
+              void _code;
+              return false;
+            },
           } satisfies PermissionCatalogPort,
         );
         const relay = new OutboxRelayService(
@@ -174,7 +173,13 @@ async function main(): Promise<void> {
           ],
         );
         assert.deepEqual(
-          auditRecords.map(({ resource }) => resource.sequence),
+          (
+            await outboxModel
+              .find({ 'fact.producer': 'asset-topology' })
+              .sort({ 'fact.occurred_at': 1, 'fact.event_id': 1 })
+              .lean()
+              .exec()
+          ).map(({ fact }) => fact.resource.sequence),
           [1, 1, 2],
         );
         assert.equal(
@@ -189,9 +194,7 @@ async function main(): Promise<void> {
 }
 
 const failingOutbox: OutboxWriterPort = {
-  append: async () => {
-    throw new Error('simulated Outbox failure');
-  },
+  append: () => Promise.reject(new Error('simulated Outbox failure')),
 };
 
 async function runCase(

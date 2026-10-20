@@ -36,7 +36,7 @@ describe('RackManagementUseCases', () => {
       saveRack: jest.fn(async () => 1),
       closeActiveLocation: jest.fn(async () => undefined),
       saveLocation: jest.fn(async () => undefined),
-    };
+    } as unknown as jest.Mocked<RackStorePort>;
     topologyStore = {
       getRoom: jest.fn(async () => room),
     } as unknown as jest.Mocked<TopologyStorePort>;

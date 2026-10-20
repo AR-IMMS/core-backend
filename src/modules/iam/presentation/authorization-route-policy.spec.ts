@@ -56,7 +56,12 @@ function policy(
     : undefined;
   return new Reflector().getAllAndOverride(
     HTTP_ROUTE_POLICY_METADATA,
-    handler ? [handler, controller] : [controller],
+    handler
+      ? [
+          handler as unknown as (...args: never[]) => unknown,
+          controller as unknown as (...args: never[]) => unknown,
+        ]
+      : [controller as unknown as (...args: never[]) => unknown],
   );
 }
 

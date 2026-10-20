@@ -45,7 +45,10 @@ describe('UserAdministrationService', () => {
       ...overrides,
     };
     const append = jest
-      .fn<OutboxWriterPort['append']>()
+      .fn<
+        ReturnType<OutboxWriterPort['append']>,
+        Parameters<OutboxWriterPort['append']>
+      >()
       .mockResolvedValue(undefined);
     const appendedFacts: unknown[] = [];
     append.mockImplementation((fact) => {
@@ -61,7 +64,7 @@ describe('UserAdministrationService', () => {
       run: jest.fn((operation) => operation(context)),
     };
     const service = new UserAdministrationService(
-      store,
+      store as unknown as UserAdministrationStorePort,
       passwords,
       unitOfWork,
       outbox,

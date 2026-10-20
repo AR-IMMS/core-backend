@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return -- Mongoose query doubles return typed generic results. */
 import { Rack } from '../../../domain/topology/rack';
 import { RackLocation } from '../../../domain/topology/rack-location';
 import { MongoRackStore } from '../mongo-rack.store';
@@ -78,12 +77,19 @@ describe('MongoRackStore', () => {
 });
 
 function query<TResult>(value: TResult) {
-  const chain = {
+  const chain: {
+    select: jest.Mock;
+    sort: jest.Mock;
+    session: jest.Mock;
+    lean: jest.Mock;
+    exec: jest.Mock;
+  } = {} as never;
+  Object.assign(chain, {
     select: jest.fn(() => chain),
     sort: jest.fn(() => chain),
     session: jest.fn(() => chain),
     lean: jest.fn(() => ({ exec: jest.fn().mockResolvedValue(value) })),
     exec: jest.fn().mockResolvedValue(value),
-  };
+  });
   return chain;
 }

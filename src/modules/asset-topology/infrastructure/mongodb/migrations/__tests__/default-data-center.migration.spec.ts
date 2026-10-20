@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access -- The migration is tested against a minimal structural Mongo connection double. */
 import { DEFAULT_DATA_CENTER_ID } from '../../../../domain/topology/data-center';
 import { DEFAULT_DATA_CENTER_MIGRATION } from '.././default-data-center.migration';
 
@@ -11,10 +10,10 @@ describe('DEFAULT_DATA_CENTER_MIGRATION', () => {
     };
     const connection = {
       db: { collection: jest.fn(() => collection) },
-    } as never;
+    };
 
-    await DEFAULT_DATA_CENTER_MIGRATION.up(connection);
-    await DEFAULT_DATA_CENTER_MIGRATION.up(connection);
+    await DEFAULT_DATA_CENTER_MIGRATION.up(connection as never);
+    await DEFAULT_DATA_CENTER_MIGRATION.up(connection as never);
 
     expect(connection.db.collection).toHaveBeenCalledWith(
       'asset_topology_data_centers',

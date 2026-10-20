@@ -33,7 +33,11 @@ describe('MongoAuditRecordStore', () => {
       ],
     };
     const create = jest.fn().mockResolvedValue([recordWithPermissionArrays]);
-    const store = new MongoAuditRecordStore({ create });
+    const store = new MongoAuditRecordStore({
+      create,
+      find: jest.fn(),
+      findOne: jest.fn(),
+    });
 
     await store.appendIfAbsent(recordWithPermissionArrays);
 
@@ -46,7 +50,11 @@ describe('MongoAuditRecordStore', () => {
 
   test('stores a record as one append-only event-id keyed effect', async () => {
     const create = jest.fn().mockResolvedValue([record]);
-    const model: MongoAuditRecordModel = { create };
+    const model: MongoAuditRecordModel = {
+      create,
+      find: jest.fn(),
+      findOne: jest.fn(),
+    };
     const store = new MongoAuditRecordStore(model);
 
     await expect(store.appendIfAbsent(record)).resolves.toBe('inserted');
@@ -64,7 +72,11 @@ describe('MongoAuditRecordStore', () => {
       .mockRejectedValue(
         Object.assign(new Error('duplicate key'), { code: 11000 }),
       );
-    const model: MongoAuditRecordModel = { create };
+    const model: MongoAuditRecordModel = {
+      create,
+      find: jest.fn(),
+      findOne: jest.fn(),
+    };
     const store = new MongoAuditRecordStore(model);
 
     await expect(store.appendIfAbsent(record)).resolves.toBe('duplicate');
@@ -74,7 +86,11 @@ describe('MongoAuditRecordStore', () => {
     const create = jest
       .fn()
       .mockRejectedValue(new Error('database unavailable'));
-    const model: MongoAuditRecordModel = { create };
+    const model: MongoAuditRecordModel = {
+      create,
+      find: jest.fn(),
+      findOne: jest.fn(),
+    };
     const store = new MongoAuditRecordStore(model);
 
     await expect(store.appendIfAbsent(record)).rejects.toThrow(

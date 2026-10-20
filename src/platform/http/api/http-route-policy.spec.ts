@@ -83,8 +83,8 @@ describe('HTTP route policy metadata', () => {
 
     expect(
       new Reflector().getAllAndOverride(HTTP_ROUTE_POLICY_METADATA, [
-        handler,
-        PublicByDefaultController,
+        handler as unknown as (...args: never[]) => unknown,
+        PublicByDefaultController as unknown as (...args: never[]) => unknown,
       ]),
     ).toEqual({ kind: 'permissions', permissions: ['audit:read'] });
   });

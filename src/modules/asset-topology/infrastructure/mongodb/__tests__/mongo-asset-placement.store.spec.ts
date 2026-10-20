@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return -- Jest query doubles forward generic results dynamically. */
 import { AssetPlacement } from '../../../domain/placement/asset-placement';
 import {
   AssetPlacementConflictError,
@@ -88,12 +87,19 @@ describe('MongoAssetPlacementStore', () => {
 
 function query<TResult>(value: TResult) {
   const exec = jest.fn().mockResolvedValue(value);
-  const chain = {
+  const chain: {
+    sort: jest.Mock;
+    session: jest.Mock;
+    lean: jest.Mock;
+    exec: jest.Mock;
+    modifiedCount: number;
+  } = {} as never;
+  Object.assign(chain, {
     sort: jest.fn(() => chain),
     session: jest.fn(() => chain),
     lean: jest.fn(() => ({ exec })),
     exec,
     modifiedCount: 1,
-  };
+  });
   return chain;
 }

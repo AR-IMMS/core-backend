@@ -28,6 +28,7 @@ describe('Asset & Topology consumer contract', () => {
       getRack: () => Promise.resolve(null),
       getRoomMap: () => Promise.resolve(null),
       getRackLocationHistory: () => Promise.resolve(null),
+      getAssetPlacementHistory: () => Promise.resolve([]),
     };
 
     await expect(query.getAsset('asset-1' as AssetId)).resolves.toMatchObject({
@@ -69,6 +70,7 @@ describe('Asset & Topology consumer contract', () => {
           racks: [],
         }),
       getRackLocationHistory: () => Promise.resolve([]),
+      getAssetPlacementHistory: () => Promise.resolve([]),
     };
 
     await expect(query.getRack('rack-1' as RackId)).resolves.toMatchObject({
@@ -98,6 +100,7 @@ describe('Asset & Topology consumer contract', () => {
     >[0] = {
       assetId: 'asset-1' as AssetId,
       targetState: 'MAINTENANCE' satisfies AssetTopologyMaintenanceState,
+      source: { type: 'manual' },
     };
 
     expect(request).toEqual({ assetId: 'asset-1', targetState: 'MAINTENANCE' });

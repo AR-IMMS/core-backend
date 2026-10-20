@@ -28,42 +28,48 @@ describe('TopologyUseCases', () => {
     sites = [];
     rooms = [];
     facts = [];
-    rackStore = { listActiveLocationsInRoom: jest.fn(async () => []) };
+    rackStore = {
+      listActiveLocationsInRoom: jest.fn(async (roomId: string) => {
+        void roomId;
+        return [];
+      }),
+    };
     store = {
       getDataCenter: jest.fn(async () => ({
         id: 'dc-default' as never,
         name: 'Default Data Center',
       })),
-      listSites: jest.fn(async (dataCenterId) =>
+      listSites: jest.fn(async (dataCenterId: string) =>
         sites.filter((site) => site.dataCenterId === dataCenterId),
       ),
       getSite: jest.fn(
-        async (id) => sites.find((site) => site.id === id) ?? null,
+        async (id: string) => sites.find((site) => site.id === id) ?? null,
       ),
-      saveSite: jest.fn(async (site) => {
+      saveSite: jest.fn(async (site: Site) => {
         const index = sites.findIndex((current) => current.id === site.id);
         if (index < 0) sites.push(site);
         else sites[index] = site;
         return index < 0 ? 1 : 2;
       }),
-      listRooms: jest.fn(async (siteId) =>
+      listRooms: jest.fn(async (siteId: string) =>
         rooms.filter((room) => room.siteId === siteId),
       ),
       getRoom: jest.fn(
-        async (id) => rooms.find((room) => room.id === id) ?? null,
+        async (id: string) => rooms.find((room) => room.id === id) ?? null,
       ),
-      saveRoom: jest.fn(async (room) => {
+      saveRoom: jest.fn(async (room: Room) => {
         const index = rooms.findIndex((current) => current.id === room.id);
         if (index < 0) rooms.push(room);
         else rooms[index] = room;
         return index < 0 ? 1 : 2;
       }),
-    };
+    } as unknown as jest.Mocked<TopologyStorePort>;
     const unitOfWork: UnitOfWorkPort = {
       run: (operation) => operation({} as never),
     };
     outbox = {
-      append: jest.fn(async (fact) => {
+      append: jest.fn(async (fact, context) => {
+        void context;
         facts.push(fact as AuditFactV2);
       }),
     };
@@ -76,7 +82,7 @@ describe('TopologyUseCases', () => {
         let nextId = 0;
         return () => `generated-${++nextId}`;
       })(),
-      rackStore as RackStorePort,
+      rackStore as unknown as RackStorePort,
     );
   });
 

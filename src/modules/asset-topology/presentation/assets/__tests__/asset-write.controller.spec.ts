@@ -7,9 +7,11 @@ describe('AssetWriteController', () => {
   it('requires IT Admin before dispatching mutations', async () => {
     const register = { execute: jest.fn() };
     const update = { execute: jest.fn() };
+    const getAsset = { execute: jest.fn() };
     const controller = new AssetWriteController(
       register as never,
       update as never,
+      getAsset as never,
     );
 
     await expect(

@@ -49,7 +49,10 @@ describe('MongoAuditRecordStore query methods', () => {
       storedRecord('event-1', '2026-10-08T00:00:01.000Z'),
     ];
     const query = createQuery(rows);
-    const find: MongoAuditRecordModel['find'] = jest.fn(() => query);
+    const find: MongoAuditRecordModel['find'] = jest.fn((filter) => {
+      void filter;
+      return query as unknown as ReturnType<MongoAuditRecordModel['find']>;
+    });
     const model: MongoAuditRecordModel = {
       create: jest.fn(),
       find,
@@ -89,7 +92,12 @@ describe('MongoAuditRecordStore query methods', () => {
       pageSize: 10,
       cursor: { occurredAt: cursorDate, eventId: 'event-3' },
     };
-    const find: MongoAuditRecordModel['find'] = jest.fn(() => createQuery([]));
+    const find: MongoAuditRecordModel['find'] = jest.fn((filter) => {
+      void filter;
+      return createQuery([]) as unknown as ReturnType<
+        MongoAuditRecordModel['find']
+      >;
+    });
     const model: MongoAuditRecordModel = {
       create: jest.fn(),
       find,

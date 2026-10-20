@@ -9,10 +9,12 @@ import {
 import { AuditEventConsumer } from '@modules/audit/application/audit-event.consumer';
 import {
   AUDIT_RECORD_MODEL,
+  AuditRecordEntry,
   AuditRecordSchema,
 } from '@modules/audit/infrastructure/mongodb/audit-record.schema';
 import type { AuditRecord } from '@modules/audit/domain/audit-record';
 import { MongoAuditRecordStore } from '@modules/audit/infrastructure/mongodb/mongo-audit-record.store';
+import { PermissionCatalogPort } from '@modules/iam/application/ports/permission-catalog.port';
 import {
   AUDIT_FACT_EVENT_TYPE,
   AUDIT_FACT_EVENT_VERSION,
@@ -60,7 +62,7 @@ async function main(): Promise<void> {
       BUSINESS_WRITE_SCHEMA,
     );
     const outboxModel = connection.model(OUTBOX_ENTRY_MODEL, OutboxEntrySchema);
-    const auditModel = connection.model<AuditRecord>(
+    const auditModel = connection.model<AuditRecordEntry>(
       AUDIT_RECORD_MODEL,
       AuditRecordSchema,
     );
@@ -77,6 +79,7 @@ async function main(): Promise<void> {
       outboxModel as unknown as MongoOutboxModel,
     );
     const auditRecords = auditModel as unknown as Model<AuditRecord>;
+    const auditStore = new MongoAuditRecordStore(auditModel);
     const unitOfWork = new MongoUnitOfWork(connection);
 
     await clearCollections();
@@ -84,13 +87,13 @@ async function main(): Promise<void> {
       const event = auditFact('pe006-commit');
       await unitOfWork.run(async (context) => {
         await businessWrites.create([{ eventId: event.event_id }], {
-          session: context as ClientSession,
+          session: context as unknown as ClientSession,
         });
         await outbox.append(event, context);
       });
-      const consumer = new AuditEventConsumer(
-        new MongoAuditRecordStore(auditRecords),
-      );
+      const consumer = new AuditEventConsumer(auditStore, {
+        isKnownPermissionCode: () => false,
+      } satisfies PermissionCatalogPort);
       const relay = new OutboxRelayService(
         outbox,
         new EventConsumerRegistry([consumer]),
@@ -118,7 +121,7 @@ async function main(): Promise<void> {
       await assert.rejects(
         unitOfWork.run(async (context) => {
           await businessWrites.create([{ eventId: event.event_id }], {
-            session: context as ClientSession,
+            session: context as unknown as ClientSession,
           });
           await outbox.append(event, context);
           throw new Error('simulated producer failure');
@@ -145,8 +148,9 @@ async function main(): Promise<void> {
       const consumer = {
         consumerId: 'sequence-recorder',
         subscriptions: [AUDIT_SUBSCRIPTION],
-        handle(event: AuditFact): void {
+        handle(event: AuditFact): Promise<void> {
           receivedSequences.push(event.resource.sequence);
+          return Promise.resolve();
         },
       };
       const relay = new OutboxRelayService(
@@ -205,9 +209,12 @@ async function main(): Promise<void> {
       const retryConsumer = {
         consumerId: 'retrying-consumer',
         subscriptions: [AUDIT_SUBSCRIPTION],
-        handle(): void {
+        handle(): Promise<void> {
           attempts += 1;
-          if (attempts === 1) throw new Error('temporary consumer failure');
+          if (attempts === 1) {
+            return Promise.reject(new Error('temporary consumer failure'));
+          }
+          return Promise.resolve();
         },
       };
       const relay = new OutboxRelayService(
@@ -231,9 +238,9 @@ async function main(): Promise<void> {
     await clearCollections();
     await runCase('Audit duplicate idempotency', async () => {
       const event = auditFact('pe006-audit-idempotency');
-      const consumer = new AuditEventConsumer(
-        new MongoAuditRecordStore(auditRecords),
-      );
+      const consumer = new AuditEventConsumer(auditStore, {
+        isKnownPermissionCode: () => false,
+      } satisfies PermissionCatalogPort);
       await consumer.handle(event);
       await consumer.handle(event);
       assert.equal(
@@ -266,7 +273,7 @@ async function outboxCountByEvent(
 }
 
 async function waitForAuditEvent(
-  auditRecords: Model<AuditRecord>,
+  auditRecords: Model<AuditRecordEntry>,
   eventId: string,
 ): Promise<void> {
   const deadline = Date.now() + 5_000;
