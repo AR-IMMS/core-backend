@@ -20,7 +20,7 @@ export const RACK_MANAGEMENT_MIGRATION: MongoMigration = {
         { rackId: 1 },
         {
           unique: true,
-          partialFilterExpression: { validTo: { $exists: false } },
+          partialFilterExpression: { validTo: null },
           name: 'uq_asset_topology_active_rack_location',
         },
       ),
@@ -28,7 +28,7 @@ export const RACK_MANAGEMENT_MIGRATION: MongoMigration = {
         { roomId: 1, column: 1, row: 1 },
         {
           unique: true,
-          partialFilterExpression: { validTo: { $exists: false } },
+          partialFilterExpression: { validTo: null },
           name: 'uq_asset_topology_active_room_cell',
         },
       ),

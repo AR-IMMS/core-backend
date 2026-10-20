@@ -653,6 +653,37 @@ paths:
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
 
+  /api/v1/asset-topology/labels/{format}:
+    parameters:
+      - name: format
+        in: path
+        required: true
+        schema: { type: string, enum: [pdf, svg] }
+    post:
+      operationId: exportAssetTopologyLabels
+      summary: Export selected Rack and Node QR labels
+      description: One printable document may contain up to 100 selected targets. Node labels omit IP; every selected target must exist and have an active QR mapping.
+      security: [{ HumanAccessToken: [] }]
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LabelExportRequest' }
+      responses:
+        '200':
+          description: Printable label document.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            image/svg+xml:
+              schema: { type: string, format: binary }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
 components:
   securitySchemes:
     HumanAccessToken:
@@ -1008,3 +1039,16 @@ components:
             type: { type: string, const: cursor }
             next_cursor: { type: [string, 'null'] }
         meta: { $ref: '#/components/schemas/Meta' }
+    LabelExportRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        rack_ids:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 1, maxLength: 128 }
+        asset_ids:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 1, maxLength: 128 }
+      description: At least one target ID is required and the combined total cannot exceed 100.

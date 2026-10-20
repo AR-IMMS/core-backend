@@ -108,11 +108,12 @@ async function main(): Promise<void> {
     await runCase(
       'Site and Room Audit delivery through the Audit consumer',
       async () => {
+        let auditTimestamp = Date.parse('2026-10-19T00:00:00.000Z');
         const topology = new TopologyUseCases(
           store,
           unitOfWork,
           outbox,
-          () => new Date('2026-10-19T00:00:00.000Z'),
+          () => new Date(auditTimestamp++),
         );
         const site = await topology.createSite(
           { name: 'Building A', dataCenterId: 'dc-default' as never },
@@ -152,14 +153,24 @@ async function main(): Promise<void> {
           outbox,
           new EventConsumerRegistry([consumer]),
         );
-        const delivery = await relay.runOnce();
+        const firstPass = await relay.runOnce();
+        const secondPass = await relay.runOnce();
         const auditRecords = await auditModel
           .find({ producer: 'asset-topology' })
           .sort({ occurredAt: 1, eventId: 1 })
           .lean()
           .exec();
 
-        assert.deepEqual(delivery, { claimed: 3, delivered: 3, failed: 0 });
+        assert.deepEqual(firstPass, {
+          claimed: 2,
+          delivered: 2,
+          failed: 0,
+        });
+        assert.deepEqual(secondPass, {
+          claimed: 1,
+          delivered: 1,
+          failed: 0,
+        });
         assert.deepEqual(
           auditRecords.map(({ action, resource }) => [
             action,

@@ -1,4 +1,6 @@
 import { MODULE_METADATA } from '@nestjs/common/constants';
+import { Test } from '@nestjs/testing';
+import { OUTBOX_WRITER_PORT, UNIT_OF_WORK_PORT } from '@platform/events';
 import { MongoTopologyStore } from '.././infrastructure/mongodb/mongo-topology.store';
 import { TopologyController } from '.././presentation/topology.controller';
 import { TopologyUseCases } from '.././application/topology/topology-use-cases';
@@ -14,8 +16,24 @@ import { ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT } from '.././contracts';
 import { RackController } from '.././presentation/racks/rack.controller';
 import { RackQueryUseCase } from '.././application/racks/rack-query.use-case';
 import { ChangeAssetMaintenanceStateUseCase } from '.././application/assets/asset-maintenance-state.use-case';
+import { RACK_STORE } from '.././application/racks/rack-store.token';
 
 describe('AssetTopologyModule', () => {
+  it('can resolve TopologyUseCases through Nest dependency injection', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        TopologyUseCases,
+        { provide: TOPOLOGY_STORE, useValue: {} },
+        { provide: UNIT_OF_WORK_PORT, useValue: {} },
+        { provide: OUTBOX_WRITER_PORT, useValue: {} },
+        { provide: RACK_STORE, useValue: {} },
+      ],
+    }).compile();
+
+    expect(moduleRef.get(TopologyUseCases)).toBeInstanceOf(TopologyUseCases);
+    await moduleRef.close();
+  });
+
   it('composes Dashboard topology routes and Asset & Topology-owned persistence', () => {
     const controllers = Reflect.getMetadata(
       MODULE_METADATA.CONTROLLERS,

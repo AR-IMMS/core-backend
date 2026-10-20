@@ -18,6 +18,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -71,6 +72,7 @@ export class TopologyController {
   @Get('data-centers/:data_center_id/sites')
   @RequirePermissions('asset:read')
   @ApiOperation({ summary: 'List Sites beneath a Data Center' })
+  @ApiParam({ name: 'data_center_id', required: true, type: String })
   @ApiOkResponse({ description: 'Sites beneath the requested Data Center.' })
   @ApiNotFoundResponse({ description: 'Data Center was not found.' })
   listSites(@Param() rawParams: unknown) {
@@ -90,6 +92,7 @@ export class TopologyController {
   @Post('data-centers/:data_center_id/sites')
   @RequirePermissions('asset:manage')
   @ApiOperation({ summary: 'Create a Site beneath a Data Center' })
+  @ApiParam({ name: 'data_center_id', required: true, type: String })
   @ApiCreatedResponse({ description: 'Site created.' })
   @ApiBadRequestResponse({ description: 'The Site request is invalid.' })
   @ApiNotFoundResponse({ description: 'Data Center was not found.' })
@@ -120,6 +123,7 @@ export class TopologyController {
   @Get('sites/:site_id')
   @RequirePermissions('asset:read')
   @ApiOperation({ summary: 'Retrieve a Site' })
+  @ApiParam({ name: 'site_id', required: true, type: String })
   @ApiOkResponse({ description: 'Site details.' })
   @ApiNotFoundResponse({ description: 'Site was not found.' })
   getSite(@Param() rawParams: unknown) {
@@ -138,6 +142,7 @@ export class TopologyController {
   @Patch('sites/:site_id')
   @RequirePermissions('asset:manage')
   @ApiOperation({ summary: 'Update a Site name' })
+  @ApiParam({ name: 'site_id', required: true, type: String })
   @ApiOkResponse({ description: 'Site updated.' })
   @ApiBadRequestResponse({ description: 'The Site request is invalid.' })
   @ApiNotFoundResponse({ description: 'Site was not found.' })
@@ -170,6 +175,7 @@ export class TopologyController {
   @Get('sites/:site_id/rooms')
   @RequirePermissions('asset:read')
   @ApiOperation({ summary: 'List Rooms beneath a Site' })
+  @ApiParam({ name: 'site_id', required: true, type: String })
   @ApiOkResponse({ description: 'Rooms beneath the requested Site.' })
   @ApiNotFoundResponse({ description: 'Site was not found.' })
   listRooms(@Param() rawParams: unknown) {
@@ -187,6 +193,7 @@ export class TopologyController {
   @Post('sites/:site_id/rooms')
   @RequirePermissions('asset:manage')
   @ApiOperation({ summary: 'Create a Room beneath a Site' })
+  @ApiParam({ name: 'site_id', required: true, type: String })
   @ApiCreatedResponse({ description: 'Room created.' })
   @ApiBadRequestResponse({ description: 'The Room request is invalid.' })
   @ApiNotFoundResponse({ description: 'Site was not found.' })
@@ -223,6 +230,7 @@ export class TopologyController {
   @Get('rooms/:room_id')
   @RequirePermissions('asset:read')
   @ApiOperation({ summary: 'Retrieve a Room and its map configuration' })
+  @ApiParam({ name: 'room_id', required: true, type: String })
   @ApiOkResponse({ description: 'Room details and Room map.' })
   @ApiNotFoundResponse({ description: 'Room was not found.' })
   getRoom(@Param() rawParams: unknown) {
@@ -241,6 +249,7 @@ export class TopologyController {
   @Patch('rooms/:room_id')
   @RequirePermissions('asset:manage')
   @ApiOperation({ summary: 'Update a Room name and map configuration' })
+  @ApiParam({ name: 'room_id', required: true, type: String })
   @ApiOkResponse({ description: 'Room updated.' })
   @ApiBadRequestResponse({ description: 'The Room request is invalid.' })
   @ApiNotFoundResponse({ description: 'Room was not found.' })

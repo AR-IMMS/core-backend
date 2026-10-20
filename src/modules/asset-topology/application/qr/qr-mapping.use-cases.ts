@@ -157,6 +157,13 @@ export class QrMappingUseCases {
     };
   }
 
+  getActiveMapping(
+    type: QrTargetType,
+    targetId: string,
+  ): Promise<QrMapping | null> {
+    return this.mappings.getActiveForTarget(type, targetId);
+  }
+
   private readTarget(type: QrTargetType, id: string) {
     return type === 'asset'
       ? this.assets.getAsset(id as never)

@@ -117,15 +117,18 @@ Persist and expose the location hierarchy required by the Flow 1 UI and other mo
 
 **Acceptance Criteria**
 
-- [ ] The system provisions a default Data Center through the existing seed/bootstrap mechanism. IT Admin can retrieve the default Data Center but cannot create or update Data Centers through Flow 1. IT Admin can create, update, and retrieve Sites and Rooms under that Data Center.
-- [ ] A Site requires an existing Data Center; a Room requires an existing Site.
-- [ ] A Room stores positive physical dimensions and grid snap; grid cells are derived and not persisted.
-- [ ] Invalid dimensions, grid snap, or parent references are rejected without partial writes.
-- [ ] Public reads expose the topology data needed by the Dashboard and authorized consumers.
-- [ ] Mutations use repository-standard authorization, validation, error responses, OpenAPI, and Audit behavior.
-- [ ] Material topology changes record actor, source, and time through the existing Audit mechanism.
+- [x] The system provisions a default Data Center through the existing seed/bootstrap mechanism. IT Admin can retrieve the default Data Center but cannot create or update Data Centers through Flow 1. IT Admin can create, update, and retrieve Sites and Rooms under that Data Center.
+- [x] A Site requires an existing Data Center; a Room requires an existing Site.
+- [x] A Room stores positive physical dimensions and grid snap; grid cells are derived and not persisted.
+- [x] Invalid dimensions, grid snap, or parent references are rejected without partial writes.
+- [x] Public reads expose the topology data needed by the Dashboard and authorized consumers.
+- [x] Mutations use repository-standard authorization, validation, error responses, OpenAPI, and Audit behavior.
+- [x] Material topology changes record actor, source, and time through the existing Audit mechanism.
 
 **Blocked by:** AT-00 and AT-12.
+
+
+**Progress:** Implemented and verified locally. The Asset & Topology Jest suite passes (16 suites, 76 tests); TypeScript build check and Nest build pass. The GitHub CLI token was refreshed, but GitHub remained unreachable, so the remote issue checklist/comment could not be updated.
 
 ### AT-02: Implement Rack management and Room-map interaction
 
@@ -139,17 +142,75 @@ Let Admins create, place, move, and inspect Racks using the 2D Room map.
 
 **Acceptance Criteria**
 
-- [ ] A Rack belongs to an existing Room and has a positive floor footprint and U capacity.
-- [ ] The Dashboard renders the generated Room grid and supports Rack placement preview, rotation, and confirmation.
-- [ ] Core validates snap, Room bounds, supported rotation, and overlap independently of the UI.
-- [ ] Invalid placement or move leaves the prior Rack layout unchanged.
-- [ ] Moving a Rack within or between Rooms retains queryable location/layout history.
-- [ ] Row and position labels remain independent of map coordinates.
-- [ ] Room updates that would invalidate existing Rack placements are rejected.
+- [x] A Rack belongs to an existing Room, occupies exactly one logical grid cell, and has positive U capacity. Physical width/depth is out of scope.
+- [ ] The Dashboard renders the generated Room grid and supports Rack placement preview, rotation, and confirmation. This UI work belongs to the frontend repository.
+- [x] Core validates complete-cell grid bounds, supported rotation, and cell occupancy independently of the UI. Remainder strips that do not complete a grid cell are excluded.
+- [x] Invalid placement or move leaves the prior Rack layout unchanged. Moving or rotating to the current Room, cell, and rotation is a no-op with no history or Audit Fact.
+- [x] Moving a Rack within or between Rooms retains queryable location history; creation with initial placement and real moves are atomic.
+- [x] Row and position labels remain independent of map coordinates. AT-02 permits updating U capacity, row label, and position-in-row; Rack ID is immutable.
+- [x] Room grid-snap changes are rejected while any Rack is placed. Room dimension changes that put a Rack outside the resulting complete-cell grid are rejected.
 - [ ] Rack QR editing is provided through the QR workflow in AT-07.
-- [ ] Rack layout and location changes record actor, source, and time through the existing Audit mechanism.
+- [x] Rack layout and location changes record actor, source, and time through the existing Audit mechanism.
+- [x] Rack and Room-map queries use a dedicated read-only port; the existing Asset query remains independently available.
 
 **Blocked by:** AT-01 and AT-12.
+
+**Progress**
+
+- Implemented and committed as `54a12e7 feat(asset-topology): manage Racks on Room map` (design/spec updates: `35d2c8b docs: define AT-02 rack management design`).
+- Added Rack create/update/move and query APIs, one-cell Room-map placement, complete-cell grid validation, atomic placement and history persistence, Rack location history queries, Room-change guards, Audit attribution, and a dedicated Rack query port independent of the Asset query.
+- Rack QR workflow remains in AT-07. Dashboard UI remains frontend work.
+- GitHub issue #40 could not be updated automatically: the GitHub connector returned HTTP 403 (`Resource not accessible by integration`) for both issue update and comment. `gh auth refresh -s project` was retried and Enter was pressed at the prompt, but the CLI reported `error connecting to github.com`.
+
+**Verification logs**
+
+```text
+> .\node_modules\.bin\tsc.cmd -p tsconfig.build.json --noEmit
+(exit code 0)
+
+> .\node_modules\.bin\jest.cmd src/modules/asset-topology --runInBand
+Test Suites: 29 passed, 29 total
+Tests:       116 passed, 116 total
+Snapshots:   0 total
+
+> .\node_modules\.bin\eslint.cmd src/modules/asset-topology/**/*.ts src/modules/asset-topology/*.ts
+(exit code 0; no output)
+
+> .\node_modules\.bin\nest.cmd build
+(exit code 0; no output)
+
+> .\node_modules\.bin\prettier.cmd --check 'src/modules/asset-topology/**/*.ts' 'src/modules/asset-topology/*.ts' api/v1/asset-topology.yaml
+All matched files use Prettier
+```
+
+**Ready-to-copy GitHub comment**
+
+````markdown
+AT-02 is implemented and committed as `54a12e7 feat(asset-topology): manage Racks on Room map` (design/spec updates: `35d2c8b docs: define AT-02 rack management design`).
+
+Implemented the backend Rack slice: one-cell placement on complete Room grid cells, Rack create/update/move and query APIs, atomic Rack creation and real moves with queryable location history, Room-change guards, Audit attribution, and a dedicated Rack read-only query port independent of the existing Asset query. Rack QR remains for AT-07; Dashboard UI remains frontend work.
+
+Verification logs:
+```text
+> .\node_modules\.bin\tsc.cmd -p tsconfig.build.json --noEmit
+(exit code 0)
+
+> .\node_modules\.bin\jest.cmd src/modules/asset-topology --runInBand
+Test Suites: 29 passed, 29 total
+Tests:       116 passed, 116 total
+Snapshots:   0 total
+
+> .\node_modules\.bin\eslint.cmd src/modules/asset-topology/**/*.ts src/modules/asset-topology/*.ts
+(exit code 0; no output)
+
+> .\node_modules\.bin\nest.cmd build
+(exit code 0; no output)
+
+> .\node_modules\.bin\prettier.cmd --check 'src/modules/asset-topology/**/*.ts' 'src/modules/asset-topology/*.ts' api/v1/asset-topology.yaml
+All matched files use Prettier
+```
+```
+````
 
 ### AT-03: Implement Asset registry and initial Node classification
 
@@ -193,17 +254,83 @@ Let Admins assign, move, and unmap an Asset while maintaining correct Rack U occ
 
 **Acceptance Criteria**
 
-- [ ] An Asset may be unassigned or placed in exactly one Rack U in v1.
-- [ ] Assignment validates Asset eligibility, Rack eligibility, U capacity, and availability.
-- [ ] Two Assets cannot occupy the same U; one Asset cannot have multiple active placements.
-- [ ] Concurrent operations cannot commit conflicting placements.
-- [ ] A move validates the destination before closing the old placement; failure preserves the previous placement.
-- [ ] Unmap releases the U and retains the Asset and prior placement history; it does not unlink an Agent or retire the Asset.
-- [ ] Current and historical placement can be queried through the module boundary.
-- [ ] Tests cover assignment, move, unmap, collisions, concurrency and history.
-- [ ] Placement changes record actor, source, and time through the existing Audit mechanism.
+- [x] An Asset may be unassigned or placed in exactly one Rack U in v1.
+- [x] Assignment validates lifecycle eligibility (`ACTIVE` or `MAINTENANCE`; reject terminal `RETIRED`), Rack existence, U capacity, and availability.
+- [x] Two Assets cannot occupy the same U; one Asset cannot have multiple active placements.
+- [x] Concurrent operations cannot commit conflicting placements; partial unique indexes protect active Asset and Rack-U assignments.
+- [x] A move validates the destination before closing the old placement; failure preserves the previous placement. Repeating the current Rack-U placement is a no-op without history or Audit Fact.
+- [x] Unmap releases the U and retains the Asset and prior placement history; it does not unlink an Agent or retire the Asset. Maintenance state does not prevent placement changes.
+- [x] Current and historical placement can be queried through the Asset query boundary.
+- [x] Tests cover assignment, move, unmap, collisions, concurrency and history; the Mongo integration harness covers concurrent operations.
+- [x] Placement changes record actor, source, and time through the existing Audit mechanism.
 
 **Blocked by:** AT-02, AT-03, and AT-12.
+
+**Progress**
+
+- Implemented and committed as `9bad36e feat(asset-topology): manage Asset placement and history`.
+- Added place/move/unmap operations, current and historical placement queries, Audit Facts, Mongo Asset Location persistence, and active-Asset / active-Rack-U unique indexes. Asset lifecycle remains separate from placement; `ACTIVE` and `MAINTENANCE` are eligible, while `RETIRED` is rejected.
+- Updated the module spec and Flow 1 business flow to record the approved eligibility rule and query/history behavior.
+- Recorded the Flow 1 business-flow clarification in the shared-docs submodule commit `e4365ac`; the parent repository pointer was left unchanged because it already had an unadvanced AT-02 submodule commit.
+- The Mongo concurrency integration harness is present but could not run in this environment because `MONGODB_TEST_URI` is unset, localhost MongoDB is unreachable, and Docker access is denied.
+- GitHub issue #41 could not be updated through the connector: the issue update returned HTTP 403 (`Resource not accessible by integration`). This local checklist and ready-to-copy comment are available for manual update.
+
+**Verification logs**
+
+```text
+> .\node_modules\.bin\jest.cmd src/modules/asset-topology --runInBand
+Test Suites: 33 passed, 33 total
+Tests:       135 passed, 135 total
+Snapshots:   0 total
+
+> .\node_modules\.bin\tsc.cmd -p tsconfig.build.json --noEmit
+(exit code 0)
+
+> .\node_modules\.bin\eslint.cmd 'src/modules/asset-topology/**/*.ts' 'src/modules/asset-topology/*.ts' 'test/asset-topology-placements.integration.ts'
+(exit code 0; no output)
+
+> .\node_modules\.bin\prettier.cmd --check 'src/modules/asset-topology/**/*.ts' 'src/modules/asset-topology/*.ts' 'test/asset-topology-placements.integration.ts' api/v1/asset-topology.yaml
+All matched files use Prettier code style!
+
+> .\node_modules\.bin\nest.cmd build
+(exit code 0)
+
+> node -r ts-node/register -r tsconfig-paths/register test/asset-topology-placements.integration.ts
+Error: MONGODB_TEST_URI must be set for MongoDB test suites
+```
+
+**Ready-to-copy GitHub comment**
+
+````markdown
+AT-04 Asset placement is implemented. Place/move/unmap operations write Asset Location history and Audit Facts through the existing Outbox. Mongo partial unique indexes enforce one active placement per Asset and one occupant per Rack U. Current placement appears in Asset reads; historical intervals are queryable through the Asset query boundary.
+
+Eligibility follows the approved clarification: `ACTIVE` and `MAINTENANCE` Assets may be placed, moved, or unmapped; terminal `RETIRED` Assets are rejected. Placement changes do not alter lifecycle or Agent binding.
+
+Verification logs:
+```text
+> .\node_modules\.bin\jest.cmd src/modules/asset-topology --runInBand
+Test Suites: 33 passed, 33 total
+Tests:       135 passed, 135 total
+Snapshots:   0 total
+
+> .\node_modules\.bin\tsc.cmd -p tsconfig.build.json --noEmit
+(exit code 0)
+
+> .\node_modules\.bin\eslint.cmd 'src/modules/asset-topology/**/*.ts' 'src/modules/asset-topology/*.ts' 'test/asset-topology-placements.integration.ts'
+(exit code 0; no output)
+
+> .\node_modules\.bin\prettier.cmd --check 'src/modules/asset-topology/**/*.ts' 'src/modules/asset-topology/*.ts' 'test/asset-topology-placements.integration.ts' api/v1/asset-topology.yaml
+All matched files use Prettier code style!
+
+> .\node_modules\.bin\nest.cmd build
+(exit code 0)
+
+> node -r ts-node/register -r tsconfig-paths/register test/asset-topology-placements.integration.ts
+Error: MONGODB_TEST_URI must be set for MongoDB test suites
+```
+
+The placement integration harness, including concurrent Rack-U and per-Asset assignment attempts, is added but could not run because this environment has no `MONGODB_TEST_URI`, localhost MongoDB is unreachable, and Docker access is denied.
+````
 
 ### AT-05: Implement Asset state and maintenance coordination
 
@@ -217,16 +344,39 @@ Keep Asset state authoritative in Asset & Topology while allowing Maintenance Ac
 
 **Acceptance Criteria**
 
-- [ ] Supported Asset states are `ACTIVE`, `MAINTENANCE`, and terminal `RETIRED`.
-- [ ] Valid maintenance transitions are `ACTIVE → MAINTENANCE` and `MAINTENANCE → ACTIVE`.
+- [x] Supported Asset states are `ACTIVE`, `MAINTENANCE`, and terminal `RETIRED`.
+- [x] Valid maintenance transitions are `ACTIVE → MAINTENANCE` and `MAINTENANCE → ACTIVE`.
 - [ ] The Maintenance module can request the state change through an explicit public Asset & Topology contract when an Activity enters `EXECUTE`, `RESUME`, or `ABORT`.
 - [ ] The Asset remains `MAINTENANCE` while any linked Maintenance Activity is executing.
 - [ ] A generic Ticket status change does not trigger an Asset state transition.
 - [ ] IT Admin can use the manual fallback; the current assignee can change maintenance state only for an Asset linked to their currently assigned Ticket.
 - [ ] Authorization is checked at the time of the change; a previous assignee loses access after reassignment.
 - [ ] Manual action cannot return an Asset to `ACTIVE` while an Activity for it is still executing.
-- [ ] Changes record actor/source and time through the existing Audit mechanism.
+- [x] Asset state changes record actor/source and time through the existing Audit mechanism.
 - [ ] Contract tests verify Maintenance, Ticket authorization, and Asset state interactions without cross-module persistence access.
+
+**Progress**
+
+- Added immutable Asset transitions between `ACTIVE` and `MAINTENANCE`; requests against `RETIRED` Assets are rejected and repeated target states are no-ops.
+- Exposed `ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT`; state persistence and the actor/source Audit Fact share the existing unit of work. Retries after a failed command can safely repeat the target state.
+- Updated the spec and Flow 1 wording with atomic Audit behavior and the retry rule.
+- Maintenance Activity coordination, current Ticket-assignee authorization, and their contract tests remain with the owning modules; those modules and contracts are not present in this checkout.
+
+**GitHub comment draft — not posted (authentication/network unavailable)**
+
+Implemented the Asset-owned maintenance-state transitions and exported `ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT`. State persistence and actor/source Audit attribution use the existing unit of work; repeated requests for the stored state are no-ops. Updated the Asset & Topology spec and Flow 1 business document with the retry behavior.
+
+Verification evidence:
+
+- `jest --runInBand src/modules/asset-topology`: `Test Suites: 34 passed, 34 total`; `Tests: 141 passed, 141 total`.
+- `tsc -p tsconfig.build.json --noEmit`: exit code 0; no diagnostics.
+- `nest build`: exit code 0; no diagnostics.
+- Scoped ESLint: exit code 0; no diagnostics.
+- Scoped Prettier check: `All matched files use Prettier code style!`.
+
+Maintenance Activity coordination, current Ticket-assignee authorization, manual fallback integration, and cross-module contract tests remain pending the owning modules/contracts.
+
+GitHub authentication was attempted with `gh auth refresh -s project` in PowerShell and cmd.exe, followed by `gh auth login -h github.com` in cmd.exe. Each failed with `error connecting to github.com`. The GitHub connector can read issue #42, but its checklist update and comment write both returned HTTP 403 `Resource not accessible by integration`; the remote issue remains unchanged.
 
 **Blocked by:** AT-03, AT-12, and AT-13.
 
@@ -263,14 +413,14 @@ Give both Racks and Nodes unique QR identities that resolve to canonical Asset &
 
 **Acceptance Criteria**
 
-- [ ] A Node receives an active QR mapping when created.
-- [ ] Admin can assign, replace, or deactivate Rack and Node QR mappings.
-- [ ] Each target has at most one active QR; each active QR identifies at most one Rack or Node.
-- [ ] Active uniqueness is enforced by persistence, including concurrent updates.
-- [ ] Resolving an active QR returns target type, canonical ID, and the information needed by the Dashboard/AR client.
-- [ ] Inactive historical QR mappings are retained but not resolved as active.
-- [ ] Tests cover generation, collision, replacement, deactivation, resolution, and history.
-- [ ] QR mapping changes record actor, source, and time through the existing Audit mechanism.
+- [x] A Node receives an active QR mapping when created.
+- [x] Admin can assign, replace, or deactivate Rack and Node QR mappings.
+- [x] Each target has at most one active QR; each active QR identifies at most one Rack or Node.
+- [x] Active uniqueness is enforced by persistence, including concurrent updates.
+- [x] Resolving an active QR returns target type, canonical ID, and the information needed by the Dashboard/AR client.
+- [x] Inactive historical QR mappings are retained but not resolved as active.
+- [x] Tests cover generation, collision, replacement, deactivation, resolution, and history.
+- [x] QR mapping changes record actor, source, and time through the existing Audit mechanism.
 
 **Blocked by:** AT-02, AT-03, and AT-12.
 
@@ -286,12 +436,23 @@ Let Admins produce single or bulk printable Rack and Node QR labels.
 
 **Acceptance Criteria**
 
-- [ ] Admin can request single or bulk labels in PDF and SVG.
-- [ ] Rack labels include QR and readable Rack identity/location.
-- [ ] Node labels include QR, Node name, and current placement; unassigned Nodes are clearly represented as unassigned.
-- [ ] IP is omitted until its authoritative source and freshness are defined.
+- [x] Admin can request single or bulk labels in PDF and SVG through the backend export API.
+- [x] Rack labels include QR and readable Rack identity/location.
+- [x] Node labels include QR, Node name, and current placement; unassigned Nodes are clearly represented as unassigned.
+- [x] IP is omitted until its authoritative source and freshness are defined.
 - [ ] Dashboard provides a print preview and download for generated labels.
-- [ ] Tests verify the contents and validity of both output formats.
+- [x] Backend tests verify label content and valid PDF/SVG output.
+
+**Progress**
+
+- Backend implementation is complete: IT Admins can export selected Rack/Node labels in PDF or SVG, for 1–100 IDs per request. Labels use current Asset/Rack query results and active QR mappings. Dashboard preview/download is skipped in this backend repository and remains for the frontend repository.
+
+**Verification logs**
+
+- `pnpm exec jest src/modules/asset-topology/application/labels/__tests__/export-asset-labels.use-case.spec.ts src/modules/asset-topology/infrastructure/labels/__tests__/label-document.renderer.spec.ts src/modules/asset-topology/presentation/labels/__tests__/label-export.controller.spec.ts --runInBand` — `Test Suites: 3 passed, 3 total`; `Tests: 11 passed, 11 total`; `exit code: 0`.
+- `pnpm exec jest src/modules/asset-topology --runInBand` — `Test Suites: 39 passed, 39 total`; `Tests: 160 passed, 160 total`; `exit code: 0`.
+- `pnpm check:all` — ran `tsc --noEmit -p tsconfig.spec.json && eslint "{src,apps,libs,test}/**/*.ts"`; `exit code: 0`.
+- `pnpm exec prettier --check api/v1/asset-topology.yaml` — `All matched files use Prettier code style!`; `exit code: 0`.
 
 **Blocked by:** AT-04, AT-06, AT-07, and AT-12.
 
@@ -314,6 +475,8 @@ Allow the AR client to scan either a Rack or Node QR and resolve it to the corre
 - [ ] Integration tests cover Rack, placed Node, unassigned Node, and invalid/inactive QR cases.
 
 **Blocked by:** AT-07 and AT-12.
+
+**Progress:** Skipped in this backend repository as requested. Issue #46 is labeled `scope:frontend`; the AR client scanning UI and its integration tests belong to the frontend repository. No AT-09 implementation or tests were run here.
 
 ### AT-10: Implement retirement and Agent Management integration
 
@@ -338,6 +501,8 @@ Retire eligible Assets and Racks while preserving identity/history and respectin
 
 **Blocked by:** AT-03, AT-04, AT-05, AT-12, and AT-13.
 
+**Progress:** Paused by user decision until AT-13 (#37) resolves the Asset–Agent public-contract approach. AT-10 requires Agent Management binding status, and the approved spec keeps the interaction pattern unresolved without a coordinator/event design. No AT-10 implementation or tests were run.
+
 ### AT-11: Verify Flow 1 end to end
 
 **Published:** [#48](https://github.com/AR-IMMS/core-backend/issues/48)
@@ -357,3 +522,13 @@ Retire eligible Assets and Racks while preserving identity/history and respectin
 - [ ] No step depends on direct cross-module database access.
 
 **Blocked by:** AT-01 through AT-10, AT-12, and AT-13.
+
+**Progress:** Backend integration coverage was run for topology Audit delivery/rollback, Asset registration/QR/Audit, and Asset placement/move/unmap history. AT-11 remains incomplete: AT-10 is waiting on AT-13, the Rack/Room-map-to-placement workflow is not exercised as one end-to-end scenario, and AR/Dashboard acceptance belongs to the frontend repository.
+
+**Verification logs**
+
+- `MONGODB_TEST_URI=mongodb://localhost:27017/ar_imms_core_test?replicaSet=rs0 pnpm run asset-topology:integration` — `PASS topology write and Audit Outbox transaction rollback`; `PASS Site and Room Audit delivery through the Audit consumer`; `exit code: 0`.
+- `MONGODB_TEST_URI=mongodb://localhost:27017/ar_imms_core_test?replicaSet=rs0 pnpm run asset-topology:assets:integration` — `PASS Asset registration/update Audit delivery and transaction rollback`; `exit code: 0`.
+- `MONGODB_TEST_URI=mongodb://localhost:27017/ar_imms_core_test?replicaSet=rs0 pnpm run asset-topology:placements:integration` — `PASS Asset placement atomicity, concurrent Rack-U uniqueness, move/unmap history, and Audit Outbox rollback`; `exit code: 0`.
+- `pnpm exec jest src/modules/asset-topology --runInBand` — `Test Suites: 39 passed, 39 total`; `Tests: 160 passed, 160 total`; `exit code: 0`.
+- `pnpm check:all` — `tsc --noEmit -p tsconfig.spec.json && eslint "{src,apps,libs,test}/**/*.ts"`; `exit code: 0`.

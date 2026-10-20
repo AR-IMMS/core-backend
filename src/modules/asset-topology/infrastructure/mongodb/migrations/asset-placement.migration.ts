@@ -19,7 +19,7 @@ export const ASSET_PLACEMENT_MIGRATION: MongoMigration = {
         { assetId: 1 },
         {
           unique: true,
-          partialFilterExpression: { validTo: { $exists: false } },
+          partialFilterExpression: { validTo: null },
           name: 'uq_asset_topology_active_asset_location',
         },
       ),
@@ -27,7 +27,7 @@ export const ASSET_PLACEMENT_MIGRATION: MongoMigration = {
         { rackId: 1, uPosition: 1 },
         {
           unique: true,
-          partialFilterExpression: { validTo: { $exists: false } },
+          partialFilterExpression: { validTo: null },
           name: 'uq_asset_topology_active_rack_u_occupant',
         },
       ),

@@ -17,6 +17,7 @@ import { RackLocation } from '../../domain/topology/rack-location';
 import type { RackRotation } from '../../domain/topology/rack-map-placement';
 import { RACK_STORE } from './rack-store.token';
 import type { RackStorePort } from './rack-store.port';
+import { RACK_CLOCK, RACK_ID_GENERATOR } from './rack-runtime.token';
 
 export interface CreateRackInput {
   readonly roomId: string;
@@ -56,7 +57,8 @@ export class RackManagementUseCases {
     @Inject(TOPOLOGY_STORE) private readonly topology: TopologyStorePort,
     @Inject(UNIT_OF_WORK_PORT) private readonly unitOfWork: UnitOfWorkPort,
     @Inject(OUTBOX_WRITER_PORT) private readonly outbox: OutboxWriterPort,
-    private readonly now: () => Date = () => new Date(),
+    @Inject(RACK_CLOCK) private readonly now: () => Date = () => new Date(),
+    @Inject(RACK_ID_GENERATOR)
     private readonly generateId: () => string = randomUUID,
   ) {}
 

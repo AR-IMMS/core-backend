@@ -64,14 +64,14 @@ These are capability boundaries inside the module, not separate NestJS modules o
 
 | External context         | Owns                                   | Asset & Topology interaction                                                                                |
 | ------------------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Agent Management         | Agent identity and Agent–Node binding  | References Asset ID; exposes binding commands and confirmed binding status through its public contract      |
+| Agent Management         | Agent identity and Agent–Node binding  | References Asset ID; binding coordination requires an agreed public contract, tracked by AT-13              |
 | Monitoring/Observability | Telemetry and observed health          | References Asset ID and confirmed topology                                                                  |
 | Maintenance              | Maintenance Activity state and records | Requests Asset state changes through an agreed public contract; Activity lifecycle rules are in section 5.5 |
 | Ticket Management        | Ticket assignment                      | Provides the current-assignee check required for manual maintenance-state authorization                     |
 | Incident, Inspection     | Their respective business records      | Store typed references to Asset/Rack IDs                                                                    |
 | AR Client                | Camera tracking and spatial anchors    | Scans a Rack or Node QR to resolve its canonical ID; consumes topology/placement data                       |
 
-No cross-module deep imports or direct reads/writes of another module's collections are allowed. Flow-level application coordination owns operations that require both Asset & Topology and Agent Management public contracts; neither module calls the other directly. Each module remains authoritative for its own data and rules.
+No cross-module deep imports or direct reads/writes of another module's collections are allowed. Cross-domain operations require an agreed public-contract approach; each module remains authoritative for its own data and rules. The Asset–Agent coordination pattern for binding and retirement remains unresolved in AT-13. This specification does not choose a coordinator or event design.
 
 ## 5. Domain concepts and logical data
 
@@ -136,7 +136,7 @@ No cross-module deep imports or direct reads/writes of another module's collecti
 - A Rack or Asset has at most one active QR mapping. QR values are globally unique across active and inactive mapping history and can never be reassigned to another target.
 - The system generates opaque QR values for both Nodes and Racks. Node creation and its initial QR mapping are atomic; an authorized Admin assigns or replaces a Rack or Node mapping by requesting a new generated value. Admins do not provide QR values.
 - QR changes do not change Rack or Asset identity. Mapping history retains the QR value, target, and active interval. Resolution ignores inactive mappings and reads the target's current data through the existing Asset or Rack query; mapping history does not snapshot target details.
-- Label generation produces printable PDF and SVG output; physical printing/application is outside Core's business transaction. Node label content includes QR, Node name, and placement. IP is omitted until an authoritative source and data freshness are defined.
+- Label export accepts selected Rack and Asset IDs and produces one printable PDF or SVG document for 1–100 targets. Every target must exist and have an active QR mapping. Rack labels show the canonical Rack ID and confirmed Room/grid cell, or `Unplaced`; Node labels show the Node name and confirmed Rack/U placement, or `Unassigned`. IP is omitted until an authoritative source and data freshness are defined. Physical printing/application is outside Core's business transaction.
 
 ### 5.5 Status and lifecycle
 

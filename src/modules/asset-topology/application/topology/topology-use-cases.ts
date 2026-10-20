@@ -74,8 +74,8 @@ export class TopologyUseCases {
     private readonly unitOfWork: UnitOfWorkPort,
     @Inject(OUTBOX_WRITER_PORT)
     private readonly outbox: OutboxWriterPort,
-    private readonly now: () => Date = () => new Date(),
-    private readonly generateId: () => string = randomUUID,
+    @Optional() private readonly now: () => Date = () => new Date(),
+    @Optional() private readonly generateId: () => string = randomUUID,
     @Optional() @Inject(RACK_STORE) private readonly racks?: RackStorePort,
   ) {}
 

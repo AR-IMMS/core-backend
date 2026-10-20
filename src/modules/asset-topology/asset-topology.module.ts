@@ -69,6 +69,14 @@ import {
   QrMappingSchema,
 } from './infrastructure/mongodb/qr-mapping.schema';
 import { QrMappingController } from './presentation/qr/qr-mapping.controller';
+import { ExportAssetLabelsUseCase } from './application/labels/export-asset-labels.use-case';
+import { LABEL_DOCUMENT_RENDERER } from './application/labels/label-document-renderer.port';
+import { LabelDocumentRenderer } from './infrastructure/labels/label-document.renderer';
+import { LabelExportController } from './presentation/labels/label-export.controller';
+import {
+  RACK_CLOCK,
+  RACK_ID_GENERATOR,
+} from './application/racks/rack-runtime.token';
 
 /** Asset & Topology's Dashboard API and owned persistence adapters. */
 @Module({
@@ -99,6 +107,7 @@ import { QrMappingController } from './presentation/qr/qr-mapping.controller';
     AssetWriteController,
     AssetPlacementController,
     QrMappingController,
+    LabelExportController,
   ],
   providers: [
     MongoTopologyStore,
@@ -107,6 +116,8 @@ import { QrMappingController } from './presentation/qr/qr-mapping.controller';
     MongoRackStore,
     { provide: RACK_STORE, useExisting: MongoRackStore },
     RackManagementUseCases,
+    { provide: RACK_CLOCK, useValue: () => new Date() },
+    { provide: RACK_ID_GENERATOR, useValue: randomUUID },
     RackQueryUseCase,
     MongoAssetStore,
     MongoQrMappingStore,
@@ -119,6 +130,9 @@ import { QrMappingController } from './presentation/qr/qr-mapping.controller';
     { provide: ASSET_ID_GENERATOR, useValue: randomUUID },
     RegisterAssetUseCase,
     QrMappingUseCases,
+    ExportAssetLabelsUseCase,
+    LabelDocumentRenderer,
+    { provide: LABEL_DOCUMENT_RENDERER, useExisting: LabelDocumentRenderer },
     UpdateAssetUseCase,
     ChangeAssetMaintenanceStateUseCase,
     AssetPlacementManagementUseCases,

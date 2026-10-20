@@ -13,7 +13,7 @@ describe('ASSET_PLACEMENT_MIGRATION', () => {
       { assetId: 1 },
       expect.objectContaining({
         unique: true,
-        partialFilterExpression: { validTo: { $exists: false } },
+        partialFilterExpression: { validTo: null },
         name: 'uq_asset_topology_active_asset_location',
       }),
     );
@@ -21,7 +21,7 @@ describe('ASSET_PLACEMENT_MIGRATION', () => {
       { rackId: 1, uPosition: 1 },
       expect.objectContaining({
         unique: true,
-        partialFilterExpression: { validTo: { $exists: false } },
+        partialFilterExpression: { validTo: null },
         name: 'uq_asset_topology_active_rack_u_occupant',
       }),
     );

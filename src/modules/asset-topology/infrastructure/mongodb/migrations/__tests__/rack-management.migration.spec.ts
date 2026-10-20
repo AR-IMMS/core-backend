@@ -14,7 +14,7 @@ describe('RACK_MANAGEMENT_MIGRATION', () => {
       { roomId: 1, column: 1, row: 1 },
       expect.objectContaining({
         unique: true,
-        partialFilterExpression: { validTo: { $exists: false } },
+        partialFilterExpression: { validTo: null },
         name: 'uq_asset_topology_active_room_cell',
       }),
     );
