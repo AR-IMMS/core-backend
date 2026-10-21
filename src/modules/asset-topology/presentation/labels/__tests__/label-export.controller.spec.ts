@@ -4,9 +4,14 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { CoreZodValidationPipe } from '@platform/http/validation/zod-validation.pipe';
 import { LabelExportController } from '../label-export.controller';
-import { LabelExportFormatParamsDto } from '../label-export.schemas';
+import {
+  LabelExportFormatParamsDto,
+  LabelExportRequestDto,
+} from '../label-export.schemas';
 import {
   ExportAssetLabelsUseCase,
   LabelExportTargetNotFoundError,
@@ -38,8 +43,9 @@ describe('LabelExportController', () => {
     });
 
     await controller.export(
-      { user: { role: 'IT_ADMIN' }, body: { asset_ids: ['asset-1'] } },
+      { user: { role: 'IT_ADMIN' } },
       { format: 'pdf' },
+      { asset_ids: ['asset-1'] } as LabelExportRequestDto,
       response as never,
     );
 
@@ -56,11 +62,51 @@ describe('LabelExportController', () => {
     expect(response.send).toHaveBeenCalledWith(Buffer.from([37, 80]));
   });
 
+  it('publishes the label selection body in Swagger', async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [LabelExportController],
+      providers: [
+        { provide: ExportAssetLabelsUseCase, useValue: { execute: jest.fn() } },
+      ],
+    }).compile();
+    const app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api/v1');
+    await app.init();
+
+    try {
+      const document = SwaggerModule.createDocument(
+        app,
+        new DocumentBuilder().setTitle('test').setVersion('1').build(),
+      );
+      const requestBody =
+        document.paths['/api/v1/asset-topology/labels/{format}'].post
+          ?.requestBody;
+      const requestSchema = document.components?.schemas?.LabelExportRequestDto;
+
+      expect(requestBody).toBeDefined();
+      expect(JSON.stringify(requestBody)).toContain('application/json');
+      expect(JSON.stringify(requestSchema)).toContain('rack_ids');
+      expect(JSON.stringify(requestSchema)).toContain('asset_ids');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('validates the label body through the global Zod pipe', () => {
+    expect(
+      new CoreZodValidationPipe().transform(
+        { asset_ids: ['asset-1'] },
+        { type: 'body', metatype: LabelExportRequestDto },
+      ),
+    ).toEqual({ rack_ids: [], asset_ids: ['asset-1'] });
+  });
+
   it('returns SVG with the SVG media type', async () => {
     exports.execute.mockResolvedValue({ format: 'svg', bytes: '<svg/>' });
     await controller.export(
-      { user: { role: 'IT_ADMIN' }, body: { rack_ids: ['rack-1'] } },
+      { user: { role: 'IT_ADMIN' } },
       { format: 'svg' },
+      { rack_ids: ['rack-1'] } as LabelExportRequestDto,
       response as never,
     );
     expect(response.set).toHaveBeenCalledWith(
@@ -72,8 +118,9 @@ describe('LabelExportController', () => {
   it('rejects unauthorized roles, unsupported formats, invalid selections, and missing targets', async () => {
     await expect(
       controller.export(
-        { user: { role: 'TECHNICIAN' }, body: { asset_ids: ['asset-1'] } },
+        { user: { role: 'TECHNICIAN' } },
         { format: 'pdf' },
+        { asset_ids: ['asset-1'] } as LabelExportRequestDto,
         response as never,
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
@@ -85,8 +132,9 @@ describe('LabelExportController', () => {
     }).toThrow(BadRequestException);
     await expect(
       controller.export(
-        { user: { role: 'IT_ADMIN' }, body: {} },
+        { user: { role: 'IT_ADMIN' } },
         { format: 'pdf' },
+        {} as LabelExportRequestDto,
         response as never,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -95,8 +143,9 @@ describe('LabelExportController', () => {
     );
     await expect(
       controller.export(
-        { user: { role: 'IT_ADMIN' }, body: { rack_ids: ['rack-404'] } },
+        { user: { role: 'IT_ADMIN' } },
         { format: 'pdf' },
+        { rack_ids: ['rack-404'] } as LabelExportRequestDto,
         response as never,
       ),
     ).rejects.toBeInstanceOf(NotFoundException);

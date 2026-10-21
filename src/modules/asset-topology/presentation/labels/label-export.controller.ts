@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   ForbiddenException,
   NotFoundException,
@@ -11,6 +12,7 @@ import {
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOperation,
@@ -29,12 +31,12 @@ import {
 } from '../../application/labels/export-asset-labels.use-case';
 import {
   LabelExportFormatParamsDto,
+  LabelExportRequestDto,
   parseLabelExportRequest,
 } from './label-export.schemas';
 
 interface LabelExportRequest {
   readonly user: { readonly role: RoleCode };
-  readonly body: unknown;
 }
 
 @ApiTags('Asset Topology - Labels')
@@ -49,6 +51,7 @@ export class LabelExportController {
   @RequirePermissions('asset:manage')
   @ApiOperation({ summary: 'Export selected Rack and Node QR labels' })
   @ApiParam({ name: 'format', enum: ['pdf', 'svg'] })
+  @ApiBody({ type: LabelExportRequestDto })
   @ApiBadRequestResponse({
     description: 'Format or target selection is invalid.',
   })
@@ -58,13 +61,14 @@ export class LabelExportController {
   async export(
     @Req() request: LabelExportRequest,
     @Param() formatParams: LabelExportFormatParamsDto,
+    @Body() bodyValue: LabelExportRequestDto,
     @Res() response: Response,
   ): Promise<void> {
     if (request.user.role !== 'IT_ADMIN') {
       throw new ForbiddenException('Only IT Admins can export labels.');
     }
     const formatValue = formatParams.format;
-    const body = parseLabelExportRequest(request.body);
+    const body = parseLabelExportRequest(bodyValue);
     try {
       const result = await this.exports.execute(
         { rackIds: body.rack_ids, assetIds: body.asset_ids },

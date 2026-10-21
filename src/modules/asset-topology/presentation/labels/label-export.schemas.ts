@@ -20,6 +20,7 @@ export const labelExportSchema = z
 export class LabelExportFormatParamsDto extends createZodDto(
   labelExportFormatParamsSchema,
 ) {}
+export class LabelExportRequestDto extends createZodDto(labelExportSchema) {}
 
 export function parseLabelExportRequest(value: unknown) {
   try {
