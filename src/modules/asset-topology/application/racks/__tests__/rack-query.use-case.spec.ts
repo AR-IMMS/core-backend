@@ -38,7 +38,7 @@ describe('RackQueryUseCase', () => {
       },
       racks: [],
     });
-    expect(racks.getRack).not.toHaveBeenCalled();
+    expect(racks.getRack.bind(racks)).not.toHaveBeenCalled();
   });
 
   it('returns full-cell counts and confirmed Rack references for a Room', async () => {
