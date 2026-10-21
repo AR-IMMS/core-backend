@@ -84,9 +84,8 @@ export class RackQueryUseCase implements AssetTopologyRackQueries {
   ): RackReference {
     return {
       id: rack.id as RackId,
+      name: rack.name,
       uCapacity: rack.uCapacity,
-      ...(rack.rowLabel ? { rowLabel: rack.rowLabel } : {}),
-      ...(rack.positionInRow ? { positionInRow: rack.positionInRow } : {}),
       currentLocation: location
         ? {
             roomId: location.roomId as RoomId,

@@ -113,9 +113,8 @@ export class TopologyRoomEntry {
 })
 export class TopologyRackEntry {
   @Prop({ required: true, type: String, immutable: true }) id!: string;
+  @Prop({ required: true, type: String, trim: true }) name!: string;
   @Prop({ required: true, type: Number, min: 1 }) uCapacity!: number;
-  @Prop({ required: false, type: String, trim: true }) rowLabel?: string;
-  @Prop({ required: false, type: String, trim: true }) positionInRow?: string;
   @Prop({ required: true, type: Number, min: 0, default: 0 })
   auditSequence!: number;
   createdAt!: Date;

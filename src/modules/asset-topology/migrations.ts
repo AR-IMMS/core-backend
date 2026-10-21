@@ -5,6 +5,7 @@ import { ASSET_PLACEMENT_MIGRATION } from './infrastructure/mongodb/migrations/a
 import { QR_MAPPING_MIGRATION } from './infrastructure/mongodb/migrations/qr-mapping.migration';
 import { ROOM_WALKWAY_LAYOUT_MIGRATION } from './infrastructure/mongodb/migrations/room-walkway-layout.migration';
 import { ROOM_WALKWAY_CELL_IDS_MIGRATION } from './infrastructure/mongodb/migrations/room-walkway-cell-ids.migration';
+import { RACK_NAME_LOCATION_LABEL_MIGRATION } from './infrastructure/mongodb/migrations/rack-name-location-label.migration';
 
 /** Asset & Topology-owned MongoDB migrations exposed to the application host. */
 export const ASSET_TOPOLOGY_MONGO_MIGRATIONS = [
@@ -15,4 +16,5 @@ export const ASSET_TOPOLOGY_MONGO_MIGRATIONS = [
   QR_MAPPING_MIGRATION,
   ROOM_WALKWAY_LAYOUT_MIGRATION,
   ROOM_WALKWAY_CELL_IDS_MIGRATION,
+  RACK_NAME_LOCATION_LABEL_MIGRATION,
 ] as const;

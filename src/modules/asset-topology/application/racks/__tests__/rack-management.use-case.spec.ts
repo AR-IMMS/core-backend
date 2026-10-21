@@ -74,14 +74,17 @@ describe('RackManagementUseCases', () => {
         row: 2,
         rotation: 90,
         uCapacity: 42,
-        rowLabel: 'A',
-        positionInRow: '03',
+        name: 'Core Rack',
         expectedLayoutRevision: 0,
       },
       actor,
     );
     expect(rackStore.saveRack).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'rack-1', uCapacity: 42 }),
+      expect.objectContaining({
+        id: 'rack-1',
+        name: 'Core Rack',
+        uCapacity: 42,
+      }),
       expect.anything(),
     );
     expect(rackStore.saveLocation).toHaveBeenCalledWith(
@@ -105,6 +108,7 @@ describe('RackManagementUseCases', () => {
           actor,
           action: 'asset_topology.rack.created',
           changes: expect.arrayContaining([
+            { field: 'name', after: 'Core Rack' },
             { field: 'u_capacity', after: 42 },
             { field: 'room_id', after: 'room-1' },
           ]),
@@ -143,6 +147,7 @@ describe('RackManagementUseCases', () => {
           column: 1,
           row: 2,
           rotation: 0,
+          name: 'Core Rack',
           uCapacity: 42,
           expectedLayoutRevision: 0,
         },
@@ -164,6 +169,7 @@ describe('RackManagementUseCases', () => {
           column: 1,
           row: 2,
           rotation: 0,
+          name: 'Core Rack',
           uCapacity: 42,
           expectedLayoutRevision: 0,
         },
@@ -176,7 +182,11 @@ describe('RackManagementUseCases', () => {
   });
 
   it('rejects moving a Rack into a retired Room without closing its current location', async () => {
-    const rack = Rack.create({ id: 'rack-1', uCapacity: 42 });
+    const rack = Rack.create({
+      id: 'rack-1',
+      name: 'Core Rack',
+      uCapacity: 42,
+    });
     const current = RackLocation.start(
       {
         rackId: rack.id,
@@ -212,7 +222,11 @@ describe('RackManagementUseCases', () => {
   });
 
   it('does not create location history or Audit Fact when a move is unchanged', async () => {
-    const rack = Rack.create({ id: 'rack-1', uCapacity: 42 });
+    const rack = Rack.create({
+      id: 'rack-1',
+      name: 'Core Rack',
+      uCapacity: 42,
+    });
     const current = RackLocation.start(
       {
         rackId: rack.id,
@@ -247,7 +261,11 @@ describe('RackManagementUseCases', () => {
   });
 
   it('closes and saves location history atomically for a real move', async () => {
-    const rack = Rack.create({ id: 'rack-1', uCapacity: 42 });
+    const rack = Rack.create({
+      id: 'rack-1',
+      name: 'Core Rack',
+      uCapacity: 42,
+    });
     const current = RackLocation.start(
       {
         rackId: rack.id,
@@ -310,7 +328,11 @@ describe('RackManagementUseCases', () => {
       roomMap: room.roomMap,
       layoutRevision: 2,
     });
-    const rack = Rack.create({ id: 'rack-1', uCapacity: 42 });
+    const rack = Rack.create({
+      id: 'rack-1',
+      name: 'Core Rack',
+      uCapacity: 42,
+    });
     const current = RackLocation.start(
       {
         rackId: rack.id,

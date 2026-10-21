@@ -120,11 +120,15 @@ export class RackController {
           .filter((rack) => rack.currentLocation !== null)
           .map((rack) => ({
             rack_id: rack.id,
+            name: rack.name,
             column: rack.currentLocation!.column,
             row: rack.currentLocation!.row,
             rotation: rack.currentLocation!.rotation,
             u_capacity: rack.uCapacity,
-            location_label: `${rowLabel(rack.currentLocation!.row)}-${rack.currentLocation!.column + 1}`,
+            location_label: formatLocationLabel(
+              rack.currentLocation!.row,
+              rack.currentLocation!.column,
+            ),
           })),
       };
     });
@@ -178,9 +182,8 @@ export class RackController {
           column: body.column,
           row: body.row,
           rotation: body.rotation,
+          name: body.name,
           uCapacity: body.u_capacity,
-          rowLabel: body.row_label ?? undefined,
-          positionInRow: body.position_in_row ?? undefined,
           expectedLayoutRevision: requireLayoutRevision(
             request.headers?.['if-match'],
           ),
@@ -226,7 +229,7 @@ export class RackController {
 
   @Patch('racks/:rack_id')
   @RequirePermissions('asset:manage')
-  @ApiOperation({ summary: 'Update Rack capacity and row/position labels' })
+  @ApiOperation({ summary: 'Update Rack capacity' })
   @ApiOkResponse({ description: 'Rack updated.' })
   update(
     @Req() request: RackRequest,
@@ -249,8 +252,6 @@ export class RackController {
         params.rack_id,
         {
           uCapacity: body.u_capacity,
-          rowLabel: body.row_label,
-          positionInRow: body.position_in_row,
         },
         actor,
       );
@@ -451,7 +452,7 @@ export class RackController {
   }
 }
 
-function rowLabel(row: number): string {
+function rowLetters(row: number): string {
   let value = row + 1;
   let label = '';
   while (value > 0) {
@@ -460,6 +461,10 @@ function rowLabel(row: number): string {
     value = Math.floor(value / 26);
   }
   return label;
+}
+
+function formatLocationLabel(row: number, column: number): string {
+  return `${rowLetters(row)}-${column + 1}`;
 }
 
 function actorFrom(request: RackRequest): TopologyActor {
@@ -473,9 +478,14 @@ function serializeRack(
 ) {
   return {
     id: rack.id,
+    name: rack.name,
     u_capacity: rack.uCapacity,
-    row_label: rack.rowLabel ?? null,
-    position_in_row: rack.positionInRow ?? null,
+    location_label: rack.currentLocation
+      ? formatLocationLabel(
+          rack.currentLocation.row,
+          rack.currentLocation.column,
+        )
+      : null,
     current_location: rack.currentLocation
       ? {
           room_id: rack.currentLocation.roomId,

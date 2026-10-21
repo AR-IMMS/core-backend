@@ -25,7 +25,7 @@ describe('AssetPlacementManagementUseCases', () => {
     name: 'Node 01',
     type: { id: 'node' },
   });
-  const rack = Rack.create({ id: 'rack-1', uCapacity: 42 });
+  const rack = Rack.create({ id: 'rack-1', name: 'Core Rack', uCapacity: 42 });
 
   beforeEach(() => {
     assets = {
@@ -89,7 +89,11 @@ describe('AssetPlacementManagementUseCases', () => {
       uPosition: 4,
       placedAt: new Date('2026-10-19T01:00:00.000Z'),
     });
-    const destination = Rack.create({ id: 'rack-2', uCapacity: 42 });
+    const destination = Rack.create({
+      id: 'rack-2',
+      name: 'Destination Rack',
+      uCapacity: 42,
+    });
     placements.findActiveByAsset.mockResolvedValue(previous);
     racks.getRack.mockResolvedValue(destination);
 
@@ -132,7 +136,7 @@ describe('AssetPlacementManagementUseCases', () => {
     placements.findActiveByAsset.mockResolvedValue(previous);
     placements.findActiveByRackU.mockResolvedValue(occupied);
     racks.getRack.mockResolvedValue(
-      Rack.create({ id: 'rack-2', uCapacity: 42 }),
+      Rack.create({ id: 'rack-2', name: 'Destination Rack', uCapacity: 42 }),
     );
 
     await expect(

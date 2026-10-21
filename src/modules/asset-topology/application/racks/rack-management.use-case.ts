@@ -29,15 +29,12 @@ export interface CreateRackInput {
   readonly row: number;
   readonly rotation: RackRotation;
   readonly uCapacity: number;
-  readonly rowLabel?: string;
-  readonly positionInRow?: string;
+  readonly name: string;
   readonly expectedLayoutRevision: number;
 }
 
 export interface UpdateRackInput {
   readonly uCapacity?: number;
-  readonly rowLabel?: string | null;
-  readonly positionInRow?: string | null;
 }
 
 export interface MoveRackInput {
@@ -95,9 +92,8 @@ export class RackManagementUseCases {
       if (!advancedRoom) throw new RoomLayoutRevisionConflictError();
       const rack = Rack.create({
         id: this.generateId(),
+        name: input.name,
         uCapacity: input.uCapacity,
-        rowLabel: input.rowLabel,
-        positionInRow: input.positionInRow,
       });
       const locations = await this.racks.listActiveLocationsInRoom(
         room.id,
@@ -124,13 +120,8 @@ export class RackManagementUseCases {
           rack,
           sequence,
           changes: [
+            { field: 'name', after: rack.name },
             { field: 'u_capacity', after: rack.uCapacity },
-            ...(rack.rowLabel
-              ? [{ field: 'row_label', after: rack.rowLabel }]
-              : []),
-            ...(rack.positionInRow
-              ? [{ field: 'position_in_row', after: rack.positionInRow }]
-              : []),
             { field: 'room_id', after: room.id },
             { field: 'column', after: input.column },
             { field: 'row', after: input.row },
@@ -165,24 +156,6 @@ export class RackManagementUseCases {
                 field: 'u_capacity',
                 before: current.uCapacity,
                 after: updated.uCapacity,
-              },
-            ]),
-        ...(current.rowLabel === updated.rowLabel
-          ? []
-          : [
-              {
-                field: 'row_label',
-                before: current.rowLabel ?? null,
-                after: updated.rowLabel ?? null,
-              },
-            ]),
-        ...(current.positionInRow === updated.positionInRow
-          ? []
-          : [
-              {
-                field: 'position_in_row',
-                before: current.positionInRow ?? null,
-                after: updated.positionInRow ?? null,
               },
             ]),
       ];

@@ -3,6 +3,23 @@ import { RackLocation } from '../../../domain/topology/rack-location';
 import { MongoRackStore } from '../mongo-rack.store';
 
 describe('MongoRackStore', () => {
+  it('restores the persisted Rack name', async () => {
+    const rackDoc = {
+      id: 'rack-1',
+      name: 'Core Rack',
+      uCapacity: 42,
+      auditSequence: 1,
+    };
+    const racks = { findOne: jest.fn(() => query(rackDoc)) };
+    const store = new MongoRackStore(racks as never, {} as never);
+
+    await expect(store.getRack('rack-1')).resolves.toMatchObject({
+      id: 'rack-1',
+      name: 'Core Rack',
+      uCapacity: 42,
+    });
+  });
+
   it('maps the active Rack location and uses its one-cell coordinates', async () => {
     const rackModel = {};
     const locationDoc = {
@@ -41,13 +58,16 @@ describe('MongoRackStore', () => {
     const context = {} as never;
 
     await expect(
-      store.saveRack(Rack.create({ id: 'rack-1', uCapacity: 42 }), context),
+      store.saveRack(
+        Rack.create({ id: 'rack-1', name: 'Core Rack', uCapacity: 42 }),
+        context,
+      ),
     ).resolves.toBe(4);
 
     expect(racks.findOneAndUpdate).toHaveBeenCalledWith(
       { id: 'rack-1' },
       {
-        $set: { uCapacity: 42 },
+        $set: { name: 'Core Rack', uCapacity: 42 },
         $setOnInsert: { id: 'rack-1' },
         $inc: { auditSequence: 1 },
         $unset: { rowLabel: '', positionInRow: '' },

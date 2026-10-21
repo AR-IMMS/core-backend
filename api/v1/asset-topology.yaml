@@ -582,7 +582,7 @@ paths:
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
     patch:
       operationId: updateRack
-      summary: Update Rack capacity and row/position labels
+      summary: Update Rack capacity
       description: Rack ID is immutable. Location changes use the location operation; QR is managed by AT-07.
       security:
         - HumanAccessToken: []
@@ -937,23 +937,19 @@ components:
     CreateRackRequest:
       type: object
       additionalProperties: false
-      required: [column, row, rotation, u_capacity]
+      required: [name, column, row, rotation, u_capacity]
       properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
         column: { type: integer, minimum: 0 }
         row: { type: integer, minimum: 0 }
         rotation: { type: integer, enum: [0, 90, 180, 270] }
         u_capacity: { type: integer, minimum: 1 }
-        row_label: { type: string, minLength: 1, maxLength: 128 }
-        position_in_row: { type: string, minLength: 1, maxLength: 128 }
     UpdateRackRequest:
       type: object
       additionalProperties: false
       minProperties: 1
       properties:
         u_capacity: { type: integer, minimum: 1 }
-        row_label: { type: [string, 'null'], minLength: 1, maxLength: 128 }
-        position_in_row:
-          { type: [string, 'null'], minLength: 1, maxLength: 128 }
     MoveRackRequest:
       type: object
       additionalProperties: false
@@ -973,12 +969,12 @@ components:
         rotation: { type: integer, enum: [0, 90, 180, 270] }
     RackResponse:
       type: object
-      required: [id, u_capacity, current_location]
+      required: [id, name, u_capacity, location_label, current_location]
       properties:
         id: { type: string }
+        name: { type: string, minLength: 1, maxLength: 128 }
         u_capacity: { type: integer, minimum: 1 }
-        row_label: { type: [string, 'null'] }
-        position_in_row: { type: [string, 'null'] }
+        location_label: { type: [string, 'null'], description: Derived from the current location coordinates; null when unplaced. }
         current_location:
           {
             oneOf:
@@ -1057,9 +1053,10 @@ components:
         row: { type: integer, minimum: 0 }
     RoomMapRack:
       type: object
-      required: [rack_id, column, row, rotation, u_capacity, location_label]
+      required: [rack_id, name, column, row, rotation, u_capacity, location_label]
       properties:
         rack_id: { type: string }
+        name: { type: string, minLength: 1, maxLength: 128 }
         column: { type: integer, minimum: 0 }
         row: { type: integer, minimum: 0 }
         rotation: { type: integer, enum: [0, 90, 180, 270] }

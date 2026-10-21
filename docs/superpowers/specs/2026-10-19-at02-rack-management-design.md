@@ -2,7 +2,7 @@
 
 ## Goal
 
-Implement backend Rack management and Room-map interaction support in Asset & Topology. Admins can create a Rack in a Room, move or rotate it, inspect the Room map, and maintain Rack row/position labels independently from map coordinates. The backend remains authoritative for placement validation and audit attribution.
+Implement backend Rack management and Room-map interaction support in Asset & Topology. Admins can create a named Rack in a Room, move or rotate it, and inspect the Room map. Location labels are derived from map coordinates; the backend remains authoritative for placement validation and audit attribution.
 
 ## Scope and decisions
 
@@ -13,9 +13,9 @@ Implement backend Rack management and Room-map interaction support in Asset & To
 - Rack creation and its initial location are one atomic operation. A successfully created Rack always belongs to an existing Room and has an active location.
 - Rack location history stores Room, column, row, rotation, and effective timestamps. Moving a Rack closes the previous active location and creates the new location atomically; invalid moves preserve the previous location.
 - Authorized callers can query the complete Rack location history, ordered by effective start time, including the active interval.
-- Rack row and position labels are Rack metadata and remain independent of map coordinates.
-- AT-02 permits Rack updates to `uCapacity`, `rowLabel`, and `positionInRow`. Rack ID is immutable. Room, `column`, `row`, and rotation change only through the location operation. Physical dimensions and QR mappings are not Rack update fields in AT-02; QR remains in AT-07.
-- The Room-map query returns Room grid metadata and the active Rack placements for that Room. Rack detail returns the canonical Rack identity, capacity, labels, and current location.
+- Rack `name` is required at creation and returned in Rack reads. Location labels are derived from the active Rack Location using spreadsheet-style row letters and one-based columns; `column` and `row` remain canonical.
+- AT-02 permits Rack updates to `uCapacity`. Rack ID is immutable. Room, `column`, `row`, and rotation change only through the location operation. Physical dimensions and QR mappings are not Rack update fields in AT-02; QR remains in AT-07.
+- The Room-map query returns Room grid metadata and the active Rack placements for that Room. Rack detail returns the canonical Rack identity, name, capacity, coordinate-derived location label, and current location.
 - Expose Rack and Room-map reads through a dedicated read-only Asset & Topology query port when implemented. Keep the existing Asset query port available independently. Leave the broader consumer contract unbound until its remaining queries are implemented.
 - Reuse the existing Audit/Outbox mechanism for material Rack and location changes, recording actor, source, and time. Do not add an Audit store.
 - A Room `gridSnapMm` change is rejected while any Rack has an active location in that Room. A Room width/depth change is rejected if the resulting full-cell grid would put any active Rack cell outside the grid.
@@ -25,7 +25,7 @@ Implement backend Rack management and Room-map interaction support in Asset & To
 
 ### Create Rack
 
-The create operation accepts the Room, one-cell `column`/`row`, cardinal rotation, U capacity, and optional row/position labels. It verifies that the Room exists, the coordinates are integer grid indices within `0 <= column < floor(widthMm / gridSnapMm)` and `0 <= row < floor(depthMm / gridSnapMm)`, and the cell is unoccupied. It creates the Rack and its first active Rack location within one unit of work. Any validation or persistence failure leaves neither record partially created.
+The create operation accepts a required Rack name, the Room, one-cell `column`/`row`, cardinal rotation, and U capacity. It verifies that the Room exists, the coordinates are integer grid indices within `0 <= column < floor(widthMm / gridSnapMm)` and `0 <= row < floor(depthMm / gridSnapMm)`, and the cell is unoccupied. It creates the Rack and its first active Rack location within one unit of work. Any validation or persistence failure leaves neither record partially created.
 
 ### Move or rotate Rack
 
@@ -33,7 +33,7 @@ The location operation accepts a destination Room, integer `column`/`row`, and c
 
 ### Room map and Room changes
 
-The Room-map read returns the Room ID and grid definition together with all Racks currently located in that Room. Each Rack entry includes its canonical Rack ID, U capacity, independent row/position labels, and current location. The generated grid is derived from Room dimensions and snap size; cell occupancy is derived from active Rack locations and is not stored as a grid document.
+The Room-map read returns the Room ID and grid definition together with all Racks currently located in that Room. Each Rack entry includes its canonical Rack ID, name, U capacity, canonical `column`/`row` coordinates, and a location label derived from those coordinates. The generated grid is derived from Room dimensions and snap size; cell occupancy is derived from active Rack locations and is not stored as a grid document.
 
 Only complete grid cells exist: grid columns are `floor(widthMm / gridSnapMm)` and rows are `floor(depthMm / gridSnapMm)`; leftover width/depth does not create a partial cell. Reject any `gridSnapMm` change while the Room has an active Rack location. Permit a width/depth change only when every active Rack cell remains inside the resulting full-cell grid. Preserve the existing Room state and Audit sequence on rejection.
 
@@ -56,7 +56,7 @@ The REST/OpenAPI contract exposes Room-map retrieval, Rack creation with initial
 - Reject moves to nonexistent Rooms.
 - Keep create and move operations atomic with their location history and audit/outbox facts.
 - Reject `gridSnapMm` changes while a Room has any active Rack location; reject width/depth changes that place an active Rack outside the new full-cell grid.
-- Keep row/position labels independent of map coordinates.
+- Derive display labels from current coordinates; never persist row/position display labels on Rack metadata.
 
 ## Verification approach
 

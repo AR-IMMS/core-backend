@@ -66,9 +66,8 @@ export interface RackLocationHistoryEntry extends RackCurrentLocation {
 /** Minimal canonical Rack reference for topology and placement consumers. */
 export interface RackReference {
   readonly id: RackId;
+  readonly name: string;
   readonly uCapacity: number;
-  readonly rowLabel?: string;
-  readonly positionInRow?: string;
   readonly currentLocation: RackCurrentLocation | null;
 }
 

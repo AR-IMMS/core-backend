@@ -21,7 +21,7 @@ describe('AssetPlacementPolicy', () => {
     ...overrides,
   });
   const rack = (id = 'rack-1', uCapacity = 42) =>
-    Rack.create({ id, uCapacity });
+    Rack.create({ id, name: id, uCapacity });
   const placement = (props: Partial<StartAssetPlacementProps> = {}) =>
     AssetPlacement.start(start(props));
 

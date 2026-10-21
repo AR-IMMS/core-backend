@@ -37,6 +37,7 @@ describe('ExportAssetLabelsUseCase', () => {
     racks.getRack.mockImplementation((id) =>
       Promise.resolve({
         id,
+        name: 'Core Rack',
         uCapacity: 42,
         currentLocation: {
           roomId: 'room-1' as never,

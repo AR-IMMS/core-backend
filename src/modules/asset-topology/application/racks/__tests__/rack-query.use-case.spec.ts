@@ -22,8 +22,7 @@ describe('RackQueryUseCase', () => {
     const rack = Rack.create({
       id: 'rack-1',
       uCapacity: 42,
-      rowLabel: 'A',
-      positionInRow: '03',
+      name: 'Core Rack',
     });
     const location = RackLocation.start(
       {
@@ -55,8 +54,7 @@ describe('RackQueryUseCase', () => {
       racks: [
         {
           id: 'rack-1',
-          rowLabel: 'A',
-          positionInRow: '03',
+          name: 'Core Rack',
           currentLocation: { column: 3, row: 4, rotation: 270 },
         },
       ],
@@ -74,7 +72,11 @@ describe('RackQueryUseCase', () => {
         gridSnapMm: 500,
       }),
     });
-    const rack = Rack.create({ id: 'rack-1', uCapacity: 42 });
+    const rack = Rack.create({
+      id: 'rack-1',
+      name: 'Core Rack',
+      uCapacity: 42,
+    });
     const location = RackLocation.start(
       {
         rackId: rack.id,
@@ -141,7 +143,7 @@ describe('RackQueryUseCase', () => {
     const query = new RackQueryUseCase(
       {
         getRack: jest.fn(async () =>
-          Rack.create({ id: 'rack-1', uCapacity: 42 }),
+          Rack.create({ id: 'rack-1', name: 'Core Rack', uCapacity: 42 }),
         ),
         listActiveLocationsInRoom: jest.fn(async () => [location]),
       } as unknown as RackStorePort,

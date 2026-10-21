@@ -29,9 +29,8 @@ interface Model<T> {
 }
 interface RackDocument {
   id: string;
+  name: string;
   uCapacity: number;
-  rowLabel?: string;
-  positionInRow?: string;
   auditSequence: number;
 }
 interface LocationDocument {
@@ -99,18 +98,16 @@ export class MongoRackStore implements RackStorePort {
   }
 
   async saveRack(rack: Rack, context: UnitOfWorkContext): Promise<number> {
-    const set: Record<string, unknown> = { uCapacity: rack.uCapacity };
-    const unset: Record<string, ''> = {};
-    if (rack.rowLabel === undefined) unset.rowLabel = '';
-    else set.rowLabel = rack.rowLabel;
-    if (rack.positionInRow === undefined) unset.positionInRow = '';
-    else set.positionInRow = rack.positionInRow;
+    const set: Record<string, unknown> = {
+      name: rack.name,
+      uCapacity: rack.uCapacity,
+    };
     const update: Record<string, unknown> = {
       $set: set,
       $setOnInsert: { id: rack.id },
       $inc: { auditSequence: 1 },
     };
-    if (Object.keys(unset).length) update.$unset = unset;
+    update.$unset = { rowLabel: '', positionInRow: '' };
     const result = await this.racks
       .findOneAndUpdate({ id: rack.id }, update, {
         upsert: true,
@@ -173,9 +170,8 @@ export class MongoRackStore implements RackStorePort {
 function toRack(doc: RackDocument): Rack {
   return Rack.create({
     id: doc.id,
+    name: doc.name,
     uCapacity: doc.uCapacity,
-    rowLabel: doc.rowLabel,
-    positionInRow: doc.positionInRow,
   });
 }
 

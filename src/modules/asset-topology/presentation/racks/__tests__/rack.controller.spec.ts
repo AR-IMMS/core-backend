@@ -24,9 +24,8 @@ describe('RackController', () => {
         racks: [
           {
             id: 'rack-1',
+            name: 'Core Rack',
             uCapacity: 42,
-            rowLabel: 'A',
-            positionInRow: '03',
             currentLocation: {
               roomId: 'room-1',
               column: 2,
@@ -63,6 +62,7 @@ describe('RackController', () => {
       racks: [
         {
           rack_id: 'rack-1',
+          name: 'Core Rack',
           column: 2,
           row: 3,
           rotation: 90,
@@ -81,6 +81,7 @@ describe('RackController', () => {
         { user: { userId: 'tech-1', role: 'TECHNICIAN' } },
         { room_id: 'room-1' },
         {
+          name: 'Core Rack',
           column: 0,
           row: 0,
           rotation: 0,
@@ -88,6 +89,68 @@ describe('RackController', () => {
         },
       ),
     ).rejects.toThrow('Only IT Admins can manage Racks.');
+  });
+
+  it('accepts a required name and includes it in the Rack creation response', async () => {
+    const management = {
+      create: jest.fn(async () => ({
+        value: { id: 'rack-1' },
+        layoutRevisions: [{ roomId: 'room-1', revision: 1 }],
+      })),
+    };
+    const queries = {
+      getRack: jest.fn(async () => ({
+        id: 'rack-1',
+        name: 'Core Rack',
+        uCapacity: 42,
+        currentLocation: {
+          roomId: 'room-1',
+          column: 3,
+          row: 3,
+          rotation: 0,
+        },
+      })),
+    };
+    const controller = new RackController(
+      management as never,
+      queries as never,
+    );
+    const response = { setHeader: jest.fn() };
+
+    await expect(
+      controller.create(
+        {
+          user: { userId: 'admin-1', role: 'IT_ADMIN' },
+          headers: { 'if-match': '"0"' },
+        },
+        { room_id: 'room-1' },
+        {
+          name: 'Core Rack',
+          column: 3,
+          row: 3,
+          rotation: 0,
+          u_capacity: 42,
+        },
+        response,
+      ),
+    ).resolves.toEqual({
+      id: 'rack-1',
+      name: 'Core Rack',
+      u_capacity: 42,
+      location_label: 'D-4',
+      current_location: {
+        room_id: 'room-1',
+        column: 3,
+        row: 3,
+        rotation: 0,
+      },
+      layout_revisions: [{ room_id: 'room-1', revision: 1 }],
+    });
+    expect(management.create).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Core Rack' }),
+      { type: 'user', id: 'admin-1' },
+    );
+    expect(response.setHeader).toHaveBeenCalledWith('ETag', '"1"');
   });
 
   it('formats Room-map row labels beyond Z', async () => {
@@ -112,6 +175,7 @@ describe('RackController', () => {
           racks: [
             {
               id: 'rack-1',
+              name: 'Core Rack',
               uCapacity: 42,
               currentLocation: {
                 roomId: 'room-1',
@@ -128,7 +192,59 @@ describe('RackController', () => {
     await expect(
       controller.getRoomMap({ room_id: 'room-1' }),
     ).resolves.toMatchObject({
-      racks: [{ location_label: 'AA-1' }],
+      racks: [{ name: 'Core Rack', location_label: 'AA-1' }],
+    });
+  });
+
+  it('includes a coordinate-derived location label in Rack reads', async () => {
+    const controller = new RackController(
+      {} as never,
+      {
+        getRack: jest.fn(async () => ({
+          id: 'rack-1',
+          name: 'Core Rack',
+          uCapacity: 42,
+          currentLocation: {
+            roomId: 'room-1',
+            column: 3,
+            row: 3,
+            rotation: 0,
+          },
+        })),
+      } as never,
+    );
+
+    await expect(controller.get({ rack_id: 'rack-1' })).resolves.toEqual({
+      id: 'rack-1',
+      name: 'Core Rack',
+      u_capacity: 42,
+      location_label: 'D-4',
+      current_location: {
+        room_id: 'room-1',
+        column: 3,
+        row: 3,
+        rotation: 0,
+      },
+    });
+  });
+
+  it('returns a null location label for an unplaced Rack', async () => {
+    const controller = new RackController(
+      {} as never,
+      {
+        getRack: jest.fn(async () => ({
+          id: 'rack-1',
+          name: 'Core Rack',
+          uCapacity: 42,
+          currentLocation: null,
+        })),
+      } as never,
+    );
+
+    await expect(controller.get({ rack_id: 'rack-1' })).resolves.toMatchObject({
+      name: 'Core Rack',
+      location_label: null,
+      current_location: null,
     });
   });
 

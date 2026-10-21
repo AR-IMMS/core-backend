@@ -51,6 +51,7 @@ describe('Asset & Topology consumer contract', () => {
       getRack: () =>
         Promise.resolve({
           id: 'rack-1' as RackId,
+          name: 'Core Rack',
           uCapacity: 42,
           currentLocation: {
             roomId: 'room-1' as RoomId,
