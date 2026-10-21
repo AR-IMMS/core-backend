@@ -91,6 +91,35 @@ describe('RackController', () => {
     ).rejects.toThrow('Only IT Admins can manage Racks.');
   });
 
+  it('passes a partial name update and returns the updated Rack', async () => {
+    const management = { update: jest.fn(async () => undefined) };
+    const queries = {
+      getRack: jest.fn(async () => ({
+        id: 'rack-1',
+        name: 'Edge Rack',
+        uCapacity: 42,
+        currentLocation: null,
+      })),
+    };
+    const controller = new RackController(
+      management as never,
+      queries as never,
+    );
+
+    await expect(
+      controller.update(
+        { user: { userId: 'admin-1', role: 'IT_ADMIN' } },
+        { rack_id: 'rack-1' },
+        { name: 'Edge Rack' },
+      ),
+    ).resolves.toMatchObject({ id: 'rack-1', name: 'Edge Rack' });
+    expect(management.update).toHaveBeenCalledWith(
+      'rack-1',
+      { name: 'Edge Rack', uCapacity: undefined },
+      { type: 'user', id: 'admin-1' },
+    );
+  });
+
   it('accepts a required name and includes it in the Rack creation response', async () => {
     const management = {
       create: jest.fn(async () => ({

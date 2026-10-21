@@ -229,7 +229,7 @@ export class RackController {
 
   @Patch('racks/:rack_id')
   @RequirePermissions('asset:manage')
-  @ApiOperation({ summary: 'Update Rack capacity' })
+  @ApiOperation({ summary: 'Update Rack name or capacity' })
   @ApiOkResponse({ description: 'Rack updated.' })
   update(
     @Req() request: RackRequest,
@@ -251,6 +251,7 @@ export class RackController {
       await this.racks.update(
         params.rack_id,
         {
+          name: body.name,
           uCapacity: body.u_capacity,
         },
         actor,

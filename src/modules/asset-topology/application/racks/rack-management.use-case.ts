@@ -34,6 +34,7 @@ export interface CreateRackInput {
 }
 
 export interface UpdateRackInput {
+  readonly name?: string;
   readonly uCapacity?: number;
 }
 
@@ -149,6 +150,15 @@ export class RackManagementUseCases {
       if (!current) throw new RackResourceNotFoundError('Rack');
       const updated = current.update(input);
       const changes: AuditFactV2['payload']['changes'] = [
+        ...(current.name === updated.name
+          ? []
+          : [
+              {
+                field: 'name',
+                before: current.name,
+                after: updated.name,
+              },
+            ]),
         ...(current.uCapacity === updated.uCapacity
           ? []
           : [

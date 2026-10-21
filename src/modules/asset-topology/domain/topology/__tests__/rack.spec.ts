@@ -62,6 +62,20 @@ describe('Rack', () => {
     });
   });
 
+  it('updates and trims the Rack name without changing capacity or identity', () => {
+    const rack = Rack.create({
+      id: 'rack-1',
+      name: 'Core Rack',
+      uCapacity: 42,
+    });
+
+    expect(rack.update({ name: ' Edge Rack ' })).toMatchObject({
+      id: 'rack-1',
+      name: 'Edge Rack',
+      uCapacity: 42,
+    });
+  });
+
   it('rejects U positions above capacity', () => {
     const rack = Rack.create({
       id: 'rack-1',

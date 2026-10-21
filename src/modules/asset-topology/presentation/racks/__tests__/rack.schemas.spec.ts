@@ -24,4 +24,12 @@ describe('Rack request schemas', () => {
       expect(updateRackSchema.safeParse({ [field]: 'A' }).success).toBe(false);
     },
   );
+
+  it('accepts a non-empty Rack name as a partial update', () => {
+    expect(updateRackSchema.safeParse({ name: 'Edge Rack' }).success).toBe(
+      true,
+    );
+    expect(updateRackSchema.safeParse({ name: '  ' }).success).toBe(false);
+    expect(updateRackSchema.safeParse({ name: '' }).success).toBe(false);
+  });
 });

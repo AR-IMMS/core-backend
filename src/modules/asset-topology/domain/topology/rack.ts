@@ -16,6 +16,7 @@ export interface CreateRackProps {
 }
 
 export interface UpdateRackProps {
+  readonly name?: string;
   readonly uCapacity?: number;
 }
 
@@ -54,7 +55,7 @@ export class Rack {
   update(props: UpdateRackProps): Rack {
     return Rack.create({
       id: this.id,
-      name: this.name,
+      name: props.name ?? this.name,
       uCapacity: props.uCapacity ?? this.uCapacity,
     });
   }

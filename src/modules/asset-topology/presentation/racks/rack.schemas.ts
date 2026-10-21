@@ -18,6 +18,7 @@ export const createRackSchema = z.strictObject({
 });
 export const updateRackSchema = z
   .strictObject({
+    name: z.string().trim().min(1).max(128).optional(),
     u_capacity: z.number().int().positive().optional(),
   })
   .refine(

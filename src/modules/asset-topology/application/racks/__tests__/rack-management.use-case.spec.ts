@@ -119,6 +119,36 @@ describe('RackManagementUseCases', () => {
     expect(rack.value.id).toBe('rack-1');
   });
 
+  it('persists Rack name changes and attributes them in the Audit Fact', async () => {
+    const rack = Rack.create({
+      id: 'rack-1',
+      name: 'Core Rack',
+      uCapacity: 42,
+    });
+    rackStore.getRack.mockResolvedValue(rack);
+
+    const updated = await useCases.update(
+      rack.id,
+      { name: 'Edge Rack' },
+      actor,
+    );
+
+    expect(updated.name).toBe('Edge Rack');
+    expect(rackStore.saveRack).toHaveBeenCalledWith(
+      expect.objectContaining({ id: rack.id, name: 'Edge Rack' }),
+      expect.anything(),
+    );
+    expect(outbox.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          action: 'asset_topology.rack.updated',
+          changes: [{ field: 'name', before: 'Core Rack', after: 'Edge Rack' }],
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
   it('rejects a Rack create on a walkway without saving or auditing', async () => {
     const roomWithWalkway = Room.create({
       id: room.id,
