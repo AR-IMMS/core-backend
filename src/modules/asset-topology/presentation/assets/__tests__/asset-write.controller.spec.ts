@@ -19,11 +19,40 @@ describe('AssetWriteController', () => {
         { user: { userId: 'operator', role: 'OPERATOR' } },
         {
           name: 'Node',
-          asset_type_id: 'type-node',
+          asset_type: 'NODE',
         },
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(register.execute).not.toHaveBeenCalled();
+  });
+
+  it('maps the public Asset Type enum to the stable catalog ID', async () => {
+    const register = {
+      execute: jest.fn().mockResolvedValue({
+        id: 'asset-1',
+        name: 'Node',
+        assetTypeId: 'type-node',
+        assetModelId: undefined,
+        serialNumber: undefined,
+        lifecycleState: 'ACTIVE',
+      }),
+    };
+    const controller = new AssetWriteController(
+      register as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      controller.create(
+        { user: { userId: 'admin-1', role: 'IT_ADMIN' } },
+        { name: 'Node', asset_type: 'NODE' },
+      ),
+    ).resolves.toMatchObject({ id: 'asset-1', asset_type: 'NODE' });
+    expect(register.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Node', assetTypeId: 'type-node' }),
+      { type: 'user', id: 'admin-1' },
+    );
   });
 
   it('preserves omitted patch values and forwards explicit null clears', () => {

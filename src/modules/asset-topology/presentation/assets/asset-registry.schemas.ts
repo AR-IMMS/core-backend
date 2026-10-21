@@ -1,13 +1,14 @@
 import { BadRequestException } from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
 import { z, ZodError } from 'zod';
+import { ASSET_TYPE_CODES } from './asset-type-code';
 
 const id = z.string().trim().min(1).max(128);
 const name = z.string().trim().min(1).max(128);
 export const assetParamsSchema = z.strictObject({ asset_id: id });
 export const registerAssetSchema = z.strictObject({
   name,
-  asset_type_id: id,
+  asset_type: z.enum(ASSET_TYPE_CODES),
   model_id: id.optional(),
   manufacturer_serial_number: z.string().trim().max(128).optional(),
 });

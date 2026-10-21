@@ -39,6 +39,7 @@ import {
 } from './asset-registry.schemas';
 import { requireAssetAdmin, type AssetHttpRequest } from './asset-http-support';
 import { QrMappingConflictError } from '../../application/qr/qr-mapping.errors';
+import { assetTypeCodeFromId, assetTypeIdFromCode } from './asset-type-code';
 
 @ApiTags('Asset Registry')
 @ApiBearerAuth('HumanAccessToken')
@@ -70,7 +71,7 @@ export class AssetWriteController {
       const asset = await this.registerAsset.execute(
         {
           name: input.name,
-          assetTypeId: input.asset_type_id,
+          assetTypeId: assetTypeIdFromCode(input.asset_type),
           modelId: input.model_id,
           serialNumber: input.manufacturer_serial_number,
         },
@@ -147,7 +148,7 @@ function serializeAsset(
   return {
     id: asset.id,
     name: asset.name,
-    asset_type_id: asset.assetTypeId,
+    asset_type: assetTypeCodeFromId(asset.assetTypeId),
     model_id: asset.assetModelId ?? null,
     manufacturer_serial_number: asset.serialNumber ?? null,
     lifecycle_state: asset.lifecycleState,

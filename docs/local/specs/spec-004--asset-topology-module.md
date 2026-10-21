@@ -99,6 +99,7 @@ No cross-module deep imports or direct reads/writes of another module's collecti
 - Asset Type is immutable after registration. Descriptive updates may change the Asset Name, optional Model, and optional serial number while preserving canonical identity and Type.
 - If an Asset has a Model, the Model must exist in the read-only catalog and its Type must equal the Asset's Type. The same validation applies when a Model is added or changed.
 - Node Type is provisioned through seed/bootstrap; Flow 1 does not provide Type catalog CRUD. An optional Model may be referenced only when it already exists and its Type matches the Asset Type. Flow 1 does not provide Model catalog CRUD.
+- The Flow 1 REST API represents the supported Type as `asset_type: "NODE"`; it does not expose the internal Asset Type ID (`type-node`). Internal Asset and Model references continue using the stable Type ID. `model_id` remains an optional reference to an already-provisioned Model.
 - The Flow 1 Asset list uses opaque `cursor` and `page_size` query parameters only, defaults to 20 entries, and caps a page at 100. AT-03 provides no list filters.
 - Asset placement is tracked through Asset Location. Asset placement is 1U in v1; multi-U and multi-Rack placement are deferred until a concrete physical-device use case requires them.
 - The current Flow 1 asset class is physical compute Node. Workload/Service and virtual workload inventory are not Asset types in this scope.

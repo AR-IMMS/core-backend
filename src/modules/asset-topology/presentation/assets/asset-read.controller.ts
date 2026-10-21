@@ -30,6 +30,7 @@ import {
   assetParamsSchema,
   parseAssetRequest,
 } from './asset-registry.schemas';
+import { assetTypeCodeFromId } from './asset-type-code';
 
 @ApiTags('Asset Registry')
 @ApiBearerAuth('HumanAccessToken')
@@ -101,7 +102,7 @@ export class AssetReadController {
     return {
       id: asset.id,
       name: asset.name,
-      asset_type_id: asset.assetTypeId,
+      asset_type: assetTypeCodeFromId(asset.assetTypeId),
       lifecycle_state: asset.lifecycleState,
       current_placement: asset.currentPlacement
         ? {
@@ -146,7 +147,7 @@ function serializeAsset(
   return {
     id: asset.id,
     name: asset.name,
-    asset_type_id: asset.assetTypeId,
+    asset_type: assetTypeCodeFromId(asset.assetTypeId),
     model_id: asset.assetModelId ?? null,
     manufacturer_serial_number: asset.serialNumber ?? null,
     lifecycle_state: asset.lifecycleState,

@@ -25,7 +25,7 @@ describe('AssetReadController', () => {
       controller.get({ asset_id: 'asset-1' }),
     ).resolves.toMatchObject({
       id: 'asset-1',
-      asset_type_id: 'type-node',
+      asset_type: 'NODE',
       current_placement: null,
     });
     await expect(
