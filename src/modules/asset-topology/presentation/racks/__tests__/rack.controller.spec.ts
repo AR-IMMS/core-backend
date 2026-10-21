@@ -2,6 +2,41 @@
 import { RackController } from '../rack.controller';
 
 describe('RackController', () => {
+  it('returns a Room map with no Racks when there are no Rack placements', async () => {
+    const queries = {
+      getRoomMap: jest.fn(async () => ({
+        id: 'room-empty',
+        status: 'ACTIVE',
+        widthMm: 2_000,
+        depthMm: 1_000,
+        gridSnapMm: 1_000,
+        columns: 2,
+        rows: 1,
+        layoutRevision: 0,
+        walkwayCells: [],
+        capacity: {
+          totalCells: 2,
+          rackCapacityCells: 2,
+          activeRackCount: 0,
+          freeRackCells: 2,
+        },
+        racks: [],
+      })),
+    };
+    const controller = new RackController({} as never, queries as never);
+
+    await expect(
+      controller.getRoomMap({ room_id: 'room-empty' }),
+    ).resolves.toMatchObject({
+      id: 'room-empty',
+      capacity: {
+        active_rack_count: 0,
+        free_rack_cells: 2,
+      },
+      racks: [],
+    });
+  });
+
   it('returns Room-map cells with the HTTP snake-case contract', async () => {
     const management = {};
     const queries = {

@@ -8,6 +8,39 @@ import type { TopologyStorePort } from '../../topology/topology-store.port';
 import { RackQueryUseCase } from '../rack-query.use-case';
 
 describe('RackQueryUseCase', () => {
+  it('returns an empty Rack list for a Room with no placements', async () => {
+    const room = Room.create({
+      id: 'room-empty' as never,
+      name: 'Empty Room',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 2_000,
+        depthMm: 1_000,
+        gridSnapMm: 1_000,
+      }),
+    });
+    const racks = {
+      getRack: jest.fn(),
+      listActiveLocationsInRoom: jest.fn(async () => []),
+    } as unknown as RackStorePort;
+    const topology = {
+      getRoom: jest.fn(async () => room),
+    } as unknown as TopologyStorePort;
+    const query = new RackQueryUseCase(racks, topology);
+
+    await expect(query.getRoomMap(room.id)).resolves.toMatchObject({
+      id: room.id,
+      capacity: {
+        totalCells: 2,
+        rackCapacityCells: 2,
+        activeRackCount: 0,
+        freeRackCells: 2,
+      },
+      racks: [],
+    });
+    expect(racks.getRack).not.toHaveBeenCalled();
+  });
+
   it('returns full-cell counts and confirmed Rack references for a Room', async () => {
     const room = Room.create({
       id: 'room-1' as never,
