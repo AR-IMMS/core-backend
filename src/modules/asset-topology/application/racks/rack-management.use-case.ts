@@ -47,6 +47,10 @@ export interface MoveRackInput {
   readonly expectedSourceLayoutRevision?: number;
 }
 
+export interface UnplaceRackInput {
+  readonly expectedLayoutRevision?: number;
+}
+
 export interface RackLayoutMutationResult<T> {
   readonly value: T;
   readonly layoutRevisions: readonly {
@@ -62,7 +66,7 @@ export class RackResourceNotFoundError extends Error {
   }
 }
 
-/** Rack create, metadata update, and atomic Room-map location operations. */
+/** Rack management and atomic Room-map placement operations. */
 @Injectable()
 export class RackManagementUseCases {
   constructor(
@@ -292,6 +296,68 @@ export class RackManagementUseCases {
         context,
       );
       return { value: result.activeLocation, layoutRevisions: advancedRooms };
+    });
+  }
+
+  async unplace(
+    rackId: string,
+    input: UnplaceRackInput,
+    actor: TopologyActor,
+  ): Promise<RackLayoutMutationResult<Rack>> {
+    return this.unitOfWork.run(async (context) => {
+      const rack = await this.racks.getRack(rackId, context);
+      if (!rack) throw new RackResourceNotFoundError('Rack');
+      const current = await this.racks.getActiveLocation(rack.id, context);
+      if (!current) return { value: rack, layoutRevisions: [] };
+
+      if (input.expectedLayoutRevision === undefined) {
+        throw new DomainError(
+          'ROOM_LAYOUT_REVISION_REQUIRED',
+          'Expected Room layout revision is required to unplace a Rack',
+        );
+      }
+
+      const room = await this.topology.getRoom(current.roomId, context);
+      if (!room) throw new RackResourceNotFoundError('Room');
+      const advancedRoom = await this.topology.advanceRoomLayoutRevision(
+        room.id,
+        input.expectedLayoutRevision,
+        context,
+      );
+      if (!advancedRoom) throw new RoomLayoutRevisionConflictError();
+
+      const unplacedAt = this.now();
+      await this.racks.closeActiveLocation(rack.id, unplacedAt, context);
+      const sequence = await this.racks.saveRack(rack, context);
+      await this.appendFact(
+        {
+          actor,
+          action: 'asset_topology.rack.unplaced',
+          rack,
+          sequence,
+          changes: [
+            { field: 'room_id', before: current.roomId, after: null },
+            {
+              field: 'column',
+              before: current.placement.column,
+              after: null,
+            },
+            { field: 'row', before: current.placement.row, after: null },
+            {
+              field: 'rotation',
+              before: current.placement.rotation,
+              after: null,
+            },
+          ],
+        },
+        context,
+      );
+      return {
+        value: rack,
+        layoutRevisions: [
+          { roomId: room.id, revision: advancedRoom.layoutRevision },
+        ],
+      };
     });
   }
 

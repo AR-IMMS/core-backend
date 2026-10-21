@@ -1,7 +1,114 @@
 /* eslint-disable @typescript-eslint/require-await -- Controller dependencies are Promise-returning test doubles. */
 import { RackController } from '../rack.controller';
+import { DomainError } from '../../../domain/shared/domain-error';
 
 describe('RackController', () => {
+  it('removes a Rack from its Room and returns the updated layout ETag', async () => {
+    const management = {
+      unplace: jest.fn(async () => ({
+        value: {},
+        layoutRevisions: [{ roomId: 'room-1', revision: 4 }],
+      })),
+    };
+    const queries = {
+      getRack: jest.fn(async () => ({
+        id: 'rack-1',
+        name: 'Core Rack',
+        uCapacity: 42,
+        currentLocation: null,
+      })),
+    };
+    const controller = new RackController(
+      management as never,
+      queries as never,
+    );
+    const response = { setHeader: jest.fn() };
+
+    await expect(
+      controller.unplace(
+        {
+          user: { userId: 'admin-1', role: 'IT_ADMIN' },
+          headers: { 'if-match': '"3"' },
+        },
+        { rack_id: 'rack-1' },
+        response,
+      ),
+    ).resolves.toMatchObject({
+      id: 'rack-1',
+      name: 'Core Rack',
+      location_label: null,
+      current_location: null,
+      layout_revisions: [{ room_id: 'room-1', revision: 4 }],
+    });
+    expect(management.unplace).toHaveBeenCalledWith(
+      'rack-1',
+      { expectedLayoutRevision: 3 },
+      { type: 'user', id: 'admin-1' },
+    );
+    expect(response.setHeader).toHaveBeenCalledWith('ETag', '"4"');
+  });
+
+  it('returns an already-unplaced Rack without requiring If-Match', async () => {
+    const management = {
+      unplace: jest.fn(async () => ({ value: {}, layoutRevisions: [] })),
+    };
+    const queries = {
+      getRack: jest.fn(async () => ({
+        id: 'rack-1',
+        name: 'Core Rack',
+        uCapacity: 42,
+        currentLocation: null,
+      })),
+    };
+    const controller = new RackController(
+      management as never,
+      queries as never,
+    );
+    const response = { setHeader: jest.fn() };
+
+    await expect(
+      controller.unplace(
+        { user: { userId: 'admin-1', role: 'IT_ADMIN' } },
+        { rack_id: 'rack-1' },
+        response,
+      ),
+    ).resolves.toMatchObject({
+      id: 'rack-1',
+      current_location: null,
+      layout_revisions: [],
+    });
+    expect(management.unplace).toHaveBeenCalledWith(
+      'rack-1',
+      {},
+      {
+        type: 'user',
+        id: 'admin-1',
+      },
+    );
+    expect(response.setHeader).not.toHaveBeenCalled();
+  });
+
+  it('returns 428 when a placed Rack is unplaced without If-Match', async () => {
+    const controller = new RackController(
+      {
+        unplace: jest.fn(async () => {
+          throw new DomainError(
+            'ROOM_LAYOUT_REVISION_REQUIRED',
+            'Expected Room layout revision is required to unplace a Rack',
+          );
+        }),
+      } as never,
+      {} as never,
+    );
+
+    await expect(
+      controller.unplace(
+        { user: { userId: 'admin-1', role: 'IT_ADMIN' } },
+        { rack_id: 'rack-1' },
+      ),
+    ).rejects.toHaveProperty('status', 428);
+  });
+
   it('returns a Room map with no Racks when there are no Rack placements', async () => {
     const queries = {
       getRoomMap: jest.fn(async () => ({

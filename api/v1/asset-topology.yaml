@@ -663,6 +663,40 @@ paths:
               schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
         '428': { $ref: ../baseline.yaml#/components/responses/Problem }
         '422': { $ref: ../baseline.yaml#/components/responses/Problem }
+    delete:
+      operationId: unplaceRack
+      summary: Remove a Rack from its current Room
+      description: Unplaces the Rack while retaining its identity and location history. Repeating the operation for an already-unplaced Rack is a no-op. If the Rack is placed, send the current Room map ETag in If-Match.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      parameters:
+        - name: If-Match
+          in: header
+          required: false
+          description: Required while the Rack is placed; strong ETag returned by its current Room map.
+          schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
+      responses:
+        '200':
+          description: Rack remains registered with current_location null; its previous location is retained in history. An already-unplaced Rack is returned unchanged.
+          headers:
+            ETag:
+              description: Updated strong ETag for the Room after a placement was removed. Omitted for an already-unplaced Rack.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RackLayoutMutationResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '412':
+          description: If-Match does not match the current Room layout revision.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '428': { $ref: ../baseline.yaml#/components/responses/Problem }
 
   /api/v1/asset-topology/racks/{rack_id}/locations:
     parameters:

@@ -3,6 +3,7 @@ import {
   ConflictException,
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   HttpException,
@@ -354,6 +355,67 @@ export class RackController {
             ...serializeRack(reference),
             layout_revisions: moved.layoutRevisions.map(
               ({ roomId, revision }) => ({ room_id: roomId, revision }),
+            ),
+          }
+        : null;
+    });
+  }
+
+  @Delete('racks/:rack_id/location')
+  @RequirePermissions('asset:manage')
+  @ApiOperation({ summary: 'Remove a Rack from its current Room' })
+  @ApiOkResponse({
+    description:
+      'Rack remains registered and its location is cleared; repeating an unplace is a no-op.',
+  })
+  @ApiBadRequestResponse({ description: 'Rack ID or If-Match is invalid.' })
+  @ApiResponse({
+    status: HttpStatus.PRECONDITION_FAILED,
+    description: 'If-Match is stale.',
+  })
+  @ApiResponse({
+    status: 428,
+    description: 'If-Match is required while the Rack is placed.',
+  })
+  @ApiNotFoundResponse({ description: 'Rack or its Room was not found.' })
+  @ApiHeader({
+    name: 'If-Match',
+    required: false,
+    description:
+      'Required while the Rack is placed: strong ETag returned by its current Room map.',
+  })
+  unplace(
+    @Req() request: RackRequest,
+    @Param() paramsValue: RackIdParamsDto,
+    @Res({ passthrough: true }) response?: RackHttpResponse,
+  ) {
+    return this.execute(async () => {
+      const actor = actorFrom(request);
+      const params = parseTopologyRequest(
+        rackIdParamsSchema,
+        paramsValue,
+        'Invalid Rack ID',
+      );
+      const ifMatch = request.headers?.['if-match'];
+      const unplaced = await this.racks.unplace(
+        params.rack_id,
+        ifMatch === undefined
+          ? {}
+          : { expectedLayoutRevision: requireLayoutRevision(ifMatch) },
+        actor,
+      );
+      const revision = unplaced.layoutRevisions[0]?.revision;
+      if (revision !== undefined)
+        response?.setHeader('ETag', layoutEtag(revision));
+      const reference = await this.queries.getRack(params.rack_id as never);
+      return reference
+        ? {
+            ...serializeRack(reference),
+            layout_revisions: unplaced.layoutRevisions.map(
+              ({ roomId, revision: layoutRevision }) => ({
+                room_id: roomId,
+                revision: layoutRevision,
+              }),
             ),
           }
         : null;
