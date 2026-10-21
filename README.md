@@ -75,7 +75,10 @@ pnpm lint
 pnpm test
 pnpm test:e2e
 pnpm build
+pnpm asset-topology:debug-room-map -- <room_id>
 ```
+
+The Room Map debug command reads the same Room-map query used by the API and prints a text grid, parent location names, and occupancy statistics. It is read-only and requires the configured database to be available.
 
 ### Local MongoDB and Readiness
 

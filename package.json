@@ -28,6 +28,7 @@
     "asset-topology:integration": "node -r ts-node/register -r tsconfig-paths/register test/asset-topology.integration.ts",
     "asset-topology:assets:integration": "node -r ts-node/register -r tsconfig-paths/register test/asset-topology-assets.integration.ts",
     "asset-topology:placements:integration": "node -r ts-node/register -r tsconfig-paths/register test/asset-topology-placements.integration.ts",
+    "asset-topology:debug-room-map": "node -r ts-node/register -r tsconfig-paths/register src/modules/asset-topology/scripts/debug-room-map.ts",
     "iam:seed-admin": "node -r ts-node/register -r tsconfig-paths/register src/modules/iam/scripts/seed-initial-admin.ts",
     "prepare": "husky"
   },
