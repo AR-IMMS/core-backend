@@ -4,12 +4,47 @@ The Core Backend serves as the monolith backend for AR-IMMS. This repository foc
 
 > The repository is currently in its foundational bootstrap phase. Business modules will be added incrementally in vertical slices, complete with tests and corresponding contracts.
 
-## Documentation
+### Documentation Structure
 
-Repository-specific documentation, including business flows, architecture
-decisions, and feature specifications, lives in [`docs/local/`](docs/local/).
-Organization-wide documentation shared across repositories lives in
-[`docs/shared/`](docs/shared/), which is maintained as a Git submodule.
+```text
+docs/
+├── local/     # Repository-specific documentation
+└── shared/    # Shared documentation (Git Submodule)
+```
+
+- `docs/local/`: Documentation specific to this repository, such as implementation specs, module designs, technical notes, and repository-specific guides.
+- `docs/shared/`: Documentation shared across AR-IMMS repositories, such as product requirements, business flows, system architecture, API contracts, and common conventions.
+- Do not duplicate shared documentation in `docs/local/`.
+- Changes to shared documentation must be committed and pushed to the `shared-docs` repository.
+
+### Git Submodule Setup
+
+**Clone repository with submodules (recommended):**
+
+```bash
+git clone --recurse-submodules <repository-url>
+```
+
+**Initialize submodules after a normal clone:**
+
+```bash
+git submodule update --init --recursive
+```
+
+**Update shared documentation to the latest remote version:**
+
+```bash
+git submodule update --remote docs/shared
+```
+
+**After updating the submodule**, commit the new reference in the parent repository if the update is intended to be shared.
+
+```bash
+git add docs/shared
+git commit -m "docs: update shared documentation reference"
+```
+
+**Note:** `docs/shared` is pinned to a specific commit. Running `git pull` in the parent repository does not automatically update it to the latest upstream documentation.
 
 ## Initial Scope
 
