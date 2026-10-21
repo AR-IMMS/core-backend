@@ -1,4 +1,6 @@
 import { DomainError } from '../shared/domain-error';
+import { compareRoomMapCells, roomMapCellKey } from './room-map-cell';
+import type { RoomMapCell } from './room-map-cell';
 
 /**
  * List of error codes defined within the RoomMap domain.
@@ -6,6 +8,8 @@ import { DomainError } from '../shared/domain-error';
  */
 export const RoomMapErrorCode = {
   INVALID_MAP: 'INVALID_ROOM_MAP',
+  CELL_OUT_OF_BOUNDS: 'CELL_OUT_OF_BOUNDS',
+  DUPLICATE_WALKWAY_CELL: 'DUPLICATE_WALKWAY_CELL',
 } as const;
 
 /**
@@ -15,6 +19,7 @@ export interface CreateRoomMapProps {
   readonly widthMm: number;
   readonly depthMm: number;
   readonly gridSnapMm: number;
+  readonly walkwayCells?: readonly RoomMapCell[];
 }
 
 /**
@@ -42,6 +47,7 @@ export class RoomMap {
     public readonly widthMm: number,
     public readonly depthMm: number,
     public readonly gridSnapMm: number,
+    public readonly walkwayCells: readonly RoomMapCell[],
   ) {}
 
   get columns(): number {
@@ -65,6 +71,41 @@ export class RoomMap {
     requirePositiveInteger(props.depthMm, 'Room depth');
     requirePositiveInteger(props.gridSnapMm, 'Grid snap');
 
-    return new RoomMap(props.widthMm, props.depthMm, props.gridSnapMm);
+    const columns = Math.floor(props.widthMm / props.gridSnapMm);
+    const rows = Math.floor(props.depthMm / props.gridSnapMm);
+    const walkwayCells = [...(props.walkwayCells ?? [])].sort(
+      compareRoomMapCells,
+    );
+    const seen = new Set<string>();
+    for (const cell of walkwayCells) {
+      if (
+        !Number.isInteger(cell.column) ||
+        !Number.isInteger(cell.row) ||
+        cell.column < 0 ||
+        cell.row < 0 ||
+        cell.column >= columns ||
+        cell.row >= rows
+      ) {
+        throw new DomainError(
+          RoomMapErrorCode.CELL_OUT_OF_BOUNDS,
+          'Walkway cell must be inside the Room grid',
+        );
+      }
+      const key = roomMapCellKey(cell);
+      if (seen.has(key)) {
+        throw new DomainError(
+          RoomMapErrorCode.DUPLICATE_WALKWAY_CELL,
+          'Walkway cells must not contain duplicates',
+        );
+      }
+      seen.add(key);
+    }
+
+    return new RoomMap(
+      props.widthMm,
+      props.depthMm,
+      props.gridSnapMm,
+      walkwayCells.map(({ column, row }) => ({ column, row })),
+    );
   }
 }

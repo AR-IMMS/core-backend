@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return -- Nest reflection metadata is dynamically typed in this test. */
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -12,7 +13,11 @@ import { Test } from '@nestjs/testing';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { CoreZodValidationPipe } from '@platform/http/validation/zod-validation.pipe';
 import { HTTP_ROUTE_POLICY_METADATA } from '@platform/http/api';
+import { RackManagementUseCases } from '../../application/racks/rack-management.use-case';
+import { RackQueryUseCase } from '../../application/racks/rack-query.use-case';
 import {
+  RoomLayoutRevisionConflictError,
+  RoomHasActiveRacksError,
   TopologyResourceNotFoundError,
   TopologyUseCases,
 } from '../../application/topology/topology-use-cases';
@@ -21,6 +26,7 @@ import { RoomMap } from '../../domain/topology/room-map';
 import { Site } from '../../domain/topology/site';
 import { DataCenterParamsDto } from '../topology.schemas';
 import { TopologyController } from '.././topology.controller';
+import { RackController } from '../racks/rack.controller';
 
 describe('TopologyController', () => {
   const actor = { type: 'user', id: 'admin-1' };
@@ -38,6 +44,7 @@ describe('TopologyController', () => {
       createRoom: jest.fn(),
       getRoom: jest.fn(),
       updateRoom: jest.fn(),
+      retireRoom: jest.fn(),
     } as unknown as jest.Mocked<TopologyUseCases>;
     controller = new TopologyController(useCases);
   });
@@ -60,8 +67,12 @@ describe('TopologyController', () => {
 
   it('publishes request body schemas for topology create routes in Swagger', async () => {
     const moduleRef = await Test.createTestingModule({
-      controllers: [TopologyController],
-      providers: [{ provide: TopologyUseCases, useValue: useCases }],
+      controllers: [TopologyController, RackController],
+      providers: [
+        { provide: TopologyUseCases, useValue: useCases },
+        { provide: RackManagementUseCases, useValue: {} },
+        { provide: RackQueryUseCase, useValue: {} },
+      ],
     }).compile();
     const app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api/v1');
@@ -94,6 +105,22 @@ describe('TopologyController', () => {
       expect(
         JSON.stringify(document.components?.schemas?.CreateRoomRequestDto),
       ).toContain('"grid_snap_mm"');
+      const roomUpdateHeaders = document.paths[
+        '/api/v1/asset-topology/rooms/{room_id}'
+      ]?.patch?.parameters?.filter(
+        (parameter) => 'in' in parameter && parameter.in === 'header',
+      );
+      expect(roomUpdateHeaders).toEqual([
+        expect.objectContaining({ name: 'If-Match', required: false }),
+      ]);
+      const rackCreateHeaders = document.paths[
+        '/api/v1/asset-topology/rooms/{room_id}/racks'
+      ]?.post?.parameters?.filter(
+        (parameter) => 'in' in parameter && parameter.in === 'header',
+      );
+      expect(rackCreateHeaders).toEqual([
+        expect.objectContaining({ name: 'If-Match', required: true }),
+      ]);
     } finally {
       await app.close();
     }
@@ -270,15 +297,118 @@ describe('TopologyController', () => {
       }),
     });
     useCases.getRoom.mockResolvedValue(room);
+    const response = { setHeader: jest.fn() };
 
-    await expect(controller.getRoom({ room_id: 'room-1' })).resolves.toEqual({
+    await expect(
+      controller.getRoom({ room_id: 'room-1' }, response),
+    ).resolves.toEqual({
       id: 'room-1',
       name: 'Server Room A',
       site_id: 'site-1',
       width_mm: 10_000,
       depth_mm: 8_000,
       grid_snap_mm: 100,
+      layout_revision: 0,
+      status: 'ACTIVE',
+      walkway_cells: [],
     });
+    expect(response.setHeader).toHaveBeenCalledWith('ETag', '"0"');
+  });
+
+  it('returns retired status when a Room is directly retrieved for history', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Server Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 10_000,
+        depthMm: 8_000,
+        gridSnapMm: 100,
+      }),
+    }).retire();
+    useCases.getRoom.mockResolvedValue(room);
+
+    await expect(
+      controller.getRoom({ room_id: 'room-1' }),
+    ).resolves.toMatchObject({
+      id: 'room-1',
+      status: 'RETIRED',
+    });
+  });
+
+  it('retires a Room without returning a response body', async () => {
+    useCases.retireRoom.mockResolvedValue({} as never);
+
+    await expect(
+      controller.retireRoom(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { room_id: 'room-1' },
+      ),
+    ).resolves.toBeUndefined();
+    expect(useCases.retireRoom).toHaveBeenCalledWith('room-1', actor);
+  });
+
+  it('maps a Room with placed Racks to a conflict', async () => {
+    useCases.retireRoom.mockRejectedValue(new RoomHasActiveRacksError());
+
+    await expect(
+      controller.retireRoom(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { room_id: 'room-1' },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('requires a layout revision and forwards walkway replacement updates', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Server Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 6_000,
+        depthMm: 4_000,
+        gridSnapMm: 1_000,
+      }),
+    });
+    useCases.updateRoom.mockResolvedValue(room);
+    await expect(
+      controller.updateRoom(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { room_id: 'room-1' },
+        { walkway_cells: [{ column: 0, row: 1 }] },
+      ),
+    ).rejects.toMatchObject({ status: 428 });
+    expect(useCases.updateRoom).not.toHaveBeenCalled();
+
+    await controller.updateRoom(
+      {
+        user: { userId: actor.id, role: 'IT_ADMIN' },
+        headers: { 'if-match': '"4"' },
+      },
+      { room_id: 'room-1' },
+      { walkway_cells: [{ column: 0, row: 1 }] },
+    );
+    expect(useCases.updateRoom).toHaveBeenCalledWith(
+      'room-1',
+      { expectedLayoutRevision: 4, walkwayCells: [{ column: 0, row: 1 }] },
+      actor,
+    );
+  });
+
+  it('maps a stale layout ETag to 412 Precondition Failed', async () => {
+    useCases.updateRoom.mockRejectedValueOnce(
+      new RoomLayoutRevisionConflictError(),
+    );
+    await expect(
+      controller.updateRoom(
+        {
+          user: { userId: actor.id, role: 'IT_ADMIN' },
+          headers: { 'if-match': '"3"' },
+        },
+        { room_id: 'room-1' },
+        { walkway_cells: [] },
+      ),
+    ).rejects.toMatchObject({ status: 412 });
   });
 });
 

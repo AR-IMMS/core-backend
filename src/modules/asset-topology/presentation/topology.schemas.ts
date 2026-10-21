@@ -22,6 +22,14 @@ export const updateRoomSchema = z
     width_mm: z.number().int().positive().optional(),
     depth_mm: z.number().int().positive().optional(),
     grid_snap_mm: z.number().int().positive().optional(),
+    walkway_cells: z
+      .array(
+        z.strictObject({
+          column: z.number().int().nonnegative(),
+          row: z.number().int().nonnegative(),
+        }),
+      )
+      .optional(),
   })
   .refine((input) => Object.keys(input).length > 0, {
     message: 'At least one Room field must be provided',

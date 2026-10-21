@@ -49,4 +49,25 @@ describe('Room', () => {
       }),
     ).toThrow('Room name is required');
   });
+
+  it('starts with layout revision zero and preserves it on metadata update', () => {
+    const room = Room.create({
+      id: 'room-1' as RoomId,
+      name: 'Server Room A',
+      siteId: 'site-1' as SiteId,
+      roomMap: RoomMap.create({
+        widthMm: 1_000,
+        depthMm: 1_000,
+        gridSnapMm: 100,
+      }),
+    });
+
+    const updated = room.update({
+      name: 'Server Room B',
+      roomMap: room.roomMap,
+    });
+
+    expect(room.layoutRevision).toBe(0);
+    expect(updated.layoutRevision).toBe(0);
+  });
 });

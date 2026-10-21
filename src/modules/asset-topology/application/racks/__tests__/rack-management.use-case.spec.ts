@@ -39,6 +39,16 @@ describe('RackManagementUseCases', () => {
     } as unknown as jest.Mocked<RackStorePort>;
     topologyStore = {
       getRoom: jest.fn(async () => room),
+      advanceRoomLayoutRevision: jest.fn(
+        async (_id: string, expected: number) =>
+          expected === room.layoutRevision
+            ? room.update({
+                name: room.name,
+                roomMap: room.roomMap,
+                layoutRevision: expected + 1,
+              })
+            : null,
+      ),
     } as unknown as jest.Mocked<TopologyStorePort>;
     const unitOfWork: UnitOfWorkPort = {
       run: (operation) => operation({} as never),
@@ -66,6 +76,7 @@ describe('RackManagementUseCases', () => {
         uCapacity: 42,
         rowLabel: 'A',
         positionInRow: '03',
+        expectedLayoutRevision: 0,
       },
       actor,
     );
@@ -101,7 +112,103 @@ describe('RackManagementUseCases', () => {
       }),
       expect.anything(),
     );
-    expect(rack.id).toBe('rack-1');
+    expect(rack.value.id).toBe('rack-1');
+  });
+
+  it('rejects a Rack create on a walkway without saving or auditing', async () => {
+    const roomWithWalkway = Room.create({
+      id: room.id,
+      name: room.name,
+      siteId: room.siteId,
+      roomMap: RoomMap.create({
+        widthMm: 5_250,
+        depthMm: 4_100,
+        gridSnapMm: 500,
+        walkwayCells: [{ column: 1, row: 2 }],
+      }),
+    });
+    topologyStore.getRoom.mockResolvedValue(roomWithWalkway);
+    topologyStore.advanceRoomLayoutRevision.mockResolvedValue(
+      roomWithWalkway.update({
+        name: room.name,
+        roomMap: roomWithWalkway.roomMap,
+        layoutRevision: 1,
+      }),
+    );
+
+    await expect(
+      useCases.create(
+        {
+          roomId: room.id,
+          column: 1,
+          row: 2,
+          rotation: 0,
+          uCapacity: 42,
+          expectedLayoutRevision: 0,
+        },
+        actor,
+      ),
+    ).rejects.toMatchObject({ code: 'RACK_CELL_RESERVED_AS_WALKWAY' });
+    expect(rackStore.saveRack).not.toHaveBeenCalled();
+    expect(rackStore.saveLocation).not.toHaveBeenCalled();
+    expect(outbox.append).not.toHaveBeenCalled();
+  });
+
+  it('rejects Rack creation in a retired Room', async () => {
+    topologyStore.getRoom.mockResolvedValue(room.retire());
+
+    await expect(
+      useCases.create(
+        {
+          roomId: room.id,
+          column: 1,
+          row: 2,
+          rotation: 0,
+          uCapacity: 42,
+          expectedLayoutRevision: 0,
+        },
+        actor,
+      ),
+    ).rejects.toMatchObject({ code: 'ROOM_RETIRED' });
+    expect(topologyStore.advanceRoomLayoutRevision).not.toHaveBeenCalled();
+    expect(rackStore.saveRack).not.toHaveBeenCalled();
+    expect(outbox.append).not.toHaveBeenCalled();
+  });
+
+  it('rejects moving a Rack into a retired Room without closing its current location', async () => {
+    const rack = Rack.create({ id: 'rack-1', uCapacity: 42 });
+    const current = RackLocation.start(
+      {
+        rackId: rack.id,
+        roomId: 'room-source',
+        column: 0,
+        row: 0,
+        rotation: 0,
+        locatedAt: new Date('2026-10-18T00:00:00.000Z'),
+      },
+      room.roomMap,
+      [],
+    );
+    rackStore.getRack.mockResolvedValue(rack);
+    rackStore.getActiveLocation.mockResolvedValue(current);
+    topologyStore.getRoom.mockResolvedValue(room.retire());
+
+    await expect(
+      useCases.move(
+        rack.id,
+        {
+          roomId: room.id,
+          column: 1,
+          row: 2,
+          rotation: 90,
+          expectedLayoutRevision: 0,
+        },
+        actor,
+      ),
+    ).rejects.toMatchObject({ code: 'ROOM_RETIRED' });
+    expect(rackStore.closeActiveLocation).not.toHaveBeenCalled();
+    expect(rackStore.saveLocation).not.toHaveBeenCalled();
+    expect(outbox.append).not.toHaveBeenCalled();
   });
 
   it('does not create location history or Audit Fact when a move is unchanged', async () => {
@@ -113,7 +220,7 @@ describe('RackManagementUseCases', () => {
         column: 1,
         row: 2,
         rotation: 90,
-        locatedAt: now,
+        locatedAt: new Date('2026-10-18T00:00:00.000Z'),
       },
       room.roomMap,
       [],
@@ -123,7 +230,13 @@ describe('RackManagementUseCases', () => {
 
     await useCases.move(
       rack.id,
-      { roomId: room.id, column: 1, row: 2, rotation: 90 },
+      {
+        roomId: room.id,
+        column: 1,
+        row: 2,
+        rotation: 90,
+        expectedLayoutRevision: 0,
+      },
       actor,
     );
 
@@ -152,7 +265,13 @@ describe('RackManagementUseCases', () => {
 
     const moved = await useCases.move(
       rack.id,
-      { roomId: room.id, column: 2, row: 2, rotation: 90 },
+      {
+        roomId: room.id,
+        column: 2,
+        row: 2,
+        rotation: 90,
+        expectedLayoutRevision: 0,
+      },
       actor,
     );
 
@@ -176,6 +295,92 @@ describe('RackManagementUseCases', () => {
       }),
       expect.anything(),
     );
-    expect(moved.placement).toMatchObject({ column: 2, row: 2, rotation: 90 });
+    expect(moved.value.placement).toMatchObject({
+      column: 2,
+      row: 2,
+      rotation: 90,
+    });
+  });
+
+  it('requires and advances both Room revisions for a cross-Room Rack move', async () => {
+    const source = Room.create({
+      id: 'room-0' as never,
+      name: 'Room 0',
+      siteId: room.siteId,
+      roomMap: room.roomMap,
+      layoutRevision: 2,
+    });
+    const rack = Rack.create({ id: 'rack-1', uCapacity: 42 });
+    const current = RackLocation.start(
+      {
+        rackId: rack.id,
+        roomId: source.id,
+        column: 1,
+        row: 2,
+        rotation: 0,
+        locatedAt: new Date('2026-10-18T00:00:00.000Z'),
+      },
+      source.roomMap,
+      [],
+    );
+    rackStore.getRack.mockResolvedValue(rack);
+    rackStore.getActiveLocation.mockResolvedValue(current);
+    topologyStore.getRoom.mockImplementation(async (id: string) =>
+      id === source.id ? source : room,
+    );
+    topologyStore.advanceRoomLayoutRevision.mockImplementation(
+      async (id: string, expected: number) => {
+        const currentRoom = id === source.id ? source : room;
+        return expected === currentRoom.layoutRevision
+          ? currentRoom.update({
+              name: currentRoom.name,
+              roomMap: currentRoom.roomMap,
+              layoutRevision: expected + 1,
+            })
+          : null;
+      },
+    );
+
+    await expect(
+      useCases.move(
+        rack.id,
+        {
+          roomId: room.id,
+          column: 2,
+          row: 2,
+          rotation: 0,
+          expectedLayoutRevision: 0,
+        },
+        actor,
+      ),
+    ).rejects.toMatchObject({ code: 'ROOM_LAYOUT_REVISION_REQUIRED' });
+    expect(rackStore.closeActiveLocation).not.toHaveBeenCalled();
+
+    const result = await useCases.move(
+      rack.id,
+      {
+        roomId: room.id,
+        column: 2,
+        row: 2,
+        rotation: 0,
+        expectedLayoutRevision: 0,
+        expectedSourceLayoutRevision: 2,
+      },
+      actor,
+    );
+    expect(topologyStore.advanceRoomLayoutRevision).toHaveBeenCalledWith(
+      source.id,
+      2,
+      expect.anything(),
+    );
+    expect(topologyStore.advanceRoomLayoutRevision).toHaveBeenCalledWith(
+      room.id,
+      0,
+      expect.anything(),
+    );
+    expect(result.layoutRevisions).toEqual([
+      { roomId: source.id, revision: 3 },
+      { roomId: room.id, revision: 1 },
+    ]);
   });
 });

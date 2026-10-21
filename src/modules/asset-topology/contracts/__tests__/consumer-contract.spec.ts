@@ -62,11 +62,20 @@ describe('Asset & Topology consumer contract', () => {
       getRoomMap: () =>
         Promise.resolve({
           id: 'room-1' as RoomId,
+          status: 'ACTIVE',
           widthMm: 8000,
           depthMm: 6000,
           gridSnapMm: 100,
           columns: 80,
           rows: 60,
+          layoutRevision: 0,
+          walkwayCells: [],
+          capacity: {
+            totalCells: 4800,
+            rackCapacityCells: 4800,
+            activeRackCount: 0,
+            freeRackCells: 4800,
+          },
           racks: [],
         }),
       getRackLocationHistory: () => Promise.resolve([]),

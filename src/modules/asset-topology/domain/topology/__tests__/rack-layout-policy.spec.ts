@@ -42,6 +42,19 @@ describe('RackLayoutPolicy', () => {
     ).toThrow('Rack cell is already occupied');
   });
 
+  it('rejects a walkway cell even when no Rack occupies it', () => {
+    const roomWithWalkway = RoomMap.create({
+      widthMm: 10_250,
+      depthMm: 8_100,
+      gridSnapMm: 500,
+      walkwayCells: [{ column: 2, row: 3 }],
+    });
+
+    expect(() =>
+      RackLayoutPolicy.validate(roomWithWalkway, placement('rack-1', 2, 3), []),
+    ).toThrow('walkway');
+  });
+
   it('allows a distinct cell and excludes the same Rack from occupancy checks', () => {
     expect(() =>
       RackLayoutPolicy.validate(room, placement('rack-2', 3, 3), [

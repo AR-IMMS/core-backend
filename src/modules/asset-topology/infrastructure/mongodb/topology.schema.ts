@@ -44,6 +44,19 @@ export class TopologySiteEntry {
   updatedAt!: Date;
 }
 
+@Schema({ _id: false })
+export class TopologyRoomWalkwayCellEntry {
+  @Prop({ required: true, type: Number, min: 0 })
+  column!: number;
+
+  @Prop({ required: true, type: Number, min: 0 })
+  row!: number;
+}
+
+export const TopologyRoomWalkwayCellSchema = SchemaFactory.createForClass(
+  TopologyRoomWalkwayCellEntry,
+);
+
 @Schema({
   collection: 'asset_topology_rooms',
   versionKey: false,
@@ -67,6 +80,24 @@ export class TopologyRoomEntry {
 
   @Prop({ required: true, type: Number, min: 1 })
   gridSnapMm!: number;
+
+  @Prop({
+    required: true,
+    type: [TopologyRoomWalkwayCellSchema],
+    default: [],
+  })
+  walkwayCells!: { column: number; row: number }[];
+
+  @Prop({ required: true, type: Number, min: 0, default: 0 })
+  layoutRevision!: number;
+
+  @Prop({
+    required: true,
+    type: String,
+    enum: ['ACTIVE', 'RETIRED'],
+    default: 'ACTIVE',
+  })
+  status!: 'ACTIVE' | 'RETIRED';
 
   @Prop({ required: true, type: Number, min: 0, default: 0 })
   auditSequence!: number;

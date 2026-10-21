@@ -6,6 +6,7 @@ import { Room } from '../../../domain/topology/room';
 import { RoomMap } from '../../../domain/topology/room-map';
 import { Site } from '../../../domain/topology/site';
 import { MongoTopologyStore } from '.././mongo-topology.store';
+import { TopologyRoomSchema } from '../topology.schema';
 import type {
   MongoTopologyDataCenterModel,
   MongoTopologyRoomModel,
@@ -13,6 +14,13 @@ import type {
 } from '.././mongo-topology.store';
 
 describe('MongoTopologyStore', () => {
+  it('defines walkway cells without MongoDB subdocument IDs', () => {
+    const walkwayCellPath = TopologyRoomSchema.path('walkwayCells') as {
+      schema: { options: { _id?: boolean } };
+    };
+    expect(walkwayCellPath.schema.options._id).toBe(false);
+  });
+
   const siteModel = {
     find: jest.fn(),
     findOne: jest.fn(),
@@ -41,6 +49,17 @@ describe('MongoTopologyStore', () => {
       record,
     );
     expect(dataCenterModel.findOne).toHaveBeenCalledWith({ id: 'dc-default' });
+  });
+
+  it('omits retired Rooms from the normal Site Room listing', async () => {
+    roomModel.find.mockReturnValue(query([]) as never);
+
+    await expect(store.listRooms('site-1')).resolves.toEqual([]);
+
+    expect(roomModel.find).toHaveBeenCalledWith({
+      siteId: 'site-1',
+      status: { $ne: 'RETIRED' },
+    });
   });
 
   it('maps persisted Site fields into an immutable domain reference', async () => {
@@ -100,13 +119,24 @@ describe('MongoTopologyStore', () => {
         widthMm: 10_000,
         depthMm: 8_000,
         gridSnapMm: 100,
+        walkwayCells: [{ _id: 'generated-cell-id', column: 1, row: 2 }],
+        layoutRevision: 4,
+        status: 'ACTIVE',
       }) as never,
     );
     const room = await store.getRoom('room-1' as never);
     expect(room).toBeInstanceOf(Room);
     expect(room?.roomMap).toEqual(
-      RoomMap.create({ widthMm: 10_000, depthMm: 8_000, gridSnapMm: 100 }),
+      RoomMap.create({
+        widthMm: 10_000,
+        depthMm: 8_000,
+        gridSnapMm: 100,
+        walkwayCells: [{ column: 1, row: 2 }],
+      }),
     );
+    expect(room?.roomMap.walkwayCells).toEqual([{ column: 1, row: 2 }]);
+    expect(room?.layoutRevision).toBe(4);
+    expect(room?.status).toBe('ACTIVE');
 
     const updated = room!.update({
       name: 'Server Room B',
@@ -114,6 +144,7 @@ describe('MongoTopologyStore', () => {
         widthMm: 12_000,
         depthMm: 8_000,
         gridSnapMm: 100,
+        walkwayCells: [{ column: 1, row: 2 }],
       }),
     });
     roomModel.findOneAndUpdate.mockReturnValue(
@@ -128,8 +159,14 @@ describe('MongoTopologyStore', () => {
           widthMm: 12_000,
           depthMm: 8_000,
           gridSnapMm: 100,
+          walkwayCells: [{ column: 1, row: 2 }],
+          layoutRevision: 4,
         },
-        $setOnInsert: { id: 'room-1', siteId: 'site-1' },
+        $setOnInsert: {
+          id: 'room-1',
+          siteId: 'site-1',
+          status: 'ACTIVE',
+        },
         $inc: { auditSequence: 1 },
       },
       expect.objectContaining({
@@ -137,6 +174,82 @@ describe('MongoTopologyStore', () => {
         new: true,
         setDefaultsOnInsert: false,
       }),
+    );
+  });
+
+  it('defaults legacy Room layout fields and advances the revision with compare-and-set', async () => {
+    roomModel.findOne.mockReturnValue(
+      query({
+        id: 'room-1',
+        name: 'Server Room A',
+        siteId: 'site-1',
+        widthMm: 10_000,
+        depthMm: 8_000,
+        gridSnapMm: 100,
+      }) as never,
+    );
+    const legacy = await store.getRoom('room-1' as never);
+    expect(legacy?.roomMap.walkwayCells).toEqual([]);
+    expect(legacy?.layoutRevision).toBe(0);
+    expect(legacy?.status).toBe('ACTIVE');
+
+    roomModel.findOneAndUpdate.mockReturnValue(
+      query({
+        id: 'room-1',
+        name: 'Server Room A',
+        siteId: 'site-1',
+        widthMm: 10_000,
+        depthMm: 8_000,
+        gridSnapMm: 100,
+        walkwayCells: [{ column: 1, row: 2 }],
+        layoutRevision: 5,
+      }) as never,
+    );
+    const advanced = await store.advanceRoomLayoutRevision(
+      'room-1',
+      4,
+      {} as never,
+    );
+
+    expect(advanced?.layoutRevision).toBe(5);
+    expect(roomModel.findOneAndUpdate.mock.calls[0]?.[0]).toEqual({
+      id: 'room-1',
+      layoutRevision: 4,
+      status: { $ne: 'RETIRED' },
+    });
+    expect(roomModel.findOneAndUpdate.mock.calls[0]?.[1]).toEqual({
+      $inc: { layoutRevision: 1 },
+    });
+    expect(roomModel.findOneAndUpdate.mock.calls[0]?.[2]?.new).toBe(true);
+    expect(
+      roomModel.findOneAndUpdate.mock.calls[0]?.[2]?.session,
+    ).toBeDefined();
+  });
+
+  it('returns null when the Room layout revision CAS does not match', async () => {
+    roomModel.findOneAndUpdate.mockReturnValue(query(null) as never);
+
+    await expect(
+      store.advanceRoomLayoutRevision('room-1', 4, {} as never),
+    ).resolves.toBeNull();
+  });
+
+  it('retires a Room by compare-and-set and increments its Audit sequence', async () => {
+    const context = {} as never;
+    roomModel.findOneAndUpdate.mockReturnValue(
+      query({ auditSequence: 5 }) as never,
+    );
+
+    await expect(store.retireRoom('room-1', 4, context)).resolves.toBe(5);
+
+    expect(roomModel.findOneAndUpdate).toHaveBeenCalledWith(
+      {
+        id: 'room-1',
+        layoutRevision: 4,
+        status: { $ne: 'RETIRED' },
+      },
+      { $set: { status: 'RETIRED' }, $inc: { auditSequence: 1 } },
+      expect.objectContaining({ new: true, session: context }),
     );
   });
 });

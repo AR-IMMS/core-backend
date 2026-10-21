@@ -75,11 +75,23 @@ export interface RackReference {
 /** Physical map facts needed to render a Room and its Rack placements. */
 export interface RoomMapReference {
   readonly id: RoomId;
+  readonly status: 'ACTIVE' | 'RETIRED';
   readonly widthMm: number;
   readonly depthMm: number;
   readonly gridSnapMm: number;
   readonly columns: number;
   readonly rows: number;
+  readonly layoutRevision: number;
+  readonly walkwayCells: readonly {
+    readonly column: number;
+    readonly row: number;
+  }[];
+  readonly capacity: {
+    readonly totalCells: number;
+    readonly rackCapacityCells: number;
+    readonly activeRackCount: number;
+    readonly freeRackCells: number;
+  };
   readonly racks: readonly RackReference[];
 }
 

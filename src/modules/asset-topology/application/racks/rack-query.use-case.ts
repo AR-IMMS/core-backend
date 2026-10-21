@@ -40,11 +40,25 @@ export class RackQueryUseCase implements AssetTopologyRackQueries {
     );
     return {
       id: room.id,
+      status: room.status,
       widthMm: room.roomMap.widthMm,
       depthMm: room.roomMap.depthMm,
       gridSnapMm: room.roomMap.gridSnapMm,
       columns: room.roomMap.columns,
       rows: room.roomMap.rows,
+      layoutRevision: room.layoutRevision,
+      walkwayCells: room.roomMap.walkwayCells,
+      capacity: {
+        totalCells: room.roomMap.columns * room.roomMap.rows,
+        rackCapacityCells:
+          room.roomMap.columns * room.roomMap.rows -
+          room.roomMap.walkwayCells.length,
+        activeRackCount: locations.length,
+        freeRackCells:
+          room.roomMap.columns * room.roomMap.rows -
+          room.roomMap.walkwayCells.length -
+          locations.length,
+      },
       racks: racks.filter((rack): rack is RackReference => rack !== null),
     };
   }

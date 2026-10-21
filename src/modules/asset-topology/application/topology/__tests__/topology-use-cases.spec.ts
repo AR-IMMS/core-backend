@@ -57,11 +57,31 @@ describe('TopologyUseCases', () => {
       getRoom: jest.fn(
         async (id: string) => rooms.find((room) => room.id === id) ?? null,
       ),
+      advanceRoomLayoutRevision: jest.fn(
+        async (id: string, expectedRevision: number) => {
+          const current = rooms.find((room) => room.id === id);
+          if (!current || current.layoutRevision !== expectedRevision)
+            return null;
+          return current.update({
+            name: current.name,
+            roomMap: current.roomMap,
+            layoutRevision: expectedRevision + 1,
+          });
+        },
+      ),
       saveRoom: jest.fn(async (room: Room) => {
         const index = rooms.findIndex((current) => current.id === room.id);
         if (index < 0) rooms.push(room);
         else rooms[index] = room;
         return index < 0 ? 1 : 2;
+      }),
+      retireRoom: jest.fn(async (id: string, expectedRevision: number) => {
+        const index = rooms.findIndex((current) => current.id === id);
+        const current = rooms[index];
+        if (!current || current.layoutRevision !== expectedRevision)
+          return null;
+        rooms[index] = current.retire();
+        return 2;
       }),
     } as unknown as jest.Mocked<TopologyStorePort>;
     const unitOfWork: UnitOfWorkPort = {
@@ -171,12 +191,94 @@ describe('TopologyUseCases', () => {
         widthMm: 10_000,
         depthMm: 8_000,
         gridSnapMm: 100,
+        expectedLayoutRevision: 0,
       },
       actor,
     );
 
     expect(updated).toEqual(room);
     expect(store.saveRoom).not.toHaveBeenCalled();
+    expect(facts).toHaveLength(0);
+  });
+
+  it('retires an empty Room, preserves its record, and records an Audit Fact', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 6_000,
+        depthMm: 4_000,
+        gridSnapMm: 1_000,
+        walkwayCells: [{ column: 0, row: 2 }],
+      }),
+      layoutRevision: 3,
+    });
+    rooms.push(room);
+
+    const retired = await useCases.retireRoom(room.id, actor);
+
+    expect(retired).toMatchObject({ id: room.id, status: 'RETIRED' });
+    expect(await store.getRoom(room.id)).toMatchObject({ status: 'RETIRED' });
+    expect(retired.roomMap.walkwayCells).toEqual([{ column: 0, row: 2 }]);
+    expect(rackStore.listActiveLocationsInRoom).toHaveBeenCalledWith(
+      room.id,
+      expect.anything(),
+    );
+    expect(store.retireRoom).toHaveBeenCalledWith(
+      room.id,
+      3,
+      expect.anything(),
+    );
+    expect(facts[0]).toMatchObject({
+      occurred_at: now.toISOString(),
+      payload: {
+        actor,
+        action: 'asset_topology.room.retired',
+        changes: [{ field: 'status', before: 'ACTIVE', after: 'RETIRED' }],
+      },
+    });
+  });
+
+  it('rejects Room retirement while a Rack is placed there', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 6_000,
+        depthMm: 4_000,
+        gridSnapMm: 1_000,
+      }),
+    });
+    rooms.push(room);
+    rackStore.listActiveLocationsInRoom.mockResolvedValue([
+      { rackId: 'rack-1' },
+    ] as never);
+
+    await expect(useCases.retireRoom(room.id, actor)).rejects.toMatchObject({
+      code: 'ROOM_HAS_ACTIVE_RACKS',
+    });
+    expect(store.retireRoom).not.toHaveBeenCalled();
+    expect(facts).toHaveLength(0);
+  });
+
+  it('treats repeated Room retirement as a no-op', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 6_000,
+        depthMm: 4_000,
+        gridSnapMm: 1_000,
+      }),
+    }).retire();
+    rooms.push(room);
+
+    await expect(useCases.retireRoom(room.id, actor)).resolves.toBe(room);
+    expect(rackStore.listActiveLocationsInRoom).not.toHaveBeenCalled();
+    expect(store.retireRoom).not.toHaveBeenCalled();
     expect(facts).toHaveLength(0);
   });
 
@@ -206,6 +308,169 @@ describe('TopologyUseCases', () => {
     expect(facts[0]?.payload.changes).toEqual([
       { field: 'name', before: 'Server Room A', after: 'Server Room B' },
     ]);
+  });
+
+  it('rejects updates to a retired Room', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 6_000,
+        depthMm: 4_000,
+        gridSnapMm: 1_000,
+      }),
+    }).retire();
+    rooms.push(room);
+
+    await expect(
+      useCases.updateRoom(room.id, { name: 'Room B' }, actor),
+    ).rejects.toMatchObject({ code: 'ROOM_RETIRED' });
+    expect(store.saveRoom).not.toHaveBeenCalled();
+    expect(facts).toHaveLength(0);
+  });
+
+  it('replaces walkway cells atomically, advances the layout revision, and audits the change', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 6_000,
+        depthMm: 4_000,
+        gridSnapMm: 1_000,
+      }),
+    });
+    rooms.push(room);
+
+    const updated = await useCases.updateRoom(
+      room.id,
+      {
+        expectedLayoutRevision: 0,
+        walkwayCells: [
+          { column: 0, row: 2 },
+          { column: 1, row: 2 },
+        ],
+      },
+      actor,
+    );
+
+    expect(updated.layoutRevision).toBe(1);
+    expect(updated.roomMap.walkwayCells).toEqual([
+      { column: 0, row: 2 },
+      { column: 1, row: 2 },
+    ]);
+    expect(facts[0]?.payload.changes).toEqual([
+      { field: 'walkway_cells', before: [], after: ['0:2', '1:2'] },
+    ]);
+  });
+
+  it('rejects a stale Room layout revision without saving or auditing', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 6_000,
+        depthMm: 4_000,
+        gridSnapMm: 1_000,
+      }),
+    }).update({
+      name: 'Room A',
+      roomMap: RoomMap.create({
+        widthMm: 6_000,
+        depthMm: 4_000,
+        gridSnapMm: 1_000,
+      }),
+      layoutRevision: 1,
+    });
+    rooms.push(room);
+
+    await expect(
+      useCases.updateRoom(
+        room.id,
+        {
+          expectedLayoutRevision: 0,
+          walkwayCells: [],
+        },
+        actor,
+      ),
+    ).rejects.toThrow('Room layout has changed');
+    expect(store.saveRoom).not.toHaveBeenCalled();
+    expect(facts).toHaveLength(0);
+  });
+
+  it('treats a canonical-equal walkway set as a no-op', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 6_000,
+        depthMm: 4_000,
+        gridSnapMm: 1_000,
+        walkwayCells: [
+          { column: 0, row: 2 },
+          { column: 1, row: 2 },
+        ],
+      }),
+      layoutRevision: 3,
+    });
+    rooms.push(room);
+
+    const updated = await useCases.updateRoom(
+      room.id,
+      {
+        expectedLayoutRevision: 3,
+        walkwayCells: [
+          { column: 1, row: 2 },
+          { column: 0, row: 2 },
+        ],
+      },
+      actor,
+    );
+
+    expect(updated).toEqual(room);
+    expect(store.advanceRoomLayoutRevision).not.toHaveBeenCalled();
+    expect(store.saveRoom).not.toHaveBeenCalled();
+    expect(facts).toHaveLength(0);
+  });
+
+  it('rejects marking a Rack-occupied cell as a walkway', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 6_000,
+        depthMm: 4_000,
+        gridSnapMm: 1_000,
+      }),
+    });
+    rooms.push(room);
+    rackStore.listActiveLocationsInRoom.mockResolvedValue([
+      {
+        placement: RackMapPlacement.create({
+          rackId: 'rack-1',
+          column: 1,
+          row: 2,
+          rotation: 0,
+        }),
+      },
+    ] as never);
+
+    await expect(
+      useCases.updateRoom(
+        room.id,
+        {
+          expectedLayoutRevision: 0,
+          walkwayCells: [{ column: 1, row: 2 }],
+        },
+        actor,
+      ),
+    ).rejects.toMatchObject({ code: 'WALKWAY_CELL_OCCUPIED_BY_RACK' });
+    expect(store.saveRoom).not.toHaveBeenCalled();
+    expect(facts).toHaveLength(0);
   });
 
   it('rejects grid-snap changes while the Room has an active Rack location', async () => {
@@ -245,6 +510,7 @@ describe('TopologyUseCases', () => {
           widthMm: 10_000,
           depthMm: 8_000,
           gridSnapMm: 200,
+          expectedLayoutRevision: 0,
         },
         actor,
       ),
@@ -308,6 +574,7 @@ describe('TopologyUseCases', () => {
         widthMm: 12_000,
         depthMm: 8_000,
         gridSnapMm: 100,
+        expectedLayoutRevision: 0,
       },
       actor,
     );

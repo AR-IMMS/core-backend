@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { ClientSession } from 'mongoose';
 import type { UnitOfWorkContext } from '@platform/events';
 import { Room } from '../../domain/topology/room';
-import type { RoomId } from '../../domain/topology/room';
+import type { RoomId, RoomStatus } from '../../domain/topology/room';
 import { RoomMap } from '../../domain/topology/room-map';
 import type {
   DataCenterId,
@@ -56,6 +56,9 @@ interface TopologyRoomDocument {
   readonly widthMm: number;
   readonly depthMm: number;
   readonly gridSnapMm: number;
+  readonly walkwayCells?: { readonly column: number; readonly row: number }[];
+  readonly layoutRevision?: number;
+  readonly status?: RoomStatus;
   readonly auditSequence: number;
 }
 
@@ -86,7 +89,7 @@ export interface MongoTopologyRoomModel {
     filter: Record<string, unknown>,
     update: Record<string, unknown>,
     options: MongoWriteOptions,
-  ): MongoQuery<Pick<TopologyRoomDocument, 'auditSequence'> | null>;
+  ): MongoQuery<TopologyRoomDocument | null>;
 }
 
 /** MongoDB adapter for Asset & Topology location records. */
@@ -150,7 +153,7 @@ export class MongoTopologyStore implements TopologyStorePort {
 
   async listRooms(siteId: string): Promise<readonly Room[]> {
     const rooms = await this.rooms
-      .find({ siteId })
+      .find({ siteId, status: { $ne: 'RETIRED' } })
       .sort({ name: 1, id: 1 })
       .lean()
       .exec();
@@ -164,6 +167,29 @@ export class MongoTopologyStore implements TopologyStorePort {
     return room ? toRoom(room) : null;
   }
 
+  async advanceRoomLayoutRevision(
+    id: string,
+    expectedRevision: number,
+    context: UnitOfWorkContext,
+  ): Promise<Room | null> {
+    const result = await this.rooms
+      .findOneAndUpdate(
+        {
+          id,
+          layoutRevision: expectedRevision,
+          status: { $ne: 'RETIRED' },
+        },
+        { $inc: { layoutRevision: 1 } },
+        {
+          new: true,
+          session: context as unknown as ClientSession,
+        },
+      )
+      .lean()
+      .exec();
+    return result ? toRoom(result) : null;
+  }
+
   async saveRoom(room: Room, context: UnitOfWorkContext): Promise<number> {
     const result = await this.rooms
       .findOneAndUpdate(
@@ -174,8 +200,14 @@ export class MongoTopologyStore implements TopologyStorePort {
             widthMm: room.roomMap.widthMm,
             depthMm: room.roomMap.depthMm,
             gridSnapMm: room.roomMap.gridSnapMm,
+            walkwayCells: room.roomMap.walkwayCells,
+            layoutRevision: room.layoutRevision,
           },
-          $setOnInsert: { id: room.id, siteId: room.siteId },
+          $setOnInsert: {
+            id: room.id,
+            siteId: room.siteId,
+            status: 'ACTIVE',
+          },
           $inc: { auditSequence: 1 },
         },
         {
@@ -189,6 +221,26 @@ export class MongoTopologyStore implements TopologyStorePort {
       .exec();
     if (!result) throw new Error('Room save did not return its Audit sequence');
     return result.auditSequence;
+  }
+
+  async retireRoom(
+    id: string,
+    expectedRevision: number,
+    context: UnitOfWorkContext,
+  ): Promise<number | null> {
+    const result = await this.rooms
+      .findOneAndUpdate(
+        {
+          id,
+          layoutRevision: expectedRevision,
+          status: { $ne: 'RETIRED' },
+        },
+        { $set: { status: 'RETIRED' }, $inc: { auditSequence: 1 } },
+        { new: true, session: context as unknown as ClientSession },
+      )
+      .lean()
+      .exec();
+    return result?.auditSequence ?? null;
   }
 }
 
@@ -209,6 +261,9 @@ function toRoom(document: TopologyRoomDocument): Room {
       widthMm: document.widthMm,
       depthMm: document.depthMm,
       gridSnapMm: document.gridSnapMm,
+      walkwayCells: document.walkwayCells ?? [],
     }),
+    layoutRevision: document.layoutRevision ?? 0,
+    status: document.status ?? 'ACTIVE',
   });
 }

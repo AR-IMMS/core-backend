@@ -49,6 +49,7 @@ describe('RackQueryUseCase', () => {
     const query = new RackQueryUseCase(store, topology);
 
     await expect(query.getRoomMap('room-1' as never)).resolves.toMatchObject({
+      status: 'ACTIVE',
       columns: 10,
       rows: 8,
       racks: [
@@ -104,5 +105,58 @@ describe('RackQueryUseCase', () => {
         validTo: null,
       },
     ]);
+  });
+
+  it('derives Rack capacity after subtracting walkway cells', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Room',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 6_000,
+        depthMm: 4_000,
+        gridSnapMm: 1_000,
+        walkwayCells: [
+          { column: 0, row: 2 },
+          { column: 1, row: 2 },
+          { column: 2, row: 2 },
+          { column: 3, row: 2 },
+          { column: 4, row: 2 },
+          { column: 5, row: 2 },
+        ],
+      }),
+    });
+    const location = RackLocation.start(
+      {
+        rackId: 'rack-1',
+        roomId: room.id,
+        column: 0,
+        row: 0,
+        rotation: 0,
+        locatedAt: new Date(),
+      },
+      room.roomMap,
+      [],
+    );
+    const query = new RackQueryUseCase(
+      {
+        getRack: jest.fn(async () =>
+          Rack.create({ id: 'rack-1', uCapacity: 42 }),
+        ),
+        listActiveLocationsInRoom: jest.fn(async () => [location]),
+      } as unknown as RackStorePort,
+      {
+        getRoom: jest.fn(async () => room),
+      } as unknown as TopologyStorePort,
+    );
+
+    await expect(query.getRoomMap(room.id)).resolves.toMatchObject({
+      capacity: {
+        totalCells: 24,
+        rackCapacityCells: 18,
+        activeRackCount: 1,
+        freeRackCells: 17,
+      },
+    });
   });
 });

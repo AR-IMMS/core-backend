@@ -9,6 +9,7 @@ import { RoomMap } from './room-map';
 export const RackLayoutPolicyErrorCode = {
   OUTSIDE_ROOM: 'RACK_OUTSIDE_ROOM',
   OVERLAP: 'RACK_OVERLAP',
+  WALKWAY: 'RACK_CELL_RESERVED_AS_WALKWAY',
 } as const;
 
 /**
@@ -33,6 +34,18 @@ export class RackLayoutPolicy {
       throw new DomainError(
         RackLayoutPolicyErrorCode.OUTSIDE_ROOM,
         'Rack cell must be inside the Room grid',
+      );
+    }
+
+    if (
+      room.walkwayCells.some(
+        (cell) =>
+          cell.column === candidate.column && cell.row === candidate.row,
+      )
+    ) {
+      throw new DomainError(
+        RackLayoutPolicyErrorCode.WALKWAY,
+        'Rack cell is reserved as a walkway',
       );
     }
 

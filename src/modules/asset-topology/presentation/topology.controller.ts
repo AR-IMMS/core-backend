@@ -1,35 +1,50 @@
 import {
   BadRequestException,
+  ConflictException,
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
+  HttpException,
+  HttpCode,
+  HttpStatus,
   NotFoundException,
   Param,
   Patch,
   Post,
   Req,
+  Res,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiCreatedResponse,
+  ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiHeader,
   ApiParam,
+  ApiResponse,
   ApiTags,
   ApiUnauthorizedResponse,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { DomainError } from '../domain/shared/domain-error';
 import type { Room } from '../domain/topology/room';
 import type { Site } from '../domain/topology/site';
 import {
+  RoomLayoutRevisionConflictError,
+  RoomHasActiveRacksError,
   TopologyResourceNotFoundError,
   TopologyUseCases,
 } from '../application/topology/topology-use-cases';
 import type { TopologyActor } from '../application/topology/topology-use-cases';
+import { layoutEtag, requireLayoutRevision } from './layout-etag';
 import { RequirePermissions } from '@modules/iam';
 import type { RoleCode } from '@modules/iam';
 import {
@@ -52,6 +67,13 @@ import {
 
 interface TopologyHttpRequest {
   readonly user: { readonly userId: string; readonly role: RoleCode };
+  readonly headers?: Readonly<
+    Record<string, string | readonly string[] | undefined>
+  >;
+}
+
+interface TopologyHttpResponse {
+  setHeader(name: string, value: string): void;
 }
 
 /** Dashboard REST endpoints for the seeded Data Center, Sites, and Rooms. */
@@ -109,6 +131,7 @@ export class TopologyController {
     @Body() rawBody: CreateSiteRequestDto,
   ) {
     return this.execute(async () => {
+      const actor = actorFrom(request);
       const params = parseTopologyRequest(
         dataCenterParamsSchema,
         rawParams,
@@ -121,7 +144,7 @@ export class TopologyController {
       );
       const site = await this.topology.createSite(
         { name: body.name, dataCenterId: params.data_center_id as never },
-        actorFrom(request),
+        actor,
       );
       return serializeSite(site);
     });
@@ -238,17 +261,52 @@ export class TopologyController {
   @RequirePermissions('asset:read')
   @ApiOperation({ summary: 'Retrieve a Room and its map configuration' })
   @ApiParam({ name: 'room_id', required: true, type: String })
-  @ApiOkResponse({ description: 'Room details and Room map.' })
+  @ApiOkResponse({
+    description:
+      'Room details and Room map, including retired status for history.',
+  })
   @ApiNotFoundResponse({ description: 'Room was not found.' })
-  getRoom(@Param() rawParams: RoomParamsDto) {
+  getRoom(
+    @Param() rawParams: RoomParamsDto,
+    @Res({ passthrough: true }) response?: TopologyHttpResponse,
+  ) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
         roomParamsSchema,
         rawParams,
         'Invalid Room ID',
       );
-      return serializeRoom(
-        await this.topology.getRoom(params.room_id as never),
+      const room = await this.topology.getRoom(params.room_id as never);
+      response?.setHeader('ETag', layoutEtag(room.layoutRevision));
+      return serializeRoom(room);
+    });
+  }
+
+  @Delete('rooms/:room_id')
+  @RequirePermissions('asset:manage')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Retire an empty Room' })
+  @ApiParam({ name: 'room_id', required: true, type: String })
+  @ApiNoContentResponse({
+    description: 'Room retired; its record is retained for history.',
+  })
+  @ApiNotFoundResponse({ description: 'Room was not found.' })
+  @ApiConflictResponse({
+    description: 'Room has a placed Rack or its layout changed concurrently.',
+  })
+  retireRoom(
+    @Req() request: TopologyHttpRequest,
+    @Param() rawParams: RoomParamsDto,
+  ) {
+    return this.execute(async () => {
+      const params = parseTopologyRequest(
+        roomParamsSchema,
+        rawParams,
+        'Invalid Room ID',
+      );
+      await this.topology.retireRoom(
+        params.room_id as never,
+        actorFrom(request),
       );
     });
   }
@@ -260,12 +318,32 @@ export class TopologyController {
   @ApiOkResponse({ description: 'Room updated.' })
   @ApiBadRequestResponse({ description: 'The Room request is invalid.' })
   @ApiNotFoundResponse({ description: 'Room was not found.' })
+  @ApiConflictResponse({
+    description: 'Room is retired.',
+  })
+  @ApiResponse({
+    status: HttpStatus.PRECONDITION_FAILED,
+    description: 'If-Match is stale.',
+  })
+  @ApiResponse({
+    status: 428,
+    description: 'If-Match is required for a layout change.',
+  })
+  @ApiHeader({
+    name: 'If-Match',
+    required: false,
+    description:
+      'Required for layout changes. Strong ETag returned by a Room read.',
+  })
+  @ApiUnprocessableEntityResponse({ description: 'Room layout is invalid.' })
   updateRoom(
     @Req() request: TopologyHttpRequest,
     @Param() rawParams: RoomParamsDto,
     @Body() rawBody: UpdateRoomRequestDto,
+    @Res({ passthrough: true }) response?: TopologyHttpResponse,
   ) {
     return this.execute(async () => {
+      const actor = actorFrom(request);
       const params = parseTopologyRequest(
         roomParamsSchema,
         rawParams,
@@ -276,20 +354,35 @@ export class TopologyController {
         rawBody,
         'Invalid Room update request',
       );
-      return serializeRoom(
-        await this.topology.updateRoom(
-          params.room_id as never,
-          {
-            ...(body.name === undefined ? {} : { name: body.name }),
-            ...(body.width_mm === undefined ? {} : { widthMm: body.width_mm }),
-            ...(body.depth_mm === undefined ? {} : { depthMm: body.depth_mm }),
-            ...(body.grid_snap_mm === undefined
-              ? {}
-              : { gridSnapMm: body.grid_snap_mm }),
-          },
-          actorFrom(request),
-        ),
+      const layoutChange =
+        body.width_mm !== undefined ||
+        body.depth_mm !== undefined ||
+        body.grid_snap_mm !== undefined ||
+        body.walkway_cells !== undefined;
+      const room = await this.topology.updateRoom(
+        params.room_id as never,
+        {
+          ...(body.name === undefined ? {} : { name: body.name }),
+          ...(body.width_mm === undefined ? {} : { widthMm: body.width_mm }),
+          ...(body.depth_mm === undefined ? {} : { depthMm: body.depth_mm }),
+          ...(body.grid_snap_mm === undefined
+            ? {}
+            : { gridSnapMm: body.grid_snap_mm }),
+          ...(body.walkway_cells === undefined
+            ? {}
+            : { walkwayCells: body.walkway_cells }),
+          ...(layoutChange
+            ? {
+                expectedLayoutRevision: requireLayoutRevision(
+                  request.headers?.['if-match'],
+                ),
+              }
+            : {}),
+        },
+        actor,
       );
+      response?.setHeader('ETag', layoutEtag(room.layoutRevision));
+      return serializeRoom(room);
     });
   }
 
@@ -300,7 +393,37 @@ export class TopologyController {
       if (error instanceof TopologyResourceNotFoundError) {
         throw new NotFoundException(error.message);
       }
+      if (error instanceof RoomLayoutRevisionConflictError) {
+        throw new HttpException(
+          { code: 'ROOM_LAYOUT_REVISION_CONFLICT', message: error.message },
+          HttpStatus.PRECONDITION_FAILED,
+        );
+      }
+      if (error instanceof RoomHasActiveRacksError) {
+        throw new ConflictException({
+          code: 'ROOM_HAS_ACTIVE_RACKS',
+          message: error.message,
+        });
+      }
       if (error instanceof DomainError) {
+        if (error.code === 'ROOM_RETIRED') {
+          throw new ConflictException({
+            code: error.code,
+            message: error.message,
+          });
+        }
+        if (error.code === 'ROOM_LAYOUT_REVISION_REQUIRED') {
+          throw new HttpException(
+            { code: 'LAYOUT_PRECONDITION_REQUIRED', message: error.message },
+            428,
+          );
+        }
+        if (ROOM_LAYOUT_VALIDATION_CODES.has(error.code)) {
+          throw new UnprocessableEntityException({
+            code: error.code,
+            message: error.message,
+          });
+        }
         throw new BadRequestException({ message: error.message });
       }
       if (error instanceof ForbiddenException) throw error;
@@ -308,6 +431,14 @@ export class TopologyController {
     }
   }
 }
+
+const ROOM_LAYOUT_VALIDATION_CODES = new Set([
+  'CELL_OUT_OF_BOUNDS',
+  'DUPLICATE_WALKWAY_CELL',
+  'WALKWAY_CELL_OCCUPIED_BY_RACK',
+  'ROOM_GRID_CHANGE_INVALIDATES_LAYOUT',
+  'GRID_SNAP_CHANGE_NOT_ALLOWED',
+]);
 
 function actorFrom(request: TopologyHttpRequest): TopologyActor {
   if (request.user.role !== 'IT_ADMIN') {
@@ -328,5 +459,8 @@ function serializeRoom(room: Room) {
     width_mm: room.roomMap.widthMm,
     depth_mm: room.roomMap.depthMm,
     grid_snap_mm: room.roomMap.gridSnapMm,
+    layout_revision: room.layoutRevision,
+    status: room.status,
+    walkway_cells: room.roomMap.walkwayCells,
   };
 }

@@ -9,7 +9,10 @@ import {
   type OutboxWriterPort,
   type UnitOfWorkPort,
 } from '@platform/events';
-import type { TopologyActor } from '../topology/topology-use-cases';
+import {
+  RoomLayoutRevisionConflictError,
+  type TopologyActor,
+} from '../topology/topology-use-cases';
 import type { TopologyStorePort } from '../topology/topology-store.port';
 import { TOPOLOGY_STORE } from '../topology/topology-store.token';
 import { Rack } from '../../domain/topology/rack';
@@ -18,6 +21,7 @@ import type { RackRotation } from '../../domain/topology/rack-map-placement';
 import { RACK_STORE } from './rack-store.token';
 import type { RackStorePort } from './rack-store.port';
 import { RACK_CLOCK, RACK_ID_GENERATOR } from './rack-runtime.token';
+import { DomainError } from '../../domain/shared/domain-error';
 
 export interface CreateRackInput {
   readonly roomId: string;
@@ -27,6 +31,7 @@ export interface CreateRackInput {
   readonly uCapacity: number;
   readonly rowLabel?: string;
   readonly positionInRow?: string;
+  readonly expectedLayoutRevision: number;
 }
 
 export interface UpdateRackInput {
@@ -40,6 +45,16 @@ export interface MoveRackInput {
   readonly column: number;
   readonly row: number;
   readonly rotation: RackRotation;
+  readonly expectedLayoutRevision: number;
+  readonly expectedSourceLayoutRevision?: number;
+}
+
+export interface RackLayoutMutationResult<T> {
+  readonly value: T;
+  readonly layoutRevisions: readonly {
+    readonly roomId: string;
+    readonly revision: number;
+  }[];
 }
 
 export class RackResourceNotFoundError extends Error {
@@ -62,10 +77,22 @@ export class RackManagementUseCases {
     private readonly generateId: () => string = randomUUID,
   ) {}
 
-  async create(input: CreateRackInput, actor: TopologyActor): Promise<Rack> {
+  async create(
+    input: CreateRackInput,
+    actor: TopologyActor,
+  ): Promise<RackLayoutMutationResult<Rack>> {
     return this.unitOfWork.run(async (context) => {
       const room = await this.topology.getRoom(input.roomId, context);
       if (!room) throw new RackResourceNotFoundError('Room');
+      if (room.status === 'RETIRED') {
+        throw new DomainError('ROOM_RETIRED', 'Retired Room cannot hold Racks');
+      }
+      const advancedRoom = await this.topology.advanceRoomLayoutRevision(
+        room.id,
+        input.expectedLayoutRevision,
+        context,
+      );
+      if (!advancedRoom) throw new RoomLayoutRevisionConflictError();
       const rack = Rack.create({
         id: this.generateId(),
         uCapacity: input.uCapacity,
@@ -112,7 +139,12 @@ export class RackManagementUseCases {
         },
         context,
       );
-      return rack;
+      return {
+        value: rack,
+        layoutRevisions: [
+          { roomId: room.id, revision: advancedRoom.layoutRevision },
+        ],
+      };
     });
   }
 
@@ -174,21 +206,66 @@ export class RackManagementUseCases {
     rackId: string,
     input: MoveRackInput,
     actor: TopologyActor,
-  ): Promise<RackLocation> {
+  ): Promise<RackLayoutMutationResult<RackLocation>> {
     return this.unitOfWork.run(async (context) => {
       const rack = await this.racks.getRack(rackId, context);
       if (!rack) throw new RackResourceNotFoundError('Rack');
       const current = await this.racks.getActiveLocation(rack.id, context);
       if (!current) throw new RackResourceNotFoundError('Rack');
+      const room = await this.topology.getRoom(input.roomId, context);
+      if (!room) throw new RackResourceNotFoundError('Room');
+      if (room.status === 'RETIRED') {
+        throw new DomainError('ROOM_RETIRED', 'Retired Room cannot hold Racks');
+      }
       if (
         current.roomId === input.roomId &&
         current.placement.column === input.column &&
         current.placement.row === input.row &&
         current.placement.rotation === input.rotation
+      ) {
+        if (room.layoutRevision !== input.expectedLayoutRevision)
+          throw new RoomLayoutRevisionConflictError();
+        return {
+          value: current,
+          layoutRevisions: [{ roomId: room.id, revision: room.layoutRevision }],
+        };
+      }
+      const sourceRoom =
+        current.roomId === room.id
+          ? room
+          : await this.topology.getRoom(current.roomId, context);
+      if (!sourceRoom) throw new RackResourceNotFoundError('Room');
+      if (
+        current.roomId !== room.id &&
+        input.expectedSourceLayoutRevision === undefined
       )
-        return current;
-      const room = await this.topology.getRoom(input.roomId, context);
-      if (!room) throw new RackResourceNotFoundError('Room');
+        throw new DomainError(
+          'ROOM_LAYOUT_REVISION_REQUIRED',
+          'Expected source Room layout revision is required for cross-Room moves',
+        );
+      const revisionsToAdvance =
+        current.roomId === room.id
+          ? [{ id: room.id, expected: input.expectedLayoutRevision }]
+          : [
+              {
+                id: sourceRoom.id,
+                expected: input.expectedSourceLayoutRevision!,
+              },
+              { id: room.id, expected: input.expectedLayoutRevision },
+            ].sort((left, right) => left.id.localeCompare(right.id));
+      const advancedRooms: { roomId: string; revision: number }[] = [];
+      for (const revision of revisionsToAdvance) {
+        const advanced = await this.topology.advanceRoomLayoutRevision(
+          revision.id,
+          revision.expected,
+          context,
+        );
+        if (!advanced) throw new RoomLayoutRevisionConflictError();
+        advancedRooms.push({
+          roomId: advanced.id,
+          revision: advanced.layoutRevision,
+        });
+      }
       const otherLocations = (
         await this.racks.listActiveLocationsInRoom(room.id, context)
       ).filter((item) => item.rackId !== rack.id);
@@ -231,7 +308,7 @@ export class RackManagementUseCases {
         },
         context,
       );
-      return result.activeLocation;
+      return { value: result.activeLocation, layoutRevisions: advancedRooms };
     });
   }
 

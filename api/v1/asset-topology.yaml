@@ -329,7 +329,7 @@ paths:
       x-required-permissions: [asset:read]
       responses:
         '200':
-          description: Rooms under the requested Site.
+          description: Active Rooms under the requested Site. Retired Rooms are excluded.
           content:
             application/json:
               schema:
@@ -374,13 +374,17 @@ paths:
       - $ref: '#/components/parameters/RoomId'
     get:
       operationId: getRoom
-      summary: Retrieve a Room and map configuration
+      summary: Retrieve a Room and map configuration, including retired Rooms
       security:
         - HumanAccessToken: []
       x-required-permissions: [asset:read]
       responses:
         '200':
-          description: Room details and map configuration.
+          description: Room details and map configuration, including its ACTIVE or RETIRED status. Retired Rooms remain readable for history.
+          headers:
+            ETag:
+              description: Strong quoted decimal Room layout revision, for example `"12"`.
+              schema: { type: string }
           content:
             application/json:
               schema:
@@ -394,24 +398,53 @@ paths:
     patch:
       operationId: updateRoom
       summary: Update a Room name and map configuration
-      description: The Site parent reference is immutable after creation. Dimensions and grid snap are millimeters.
+      description: The Site parent reference is immutable after creation. For layout changes, send the strong ETag last read from this Room in If-Match; do not increment it. The server increments the revision after a successful layout change and returns the updated ETag. A stale ETag returns 412. Walkway cells replace the complete current set; [] clears it. Name-only updates do not require If-Match.
       security:
         - HumanAccessToken: []
       x-required-permissions: [asset:manage]
       x-required-role: IT_ADMIN
+      parameters:
+        - name: If-Match
+          in: header
+          required: false
+          description: Required for layout changes. The strong ETag returned by a Room read.
+          schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/UpdateRoomRequest'
+            example:
+              walkway_cells:
+                - { column: 0, row: 2 }
+                - { column: 1, row: 2 }
+                - { column: 2, row: 2 }
       responses:
         '200':
-          description: Room updated.
+          description: Room updated. For a successful layout change, the ETag response header contains the new server-managed revision.
+          headers:
+            ETag:
+              description: Updated strong quoted decimal Room layout revision.
+              schema: { type: string }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/RoomResponse'
+              example:
+                data:
+                  id: 81de181e-cc85-417d-b1ed-6f599645f2eb
+                  name: Room A
+                  site_id: 64d9ee9b-82a5-43c6-8c5c-9aa4e620265d
+                  status: ACTIVE
+                  width_mm: 6000
+                  depth_mm: 4000
+                  grid_snap_mm: 1000
+                  layout_revision: 13
+                  walkway_cells:
+                    - { column: 0, row: 2 }
+                    - { column: 1, row: 2 }
+                    - { column: 2, row: 2 }
         '400':
           $ref: ../baseline.yaml#/components/responses/Problem
         '401':
@@ -420,6 +453,40 @@ paths:
           $ref: ../baseline.yaml#/components/responses/Problem
         '404':
           $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          description: Room is retired.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '412':
+          description: If-Match does not match the current Room layout revision.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '428': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '422': { $ref: ../baseline.yaml#/components/responses/Problem }
+    delete:
+      operationId: retireRoom
+      summary: Retire a Room
+      description: Retires an empty Room without deleting its record or Room-map history. A retired Room is excluded from Room listings and cannot be edited or receive Rack placements. Repeating the request for an already retired Room succeeds without adding another Audit Fact.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '204':
+          description: Room retired; no response body.
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          description: Room has a placed Rack or a concurrent layout change prevented retirement.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
 
   /api/v1/asset-topology/rooms/{room_id}/map:
     parameters:
@@ -432,7 +499,11 @@ paths:
       x-required-permissions: [asset:read]
       responses:
         '200':
-          description: Generated full-cell grid and active Rack placements.
+          description: Generated full-cell grid, Room status, walkway cells, capacity, and active Rack placements. Retired Rooms remain readable but cannot receive Rack placements.
+          headers:
+            ETag:
+              description: Strong quoted decimal Room layout revision, for example `"12"`.
+              schema: { type: string }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RoomMapResponse' }
@@ -450,6 +521,12 @@ paths:
         - HumanAccessToken: []
       x-required-permissions: [asset:manage]
       x-required-role: IT_ADMIN
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: Strong ETag returned by the Room map read.
+          schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
       requestBody:
         required: true
         content:
@@ -457,14 +534,30 @@ paths:
             schema: { $ref: '#/components/schemas/CreateRackRequest' }
       responses:
         '201':
-          description: Rack and initial location created atomically.
+          description: Rack and initial location created atomically in an active Room.
+          headers:
+            ETag:
+              description: Updated strong quoted decimal Room layout revision.
+              schema: { type: string }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RackResponse' }
+              schema: { $ref: '#/components/schemas/RackLayoutMutationResponse' }
         '400': { $ref: ../baseline.yaml#/components/responses/Problem }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409':
+          description: The Room is retired.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '412':
+          description: If-Match does not match the current Room layout revision.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '428': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '422': { $ref: ../baseline.yaml#/components/responses/Problem }
 
   /api/v1/asset-topology/racks/{rack_id}:
     parameters:
@@ -525,6 +618,17 @@ paths:
         - HumanAccessToken: []
       x-required-permissions: [asset:manage]
       x-required-role: IT_ADMIN
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: Strong ETag for the destination Room returned by its Room map read.
+          schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
+        - name: If-Match-Source
+          in: header
+          required: false
+          description: Required for cross-Room moves; strong ETag returned by the source Room map read.
+          schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
       requestBody:
         required: true
         content:
@@ -533,13 +637,32 @@ paths:
       responses:
         '200':
           description: Rack and location history updated atomically, or current location returned for a no-op.
+          headers:
+            ETag:
+              description: Updated strong ETag for the destination Room.
+              schema: { type: string }
+            ETag-Source:
+              description: Updated strong ETag for the source Room on a cross-Room move.
+              schema: { type: string }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RackResponse' }
+              schema: { $ref: '#/components/schemas/RackLayoutMutationResponse' }
         '400': { $ref: ../baseline.yaml#/components/responses/Problem }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409':
+          description: The destination Room is retired.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '412':
+          description: If-Match or If-Match-Source does not match the corresponding current Room layout revision.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '428': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '422': { $ref: ../baseline.yaml#/components/responses/Problem }
 
   /api/v1/asset-topology/racks/{rack_id}/locations:
     parameters:
@@ -585,7 +708,11 @@ paths:
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
-        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409':
+          description: Source or destination Room layout revision is stale, or the destination Room is retired.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
     delete:
       operationId: deactivateAssetQr
       summary: Deactivate the active Asset QR mapping
@@ -893,17 +1020,65 @@ components:
           items: { $ref: '#/components/schemas/RackLocationHistoryEntry' }
     RoomMapResponse:
       type: object
-      required: [id, width_mm, depth_mm, grid_snap_mm, columns, rows, racks]
+      required: [id, status, width_mm, depth_mm, grid_snap_mm, grid, layout_revision, walkway_cells, capacity, racks]
       properties:
         id: { type: string }
+        status: { type: string, enum: [ACTIVE, RETIRED] }
         width_mm: { type: integer, minimum: 1 }
         depth_mm: { type: integer, minimum: 1 }
         grid_snap_mm: { type: integer, minimum: 1 }
-        columns: { type: integer, minimum: 0 }
-        rows: { type: integer, minimum: 0 }
+        grid:
+          type: object
+          required: [columns, rows, origin]
+          properties:
+            columns: { type: integer, minimum: 0 }
+            rows: { type: integer, minimum: 0 }
+            origin: { type: string, enum: [lower-left] }
+        layout_revision: { type: integer, minimum: 0, description: Server-managed revision. The server increments this after a successful layout change and returns it for the client's next request. }
+        walkway_cells:
+          type: array
+          items: { $ref: '#/components/schemas/RoomMapCell' }
+        capacity:
+          type: object
+          required: [total_cells, rack_capacity_cells, active_rack_count, free_rack_cells]
+          properties:
+            total_cells: { type: integer, minimum: 0 }
+            rack_capacity_cells: { type: integer, minimum: 0 }
+            active_rack_count: { type: integer, minimum: 0 }
+            free_rack_cells: { type: integer, minimum: 0 }
         racks:
           type: array
-          items: { $ref: '#/components/schemas/RackResponse' }
+          items: { $ref: '#/components/schemas/RoomMapRack' }
+    RoomMapCell:
+      type: object
+      required: [column, row]
+      properties:
+        column: { type: integer, minimum: 0 }
+        row: { type: integer, minimum: 0 }
+    RoomMapRack:
+      type: object
+      required: [rack_id, column, row, rotation, u_capacity, location_label]
+      properties:
+        rack_id: { type: string }
+        column: { type: integer, minimum: 0 }
+        row: { type: integer, minimum: 0 }
+        rotation: { type: integer, enum: [0, 90, 180, 270] }
+        u_capacity: { type: integer, minimum: 1 }
+        location_label: { type: string }
+    RackLayoutMutationResponse:
+      allOf:
+        - $ref: '#/components/schemas/RackResponse'
+        - type: object
+          required: [layout_revisions]
+          properties:
+            layout_revisions:
+              type: array
+              items:
+                type: object
+                required: [room_id, revision]
+                properties:
+                  room_id: { type: string }
+                  revision: { type: integer, minimum: 0, description: Server-managed revision after the Rack layout change. Clients use this returned value as-is in the next request. }
     Meta:
       type: object
       properties:
@@ -938,14 +1113,19 @@ components:
         data_center_id: { type: string }
     Room:
       type: object
-      required: [id, name, site_id, width_mm, depth_mm, grid_snap_mm]
+      required: [id, name, site_id, status, width_mm, depth_mm, grid_snap_mm, layout_revision, walkway_cells]
       properties:
         id: { type: string, format: uuid }
         name: { type: string, minLength: 1, maxLength: 128 }
         site_id: { type: string, format: uuid }
+        status: { type: string, enum: [ACTIVE, RETIRED] }
         width_mm: { type: integer, minimum: 1 }
         depth_mm: { type: integer, minimum: 1 }
         grid_snap_mm: { type: integer, minimum: 1 }
+        layout_revision: { type: integer, minimum: 0, description: Server-managed revision. The server increments this after a successful layout change and returns it for the client's next request. }
+        walkway_cells:
+          type: array
+          items: { $ref: '#/components/schemas/RoomMapCell' }
     CreateSiteRequest:
       type: object
       additionalProperties: false
@@ -964,7 +1144,17 @@ components:
         depth_mm: { type: integer, minimum: 1 }
         grid_snap_mm: { type: integer, minimum: 1 }
     UpdateRoomRequest:
-      $ref: '#/components/schemas/CreateRoomRequest'
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        width_mm: { type: integer, minimum: 1 }
+        depth_mm: { type: integer, minimum: 1 }
+        grid_snap_mm: { type: integer, minimum: 1 }
+        walkway_cells:
+          type: array
+          items: { $ref: '#/components/schemas/RoomMapCell' }
     DataCenterResponse:
       allOf:
         - $ref: '#/components/schemas/SingleResponse'

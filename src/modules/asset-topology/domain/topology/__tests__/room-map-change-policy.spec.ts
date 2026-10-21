@@ -29,9 +29,15 @@ describe('RoomMapChangePolicy', () => {
       depthMm: 7_000,
       gridSnapMm: 500,
     });
-    expect(() =>
-      RoomMapChangePolicy.validate(current, proposed, [rack(10, 2)]),
-    ).toThrow(DomainError);
+    try {
+      RoomMapChangePolicy.validate(current, proposed, [rack(10, 2)]);
+      throw new Error('Expected invalid Room shrink to be rejected');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DomainError);
+      expect(error).toMatchObject({
+        code: 'ROOM_GRID_CHANGE_INVALIDATES_LAYOUT',
+      });
+    }
   });
 
   it('rejects a grid-snap change while any Rack is placed', () => {
@@ -43,6 +49,42 @@ describe('RoomMapChangePolicy', () => {
     expect(() =>
       RoomMapChangePolicy.validate(current, proposed, [rack(1, 2)]),
     ).toThrow('grid snap cannot change');
+  });
+
+  it('rejects a grid-snap change while any walkway cell exists', () => {
+    const currentWithWalkway = RoomMap.create({
+      widthMm: 10_000,
+      depthMm: 8_000,
+      gridSnapMm: 500,
+      walkwayCells: [{ column: 1, row: 2 }],
+    });
+    const proposed = RoomMap.create({
+      widthMm: 10_000,
+      depthMm: 8_000,
+      gridSnapMm: 250,
+    });
+
+    expect(() =>
+      RoomMapChangePolicy.validate(currentWithWalkway, proposed, []),
+    ).toThrow('grid snap cannot change');
+  });
+
+  it('rejects a dimension reduction that excludes a walkway cell', () => {
+    const currentWithWalkway = RoomMap.create({
+      widthMm: 10_000,
+      depthMm: 8_000,
+      gridSnapMm: 500,
+      walkwayCells: [{ column: 18, row: 2 }],
+    });
+    const proposed = RoomMap.create({
+      widthMm: 5_000,
+      depthMm: 8_000,
+      gridSnapMm: 500,
+    });
+
+    expect(() =>
+      RoomMapChangePolicy.validate(currentWithWalkway, proposed, []),
+    ).toThrow('walkway');
   });
 
   it('allows a grid-snap change when the Room has no placed Racks', () => {
