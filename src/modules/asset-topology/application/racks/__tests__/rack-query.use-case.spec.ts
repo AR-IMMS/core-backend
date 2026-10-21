@@ -19,8 +19,9 @@ describe('RackQueryUseCase', () => {
         gridSnapMm: 1_000,
       }),
     });
+    const getRack = jest.fn();
     const racks = {
-      getRack: jest.fn(),
+      getRack,
       listActiveLocationsInRoom: jest.fn(async () => []),
     } as unknown as RackStorePort;
     const topology = {
@@ -38,7 +39,7 @@ describe('RackQueryUseCase', () => {
       },
       racks: [],
     });
-    expect(racks.getRack.bind(racks)).not.toHaveBeenCalled();
+    expect(getRack).not.toHaveBeenCalled();
   });
 
   it('returns full-cell counts and confirmed Rack references for a Room', async () => {
