@@ -161,9 +161,15 @@ function mapHttpException(
       : (getHttpExceptionDetail(exception.getResponse()) ??
         presentation.detail),
     instance,
-    code: presentation.code,
+    code: getHttpExceptionCode(exception.getResponse()) ?? presentation.code,
     request_id: requestId,
   };
+}
+
+function getHttpExceptionCode(exceptionResponse: unknown): string | undefined {
+  if (!isRecord(exceptionResponse)) return undefined;
+  const code = exceptionResponse['code'];
+  return typeof code === 'string' && code.length > 0 ? code : undefined;
 }
 
 function getHttpErrorPresentation(status: number): HttpErrorPresentation {

@@ -12,7 +12,7 @@ describe('HumanAccessService', () => {
           status: 'ACTIVE',
           effectivePermissions: ['ticket:read'],
         }),
-    } as HumanAccessStorePort);
+    } as unknown as HumanAccessStorePort);
 
     await expect(service.getPrincipal('user-1')).resolves.toEqual({
       userId: 'user-1',
@@ -24,7 +24,7 @@ describe('HumanAccessService', () => {
   /** Denies capability checks for missing or inactive accounts. */
   it('denies access when the account is missing or inactive', async () => {
     const store: HumanAccessStorePort = {
-      findByUserId: (userId) =>
+      findByUserId: (userId: string) =>
         Promise.resolve(
           userId === 'inactive'
             ? {
@@ -32,10 +32,12 @@ describe('HumanAccessService', () => {
                 role: 'IT_ADMIN',
                 status: 'INACTIVE',
                 effectivePermissions: ['audit:read'],
+                additionalPermissions: [],
+                presencePreference: 'AUTOMATIC',
               }
             : null,
         ),
-    };
+    } as unknown as HumanAccessStorePort;
     const service = new HumanAccessService(store);
 
     await expect(
@@ -56,7 +58,7 @@ describe('HumanAccessService', () => {
           status: 'ACTIVE',
           effectivePermissions: ['ticket:read'],
         }),
-    } as HumanAccessStorePort);
+    } as unknown as HumanAccessStorePort);
 
     await expect(
       service.hasAllPermissions('user-1', ['ticket:read']),

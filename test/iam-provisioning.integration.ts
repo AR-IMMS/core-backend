@@ -116,7 +116,13 @@ async function main(): Promise<void> {
       assert.equal(fact?.fact.event_type, 'audit.fact');
       assert.equal(fact?.fact.event_version, 1);
       assert.equal(fact?.fact.resource.sequence, 1);
-      assert.equal(fact?.fact.payload.action, 'iam.user.created');
+      const payload = fact?.fact.payload;
+      assert.equal(
+        typeof payload === 'object' && payload !== null && 'action' in payload
+          ? payload.action
+          : undefined,
+        'iam.user.created',
+      );
       assert.equal(
         JSON.stringify(fact?.fact).includes('temporary-secret-for-integration'),
         false,

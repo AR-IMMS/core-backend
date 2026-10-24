@@ -1,0 +1,421 @@
+/* eslint-disable @typescript-eslint/unbound-method -- Jest matchers inspect mocked methods and reflected handlers. */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment -- Nest reflection metadata is dynamically typed in this test. */
+/* eslint-disable @typescript-eslint/no-unsafe-return -- Nest reflection metadata is dynamically typed in this test. */
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { PATH_METADATA, METHOD_METADATA } from '@nestjs/common/constants';
+import { Reflector } from '@nestjs/core';
+import { Test } from '@nestjs/testing';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { CoreZodValidationPipe } from '@platform/http/validation/zod-validation.pipe';
+import { HTTP_ROUTE_POLICY_METADATA } from '@platform/http/api';
+import { RackManagementUseCases } from '../../application/racks/rack-management.use-case';
+import { RackQueryUseCase } from '../../application/racks/rack-query.use-case';
+import {
+  RoomLayoutRevisionConflictError,
+  RoomHasActiveRacksError,
+  TopologyResourceNotFoundError,
+  TopologyUseCases,
+} from '../../application/topology/topology-use-cases';
+import { Room } from '../../domain/topology/room';
+import { RoomMap } from '../../domain/topology/room-map';
+import { Site } from '../../domain/topology/site';
+import { DataCenterParamsDto } from '../topology.schemas';
+import { TopologyController } from '.././topology.controller';
+import { RackController } from '../racks/rack.controller';
+
+describe('TopologyController', () => {
+  const actor = { type: 'user', id: 'admin-1' };
+  let useCases: jest.Mocked<TopologyUseCases>;
+  let controller: TopologyController;
+
+  beforeEach(() => {
+    useCases = {
+      getDefaultDataCenter: jest.fn(),
+      listSites: jest.fn(),
+      createSite: jest.fn(),
+      getSite: jest.fn(),
+      updateSite: jest.fn(),
+      listRooms: jest.fn(),
+      createRoom: jest.fn(),
+      getRoom: jest.fn(),
+      updateRoom: jest.fn(),
+      retireRoom: jest.fn(),
+    } as unknown as jest.Mocked<TopologyUseCases>;
+    controller = new TopologyController(useCases);
+  });
+
+  it('declares the Data Center path schema to the strict global Zod pipe', () => {
+    const parameterTypes = Reflect.getMetadata(
+      'design:paramtypes',
+      TopologyController.prototype,
+      'listSites',
+    ) as (typeof DataCenterParamsDto)[];
+    const pathParams = { data_center_id: 'dc-default' };
+
+    expect(
+      new CoreZodValidationPipe().transform(pathParams, {
+        type: 'param',
+        metatype: parameterTypes[0],
+      }),
+    ).toEqual(pathParams);
+  });
+
+  it('publishes request body schemas for topology create routes in Swagger', async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [TopologyController, RackController],
+      providers: [
+        { provide: TopologyUseCases, useValue: useCases },
+        { provide: RackManagementUseCases, useValue: {} },
+        { provide: RackQueryUseCase, useValue: {} },
+      ],
+    }).compile();
+    const app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api/v1');
+    await app.init();
+
+    try {
+      const document = SwaggerModule.createDocument(
+        app,
+        new DocumentBuilder().setTitle('test').setVersion('1').build(),
+      );
+
+      const siteRequestBody =
+        document.paths[
+          '/api/v1/asset-topology/data-centers/{data_center_id}/sites'
+        ]?.post?.requestBody;
+      const roomRequestBody =
+        document.paths['/api/v1/asset-topology/sites/{site_id}/rooms']?.post
+          ?.requestBody;
+
+      expect(siteRequestBody).toBeDefined();
+      expect(JSON.stringify(siteRequestBody)).toContain('application/json');
+      expect(
+        JSON.stringify(document.components?.schemas?.CreateSiteRequestDto),
+      ).toContain('"name"');
+      expect(roomRequestBody).toBeDefined();
+      expect(JSON.stringify(roomRequestBody)).toContain('application/json');
+      expect(
+        JSON.stringify(document.components?.schemas?.CreateRoomRequestDto),
+      ).toContain('"width_mm"');
+      expect(
+        JSON.stringify(document.components?.schemas?.CreateRoomRequestDto),
+      ).toContain('"grid_snap_mm"');
+      const roomUpdateHeaders = document.paths[
+        '/api/v1/asset-topology/rooms/{room_id}'
+      ]?.patch?.parameters?.filter(
+        (parameter) => 'in' in parameter && parameter.in === 'header',
+      );
+      expect(roomUpdateHeaders).toEqual([
+        expect.objectContaining({ name: 'If-Match', required: false }),
+      ]);
+      const rackCreateHeaders = document.paths[
+        '/api/v1/asset-topology/rooms/{room_id}/racks'
+      ]?.post?.parameters?.filter(
+        (parameter) => 'in' in parameter && parameter.in === 'header',
+      );
+      expect(rackCreateHeaders).toEqual([
+        expect.objectContaining({ name: 'If-Match', required: true }),
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns the read-only default Data Center', async () => {
+    useCases.getDefaultDataCenter.mockResolvedValue({
+      id: 'dc-default' as never,
+      name: 'Default Data Center',
+    });
+
+    await expect(controller.getDefaultDataCenter()).resolves.toEqual({
+      id: 'dc-default',
+      name: 'Default Data Center',
+    });
+  });
+
+  it('creates a Site beneath the Data Center path and serializes its canonical parent', async () => {
+    const site = Site.create({
+      id: 'site-1' as never,
+      name: 'Building A',
+      dataCenterId: 'dc-default' as never,
+    });
+    useCases.createSite.mockResolvedValue(site);
+
+    await expect(
+      controller.createSite(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { data_center_id: 'dc-default' },
+        { name: 'Building A' },
+      ),
+    ).resolves.toEqual({
+      id: 'site-1',
+      name: 'Building A',
+      data_center_id: 'dc-default',
+    });
+    expect(useCases.createSite).toHaveBeenCalledWith(
+      { name: 'Building A', dataCenterId: 'dc-default' },
+      actor,
+    );
+  });
+
+  it('rejects parent fields in Site update requests', async () => {
+    await expect(
+      controller.updateSite(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { site_id: 'site-1' },
+        { name: 'Building B', data_center_id: 'another-dc' } as never,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(useCases.updateSite).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid Room dimensions before calling the use case', async () => {
+    await expect(
+      controller.createRoom(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { site_id: 'site-1' },
+        {
+          name: 'Server Room A',
+          width_mm: 0,
+          depth_mm: 8_000,
+          grid_snap_mm: 100,
+        },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(useCases.createRoom).not.toHaveBeenCalled();
+  });
+
+  it('accepts a Room update with only the name and rejects an empty update', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Server Room B',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 10_000,
+        depthMm: 8_000,
+        gridSnapMm: 100,
+      }),
+    });
+    useCases.updateRoom.mockResolvedValue(room);
+
+    await expect(
+      controller.updateRoom(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { room_id: 'room-1' },
+        { name: 'Server Room B' },
+      ),
+    ).resolves.toMatchObject({ name: 'Server Room B' });
+    expect(useCases.updateRoom).toHaveBeenCalledWith(
+      'room-1',
+      { name: 'Server Room B' },
+      actor,
+    );
+
+    await expect(
+      controller.updateRoom(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { room_id: 'room-1' },
+        {},
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects non-Admin mutation even when route permission is granted', async () => {
+    useCases.createSite.mockResolvedValue(
+      Site.create({
+        id: 'site-1' as never,
+        name: 'Building A',
+        dataCenterId: 'dc-default' as never,
+      }),
+    );
+    await expect(
+      controller.createSite(
+        { user: { userId: 'operator-1', role: 'OPERATOR' } },
+        { data_center_id: 'dc-default' },
+        { name: 'Building A' },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(useCases.createSite).not.toHaveBeenCalled();
+  });
+
+  it('maps a missing resource to the standard HTTP not found exception', async () => {
+    useCases.getSite.mockRejectedValue(
+      new TopologyResourceNotFoundError('Site'),
+    );
+
+    await expect(
+      controller.getSite({ site_id: 'site-404' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('assigns read/manage permission policies and exposes no Data Center mutation route', () => {
+    expect(policy('getDefaultDataCenter')).toEqual({
+      kind: 'permissions',
+      permissions: ['asset:read'],
+    });
+    expect(policy('createSite')).toEqual({
+      kind: 'permissions',
+      permissions: ['asset:manage'],
+    });
+    const dataCenterRoutes = Object.getOwnPropertyNames(
+      TopologyController.prototype,
+    )
+      .map((name) => ({
+        path: Reflect.getMetadata(
+          PATH_METADATA,
+          TopologyController.prototype[name as keyof TopologyController],
+        ),
+        method: Reflect.getMetadata(
+          METHOD_METADATA,
+          TopologyController.prototype[name as keyof TopologyController],
+        ),
+      }))
+      .filter(
+        ({ path }) => typeof path === 'string' && path.includes('data-centers'),
+      );
+    expect(dataCenterRoutes).toEqual([
+      { path: 'data-centers/default', method: 0 },
+      { path: 'data-centers/:data_center_id/sites', method: 0 },
+      { path: 'data-centers/:data_center_id/sites', method: 1 },
+    ]);
+  });
+
+  it('serializes a Room map without leaking the domain object', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Server Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 10_000,
+        depthMm: 8_000,
+        gridSnapMm: 100,
+      }),
+    });
+    useCases.getRoom.mockResolvedValue(room);
+    const response = { setHeader: jest.fn() };
+
+    await expect(
+      controller.getRoom({ room_id: 'room-1' }, response),
+    ).resolves.toEqual({
+      id: 'room-1',
+      name: 'Server Room A',
+      site_id: 'site-1',
+      width_mm: 10_000,
+      depth_mm: 8_000,
+      grid_snap_mm: 100,
+      layout_revision: 0,
+      status: 'ACTIVE',
+      walkway_cells: [],
+    });
+    expect(response.setHeader).toHaveBeenCalledWith('ETag', '"0"');
+  });
+
+  it('returns retired status when a Room is directly retrieved for history', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Server Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 10_000,
+        depthMm: 8_000,
+        gridSnapMm: 100,
+      }),
+    }).retire();
+    useCases.getRoom.mockResolvedValue(room);
+
+    await expect(
+      controller.getRoom({ room_id: 'room-1' }),
+    ).resolves.toMatchObject({
+      id: 'room-1',
+      status: 'RETIRED',
+    });
+  });
+
+  it('retires a Room without returning a response body', async () => {
+    useCases.retireRoom.mockResolvedValue({} as never);
+
+    await expect(
+      controller.retireRoom(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { room_id: 'room-1' },
+      ),
+    ).resolves.toBeUndefined();
+    expect(useCases.retireRoom).toHaveBeenCalledWith('room-1', actor);
+  });
+
+  it('maps a Room with placed Racks to a conflict', async () => {
+    useCases.retireRoom.mockRejectedValue(new RoomHasActiveRacksError());
+
+    await expect(
+      controller.retireRoom(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { room_id: 'room-1' },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('requires a layout revision and forwards walkway replacement updates', async () => {
+    const room = Room.create({
+      id: 'room-1' as never,
+      name: 'Server Room A',
+      siteId: 'site-1' as never,
+      roomMap: RoomMap.create({
+        widthMm: 6_000,
+        depthMm: 4_000,
+        gridSnapMm: 1_000,
+      }),
+    });
+    useCases.updateRoom.mockResolvedValue(room);
+    await expect(
+      controller.updateRoom(
+        { user: { userId: actor.id, role: 'IT_ADMIN' } },
+        { room_id: 'room-1' },
+        { walkway_cells: [{ column: 0, row: 1 }] },
+      ),
+    ).rejects.toMatchObject({ status: 428 });
+    expect(useCases.updateRoom).not.toHaveBeenCalled();
+
+    await controller.updateRoom(
+      {
+        user: { userId: actor.id, role: 'IT_ADMIN' },
+        headers: { 'if-match': '"4"' },
+      },
+      { room_id: 'room-1' },
+      { walkway_cells: [{ column: 0, row: 1 }] },
+    );
+    expect(useCases.updateRoom).toHaveBeenCalledWith(
+      'room-1',
+      { expectedLayoutRevision: 4, walkwayCells: [{ column: 0, row: 1 }] },
+      actor,
+    );
+  });
+
+  it('maps a stale layout ETag to 412 Precondition Failed', async () => {
+    useCases.updateRoom.mockRejectedValueOnce(
+      new RoomLayoutRevisionConflictError(),
+    );
+    await expect(
+      controller.updateRoom(
+        {
+          user: { userId: actor.id, role: 'IT_ADMIN' },
+          headers: { 'if-match': '"3"' },
+        },
+        { room_id: 'room-1' },
+        { walkway_cells: [] },
+      ),
+    ).rejects.toMatchObject({ status: 412 });
+  });
+});
+
+function policy(handlerName: keyof TopologyController) {
+  const handler = TopologyController.prototype[handlerName];
+  return new Reflector().getAllAndOverride(HTTP_ROUTE_POLICY_METADATA, [
+    handler,
+    TopologyController,
+  ]);
+}

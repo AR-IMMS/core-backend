@@ -1,0 +1,1276 @@
+openapi: 3.1.2
+info:
+  title: AR-IMMS Core Asset & Topology API
+  version: 1.0.0
+  description: |
+    Dashboard HTTP contract for the seeded Data Center and its Sites and Rooms.
+    This REST/OpenAPI surface is separate from the Asset & Topology application
+    contracts used by backend modules. Flow 1 provides no Data Center create or
+    update operation. Parent references are chosen at creation and are immutable.
+
+paths:
+  /api/v1/asset-topology/assets:
+    get:
+      operationId: listAssets
+      summary: List Assets by canonical ID
+      description: Lists Assets in stable Asset ID order. AT-03 has no filters.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque cursor returned by the previous page.
+          schema: { type: string, minLength: 1 }
+        - name: page_size
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Cursor-paginated Asset list.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetPageResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+    post:
+      operationId: registerAsset
+      summary: Register a physical Asset
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterAssetRequest' }
+      responses:
+        '201':
+          description: Asset registered ACTIVE and unassigned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/assets/{asset_id}:
+    parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    get:
+      operationId: getAsset
+      summary: Retrieve an Asset by canonical ID
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Canonical Asset reference with current placement.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetReferenceResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+    patch:
+      operationId: updateAsset
+      summary: Update Asset descriptive information
+      description: Asset Type is immutable. Omitted fields remain unchanged; explicit null clears Model or serial number.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAssetRequest' }
+      responses:
+        '200':
+          description: Asset updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/data-centers/default:
+    get:
+      operationId: getDefaultDataCenter
+      summary: Retrieve the default Data Center
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: The seeded, read-only Data Center.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataCenterResponse'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/asset-topology/assets/{asset_id}/placement:
+    parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    post:
+      operationId: placeAsset
+      summary: Place an unassigned Asset in a Rack U
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssetPlacementRequest' }
+      responses:
+        '201':
+          description: Asset placement created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetPlacementResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+    patch:
+      operationId: moveAsset
+      summary: Move a placed Asset to another Rack U
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssetPlacementRequest' }
+      responses:
+        '200':
+          description: Asset placement moved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetPlacementResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+    delete:
+      operationId: unmapAsset
+      summary: Unmap an Asset and retain its placement history
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '204': { description: Asset unmapped. }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/assets/{asset_id}/placement-history:
+    parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    get:
+      operationId: getAssetPlacementHistory
+      summary: List historical Asset Location intervals
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Historical Asset placement intervals.
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/AssetPlacementHistoryResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/data-centers/{data_center_id}/sites:
+    parameters:
+      - $ref: '#/components/parameters/DataCenterId'
+    get:
+      operationId: listSites
+      summary: List Sites beneath a Data Center
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Sites under the requested Data Center.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteListResponse'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+    post:
+      operationId: createSite
+      summary: Create a Site beneath a Data Center
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSiteRequest'
+      responses:
+        '201':
+          description: Site created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteResponse'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/asset-topology/sites/{site_id}:
+    parameters:
+      - $ref: '#/components/parameters/SiteId'
+    get:
+      operationId: getSite
+      summary: Retrieve a Site
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Site details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteResponse'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+    patch:
+      operationId: updateSite
+      summary: Update a Site name
+      description: The Data Center parent reference is immutable after creation.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSiteRequest'
+      responses:
+        '200':
+          description: Site updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteResponse'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/asset-topology/sites/{site_id}/rooms:
+    parameters:
+      - $ref: '#/components/parameters/SiteId'
+    get:
+      operationId: listRooms
+      summary: List Rooms beneath a Site
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Active Rooms under the requested Site. Retired Rooms are excluded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomListResponse'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+    post:
+      operationId: createRoom
+      summary: Create a Room beneath a Site
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+      responses:
+        '201':
+          description: Room created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+
+  /api/v1/asset-topology/rooms/{room_id}:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    get:
+      operationId: getRoom
+      summary: Retrieve a Room and map configuration, including retired Rooms
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Room details and map configuration, including its ACTIVE or RETIRED status. Retired Rooms remain readable for history.
+          headers:
+            ETag:
+              description: Strong quoted decimal Room layout revision, for example `"12"`.
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+    patch:
+      operationId: updateRoom
+      summary: Update a Room name and map configuration
+      description: The Site parent reference is immutable after creation. For layout changes, send the strong ETag last read from this Room in If-Match; do not increment it. The server increments the revision after a successful layout change and returns the updated ETag. A stale ETag returns 412. Walkway cells replace the complete current set; [] clears it. Name-only updates do not require If-Match.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      parameters:
+        - name: If-Match
+          in: header
+          required: false
+          description: Required for layout changes. The strong ETag returned by a Room read.
+          schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoomRequest'
+            example:
+              walkway_cells:
+                - { column: 0, row: 2 }
+                - { column: 1, row: 2 }
+                - { column: 2, row: 2 }
+      responses:
+        '200':
+          description: Room updated. For a successful layout change, the ETag response header contains the new server-managed revision.
+          headers:
+            ETag:
+              description: Updated strong quoted decimal Room layout revision.
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+              example:
+                data:
+                  id: 81de181e-cc85-417d-b1ed-6f599645f2eb
+                  name: Room A
+                  site_id: 64d9ee9b-82a5-43c6-8c5c-9aa4e620265d
+                  status: ACTIVE
+                  width_mm: 6000
+                  depth_mm: 4000
+                  grid_snap_mm: 1000
+                  layout_revision: 13
+                  walkway_cells:
+                    - { column: 0, row: 2 }
+                    - { column: 1, row: 2 }
+                    - { column: 2, row: 2 }
+        '400':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          description: Room is retired.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '412':
+          description: If-Match does not match the current Room layout revision.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '428': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '422': { $ref: ../baseline.yaml#/components/responses/Problem }
+    delete:
+      operationId: retireRoom
+      summary: Retire a Room
+      description: Retires an empty Room without deleting its record or Room-map history. A retired Room is excluded from Room listings and cannot be edited or receive Rack placements. Repeating the request for an already retired Room succeeds without adding another Audit Fact.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '204':
+          description: Room retired; no response body.
+        '401':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '403':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '404':
+          $ref: ../baseline.yaml#/components/responses/Problem
+        '409':
+          description: Room has a placed Rack or a concurrent layout change prevented retirement.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+
+  /api/v1/asset-topology/rooms/{room_id}/map:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    get:
+      operationId: getRoomMap
+      summary: Retrieve a Room grid and its confirmed Rack cells
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Generated full-cell grid, Room status, walkway cells, capacity, and active Rack placements. Retired Rooms remain readable but cannot receive Rack placements.
+          headers:
+            ETag:
+              description: Strong quoted decimal Room layout revision, for example `"12"`.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoomMapResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/rooms/{room_id}/racks:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      operationId: createRack
+      summary: Create a Rack with its initial one-cell location
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: Strong ETag returned by the Room map read.
+          schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRackRequest' }
+      responses:
+        '201':
+          description: Rack and initial location created atomically in an active Room.
+          headers:
+            ETag:
+              description: Updated strong quoted decimal Room layout revision.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RackLayoutMutationResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409':
+          description: The Room is retired.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '412':
+          description: If-Match does not match the current Room layout revision.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '428': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '422': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/racks/{rack_id}:
+    parameters:
+      - name: rack_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    get:
+      operationId: getRack
+      summary: Retrieve a Rack and its confirmed location
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Canonical Rack reference.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RackResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+    patch:
+      operationId: updateRack
+      summary: Update Rack name or capacity
+      description: Update the Rack name, U capacity, or both. Rack ID is immutable. Location changes use the location operation; QR is managed by AT-07.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateRackRequest' }
+      responses:
+        '200':
+          description: Rack updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RackResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/racks/{rack_id}/location:
+    parameters:
+      - name: rack_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    patch:
+      operationId: moveRack
+      summary: Move or rotate a Rack
+      description: An unchanged Room, cell, and rotation is a no-op with no history or Audit Fact.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: Strong ETag for the destination Room returned by its Room map read.
+          schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
+        - name: If-Match-Source
+          in: header
+          required: false
+          description: Required for cross-Room moves; strong ETag returned by the source Room map read.
+          schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MoveRackRequest' }
+      responses:
+        '200':
+          description: Rack and location history updated atomically, or current location returned for a no-op.
+          headers:
+            ETag:
+              description: Updated strong ETag for the destination Room.
+              schema: { type: string }
+            ETag-Source:
+              description: Updated strong ETag for the source Room on a cross-Room move.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RackLayoutMutationResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409':
+          description: The destination Room is retired.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '412':
+          description: If-Match or If-Match-Source does not match the corresponding current Room layout revision.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '428': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '422': { $ref: ../baseline.yaml#/components/responses/Problem }
+    delete:
+      operationId: unplaceRack
+      summary: Remove a Rack from its current Room
+      description: Unplaces the Rack while retaining its identity and location history. Repeating the operation for an already-unplaced Rack is a no-op. If the Rack is placed, send the current Room map ETag in If-Match.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      parameters:
+        - name: If-Match
+          in: header
+          required: false
+          description: Required while the Rack is placed; strong ETag returned by its current Room map.
+          schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
+      responses:
+        '200':
+          description: Rack remains registered with current_location null; its previous location is retained in history. An already-unplaced Rack is returned unchanged.
+          headers:
+            ETag:
+              description: Updated strong ETag for the Room after a placement was removed. Omitted for an already-unplaced Rack.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RackLayoutMutationResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '412':
+          description: If-Match does not match the current Room layout revision.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+        '428': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/racks/{rack_id}/locations:
+    parameters:
+      - name: rack_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    get:
+      operationId: getRackLocationHistory
+      summary: Retrieve time-bounded Rack location history
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Historical and active Rack Room-map locations.
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/RackLocationHistoryResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/assets/{asset_id}/qr:
+    parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    post:
+      operationId: assignAssetQr
+      summary: Generate or replace an Asset QR mapping
+      security: [{ HumanAccessToken: [] }]
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '200':
+          description: System-generated QR mapping.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QrMappingResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409':
+          description: Source or destination Room layout revision is stale, or the destination Room is retired.
+          content:
+            application/problem+json:
+              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
+    delete:
+      operationId: deactivateAssetQr
+      summary: Deactivate the active Asset QR mapping
+      security: [{ HumanAccessToken: [] }]
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '200': { description: Active mapping deactivated. }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/racks/{rack_id}/qr:
+    parameters:
+      - name: rack_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    post:
+      operationId: assignRackQr
+      summary: Generate or replace a Rack QR mapping
+      security: [{ HumanAccessToken: [] }]
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '200':
+          description: System-generated QR mapping.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QrMappingResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+    delete:
+      operationId: deactivateRackQr
+      summary: Deactivate the active Rack QR mapping
+      security: [{ HumanAccessToken: [] }]
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '200': { description: Active mapping deactivated. }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/qr/{value}:
+    parameters:
+      - name: value
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    get:
+      operationId: resolveQr
+      summary: Resolve an active QR to current target data
+      security: [{ HumanAccessToken: [] }]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Current Asset or Rack data for the active mapping.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QrResolutionResponse' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/labels/{format}:
+    parameters:
+      - name: format
+        in: path
+        required: true
+        schema: { type: string, enum: [pdf, svg] }
+    post:
+      operationId: exportAssetTopologyLabels
+      summary: Export selected Rack and Node QR labels
+      description: One printable document may contain up to 100 selected targets. Node labels omit IP; every selected target must exist and have an active QR mapping.
+      security: [{ HumanAccessToken: [] }]
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LabelExportRequest' }
+      responses:
+        '200':
+          description: Printable label document.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            image/svg+xml:
+              schema: { type: string, format: binary }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+components:
+  securitySchemes:
+    HumanAccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    DataCenterId:
+      name: data_center_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    SiteId:
+      name: site_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    RoomId:
+      name: room_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    Asset:
+      type: object
+      required:
+        [
+          id,
+          name,
+          asset_type,
+          model_id,
+          manufacturer_serial_number,
+          lifecycle_state,
+          current_placement,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        asset_type: { type: string, enum: [NODE] }
+        model_id: { type: [string, 'null'] }
+        manufacturer_serial_number: { type: [string, 'null'] }
+        lifecycle_state: { type: string, enum: [ACTIVE, MAINTENANCE, RETIRED] }
+        current_placement:
+          oneOf:
+            - $ref: '#/components/schemas/CurrentAssetPlacement'
+            - type: 'null'
+    AssetReference:
+      type: object
+      required: [id, name, asset_type, lifecycle_state, current_placement]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        asset_type: { type: string, enum: [NODE] }
+        lifecycle_state: { type: string, enum: [ACTIVE, MAINTENANCE, RETIRED] }
+        current_placement:
+          oneOf:
+            - $ref: '#/components/schemas/CurrentAssetPlacement'
+            - type: 'null'
+    RegisterAssetRequest:
+      type: object
+      additionalProperties: false
+      required: [name, asset_type]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        asset_type: { type: string, enum: [NODE] }
+        model_id: { type: string }
+        manufacturer_serial_number:
+          {
+            type: string,
+            maxLength: 128,
+            description: Blank values are normalized to absent.,
+          }
+    UpdateAssetRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        model_id: { type: string, nullable: true }
+        manufacturer_serial_number:
+          {
+            type: string,
+            maxLength: 128,
+            nullable: true,
+            description: Blank values clear the serial number.,
+          }
+  schemas:
+    CurrentAssetPlacement:
+      type: object
+      required: [rack_id, u_position]
+      properties:
+        rack_id: { type: string }
+        u_position: { type: integer, minimum: 1 }
+    AssetPlacementRequest:
+      type: object
+      additionalProperties: false
+      required: [rack_id, u_position]
+      properties:
+        rack_id: { type: string, minLength: 1, maxLength: 128 }
+        u_position: { type: integer, minimum: 1 }
+    AssetPlacement:
+      type: object
+      required: [asset_id, rack_id, u_position]
+      properties:
+        asset_id: { type: string }
+        rack_id: { type: string }
+        u_position: { type: integer, minimum: 1 }
+    AssetPlacementHistoryEntry:
+      allOf:
+        - $ref: '#/components/schemas/AssetPlacement'
+        - type: object
+          required: [valid_from, valid_to]
+          properties:
+            valid_from: { type: string, format: date-time }
+            valid_to: { type: [string, 'null'], format: date-time }
+    CreateRackRequest:
+      type: object
+      additionalProperties: false
+      required: [name, column, row, rotation, u_capacity]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        column: { type: integer, minimum: 0 }
+        row: { type: integer, minimum: 0 }
+        rotation: { type: integer, enum: [0, 90, 180, 270] }
+        u_capacity: { type: integer, minimum: 1 }
+    UpdateRackRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        u_capacity: { type: integer, minimum: 1 }
+    MoveRackRequest:
+      type: object
+      additionalProperties: false
+      required: [room_id, column, row, rotation]
+      properties:
+        room_id: { type: string, minLength: 1, maxLength: 128 }
+        column: { type: integer, minimum: 0 }
+        row: { type: integer, minimum: 0 }
+        rotation: { type: integer, enum: [0, 90, 180, 270] }
+    RackLocation:
+      type: object
+      required: [room_id, column, row, rotation]
+      properties:
+        room_id: { type: string }
+        column: { type: integer, minimum: 0 }
+        row: { type: integer, minimum: 0 }
+        rotation: { type: integer, enum: [0, 90, 180, 270] }
+    RackResponse:
+      type: object
+      required: [id, name, u_capacity, location_label, current_location]
+      properties:
+        id: { type: string }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        u_capacity: { type: integer, minimum: 1 }
+        location_label: { type: [string, 'null'], description: Derived from the current location coordinates; null when unplaced. }
+        current_location:
+          {
+            oneOf:
+              [{ $ref: '#/components/schemas/RackLocation' }, { type: 'null' }],
+          }
+    QrMappingResponse:
+      type: object
+      required: [target_type, target_id, qr_value, active]
+      properties:
+        target_type: { type: string, enum: [asset, rack] }
+        target_id: { type: string }
+        qr_value: { type: string }
+        active: { type: boolean }
+    QrResolutionResponse:
+      type: object
+      required: [target_type, target_id, target]
+      properties:
+        target_type: { type: string, enum: [asset, rack] }
+        target_id: { type: string }
+        target:
+          oneOf:
+            - $ref: '#/components/schemas/AssetReference'
+            - $ref: '#/components/schemas/RackResponse'
+    RackLocationHistoryEntry:
+      allOf:
+        - $ref: '#/components/schemas/RackLocation'
+        - type: object
+          required: [valid_from, valid_to]
+          properties:
+            valid_from: { type: string, format: date-time }
+            valid_to: { type: [string, 'null'], format: date-time }
+    RackLocationHistoryResponse:
+      type: object
+      required: [rack_id, locations]
+      properties:
+        rack_id: { type: string }
+        locations:
+          type: array
+          items: { $ref: '#/components/schemas/RackLocationHistoryEntry' }
+    RoomMapResponse:
+      type: object
+      required: [id, status, width_mm, depth_mm, grid_snap_mm, grid, layout_revision, walkway_cells, capacity, racks]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [ACTIVE, RETIRED] }
+        width_mm: { type: integer, minimum: 1 }
+        depth_mm: { type: integer, minimum: 1 }
+        grid_snap_mm: { type: integer, minimum: 1 }
+        grid:
+          type: object
+          required: [columns, rows, origin]
+          properties:
+            columns: { type: integer, minimum: 0 }
+            rows: { type: integer, minimum: 0 }
+            origin: { type: string, enum: [lower-left] }
+        layout_revision: { type: integer, minimum: 0, description: Server-managed revision. The server increments this after a successful layout change and returns it for the client's next request. }
+        walkway_cells:
+          type: array
+          items: { $ref: '#/components/schemas/RoomMapCell' }
+        capacity:
+          type: object
+          required: [total_cells, rack_capacity_cells, active_rack_count, free_rack_cells]
+          properties:
+            total_cells: { type: integer, minimum: 0 }
+            rack_capacity_cells: { type: integer, minimum: 0 }
+            active_rack_count: { type: integer, minimum: 0 }
+            free_rack_cells: { type: integer, minimum: 0 }
+        racks:
+          type: array
+          items: { $ref: '#/components/schemas/RoomMapRack' }
+    RoomMapCell:
+      type: object
+      required: [column, row]
+      properties:
+        column: { type: integer, minimum: 0 }
+        row: { type: integer, minimum: 0 }
+    RoomMapRack:
+      type: object
+      required: [rack_id, name, column, row, rotation, u_capacity, location_label]
+      properties:
+        rack_id: { type: string }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        column: { type: integer, minimum: 0 }
+        row: { type: integer, minimum: 0 }
+        rotation: { type: integer, enum: [0, 90, 180, 270] }
+        u_capacity: { type: integer, minimum: 1 }
+        location_label: { type: string }
+    RackLayoutMutationResponse:
+      allOf:
+        - $ref: '#/components/schemas/RackResponse'
+        - type: object
+          required: [layout_revisions]
+          properties:
+            layout_revisions:
+              type: array
+              items:
+                type: object
+                required: [room_id, revision]
+                properties:
+                  room_id: { type: string }
+                  revision: { type: integer, minimum: 0, description: Server-managed revision after the Rack layout change. Clients use this returned value as-is in the next request. }
+    Meta:
+      type: object
+      properties:
+        request_id: { type: string }
+        trace_id: { type: string }
+    SingleResponse:
+      type: object
+      required: [data]
+      properties:
+        data: {}
+        meta: { $ref: '#/components/schemas/Meta' }
+    ListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: {}
+        meta: { $ref: '#/components/schemas/Meta' }
+    DataCenter:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, example: dc-default }
+        name: { type: string, example: Default Data Center }
+    Site:
+      type: object
+      required: [id, name, data_center_id]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        data_center_id: { type: string }
+    Room:
+      type: object
+      required: [id, name, site_id, status, width_mm, depth_mm, grid_snap_mm, layout_revision, walkway_cells]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        site_id: { type: string, format: uuid }
+        status: { type: string, enum: [ACTIVE, RETIRED] }
+        width_mm: { type: integer, minimum: 1 }
+        depth_mm: { type: integer, minimum: 1 }
+        grid_snap_mm: { type: integer, minimum: 1 }
+        layout_revision: { type: integer, minimum: 0, description: Server-managed revision. The server increments this after a successful layout change and returns it for the client's next request. }
+        walkway_cells:
+          type: array
+          items: { $ref: '#/components/schemas/RoomMapCell' }
+    CreateSiteRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+    UpdateSiteRequest:
+      $ref: '#/components/schemas/CreateSiteRequest'
+    CreateRoomRequest:
+      type: object
+      additionalProperties: false
+      required: [name, width_mm, depth_mm, grid_snap_mm]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        width_mm: { type: integer, minimum: 1 }
+        depth_mm: { type: integer, minimum: 1 }
+        grid_snap_mm: { type: integer, minimum: 1 }
+    UpdateRoomRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        width_mm: { type: integer, minimum: 1 }
+        depth_mm: { type: integer, minimum: 1 }
+        grid_snap_mm: { type: integer, minimum: 1 }
+        walkway_cells:
+          type: array
+          items: { $ref: '#/components/schemas/RoomMapCell' }
+    DataCenterResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/DataCenter' }
+    SiteResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Site' }
+    SiteListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ListResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/Site' }
+    RoomResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Room' }
+    RoomListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ListResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/Room' }
+    AssetResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Asset' }
+    AssetReferenceResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/AssetReference' }
+    AssetPlacementResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/AssetPlacement' }
+    AssetPlacementHistoryResponse:
+      allOf:
+        - $ref: '#/components/schemas/ListResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/AssetPlacementHistoryEntry' }
+    AssetPageResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Asset' }
+        pagination:
+          type: object
+          required: [type, next_cursor]
+          properties:
+            type: { type: string, const: cursor }
+            next_cursor: { type: [string, 'null'] }
+        meta: { $ref: '#/components/schemas/Meta' }
+    LabelExportRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        rack_ids:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 1, maxLength: 128 }
+        asset_ids:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 1, maxLength: 128 }
+      description: At least one target ID is required and the combined total cannot exceed 100.

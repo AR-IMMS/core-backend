@@ -29,7 +29,8 @@ describe('parseAuditFactPayloadV2', () => {
     [null, 'null'],
     [{ code: 'user:read' }, 'object'],
     [['user:read'], 'nested array'],
-  ])('rejects an array with a %s element', (entry) => {
+  ])('rejects an array with a %s element', (entry, _description) => {
+    void _description;
     expect(() =>
       parseAuditFactPayloadV2(
         {

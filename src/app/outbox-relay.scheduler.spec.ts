@@ -87,7 +87,7 @@ describe('OutboxRelayScheduler', () => {
 function createRelay() {
   return {
     runOnce: jest
-      .fn<() => Promise<OutboxRelayRunResult>>()
+      .fn<Promise<OutboxRelayRunResult>, []>()
       .mockResolvedValue({ ...EMPTY_RUN_RESULT }),
   };
 }
