@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { OUTBOX_WRITER_PORT, UNIT_OF_WORK_PORT } from '@platform/events';
 import { AssetTopologyModule } from '@modules/asset-topology/asset-topology.module';
 import { ASSET_TOPOLOGY_ASSET_QUERIES_PORT } from '@modules/asset-topology/contracts';
@@ -15,15 +16,22 @@ import type {
   NodeEligibilityPort,
 } from './application/bootstrap-token.port';
 import { IssueBootstrapTokenUseCase } from './application/issue-bootstrap-token.use-case';
+import { EnrollAgentUseCase } from './application/enroll-agent.use-case';
+import { ENROLLMENT_PERSISTENCE_PORT } from './application/enrollment.port';
+import type { EnrollmentPersistencePort } from './application/enrollment.port';
+import { MongoEnrollmentStore } from './infrastructure/mongodb/mongo-enrollment.store';
+import { EnrollmentController } from './presentation/enrollment.controller';
 import { MongoBootstrapTokenStore } from './infrastructure/mongodb/mongo-bootstrap-token.store';
 import { BootstrapTokenController } from './presentation/bootstrap-token.controller';
 
 @Module({
   imports: [AssetTopologyModule],
-  controllers: [BootstrapTokenController],
+  controllers: [BootstrapTokenController, EnrollmentController],
   providers: [
     MongoBootstrapTokenStore,
+    MongoEnrollmentStore,
     { provide: BOOTSTRAP_TOKEN_STORE, useExisting: MongoBootstrapTokenStore },
+    { provide: ENROLLMENT_PERSISTENCE_PORT, useExisting: MongoEnrollmentStore },
     {
       provide: NODE_ELIGIBILITY_PORT,
       useFactory: (assets: AssetTopologyAssetQueries) => ({
@@ -45,6 +53,30 @@ import { BootstrapTokenController } from './presentation/bootstrap-token.control
         BOOTSTRAP_TOKEN_STORE,
         UNIT_OF_WORK_PORT,
         OUTBOX_WRITER_PORT,
+      ],
+    },
+    {
+      provide: EnrollAgentUseCase,
+      useFactory: (
+        persistence: EnrollmentPersistencePort,
+        nodes: NodeEligibilityPort,
+        unitOfWork: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[2],
+        outbox: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[3],
+        config: ConfigService,
+      ) =>
+        new EnrollAgentUseCase(
+          persistence,
+          nodes,
+          unitOfWork,
+          outbox,
+          config.getOrThrow<string>('AGENT_CONTROL_PLANE_BASE_URL'),
+        ),
+      inject: [
+        ENROLLMENT_PERSISTENCE_PORT,
+        NODE_ELIGIBILITY_PORT,
+        UNIT_OF_WORK_PORT,
+        OUTBOX_WRITER_PORT,
+        ConfigService,
       ],
     },
   ],

@@ -2,7 +2,7 @@ openapi: 3.1.2
 info:
   title: AR-IMMS Core Agent Enrollment API
   version: 0.1.0
-  description: I1 Admin API for Node-bound bootstrap token issuance.
+  description: I1 bootstrap token issuance and I2 Agent enrollment.
 paths:
   /api/v1/nodes/{nodeId}/agent-bootstrap-tokens:
     post:
@@ -49,3 +49,89 @@ paths:
         '403': { $ref: './baseline.yaml#/components/responses/Problem' }
         '404': { $ref: './baseline.yaml#/components/responses/Problem' }
         '409': { $ref: './baseline.yaml#/components/responses/Problem' }
+  /api/v1/agent-enrollments:
+    post:
+      operationId: enrollAgent
+      summary: Enroll an Agent installation and bind it to a Node
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EnrollmentRequest' }
+      responses:
+        '201':
+          description: Enrollment committed; response is no-store
+          headers:
+            Cache-Control: { schema: { type: string }, description: no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrollmentResponse' }
+        '400': { $ref: './baseline.yaml#/components/responses/Problem' }
+        '401': { $ref: './baseline.yaml#/components/responses/Problem' }
+        '409': { $ref: './baseline.yaml#/components/responses/Problem' }
+        '503': { $ref: './baseline.yaml#/components/responses/Problem' }
+components:
+  schemas:
+    EnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required: [bootstrap_token, enrollment_attempt_id, installation, agent, environment]
+      properties:
+        bootstrap_token: { type: string, minLength: 1, writeOnly: true }
+        enrollment_attempt_id: { type: string, format: uuid }
+        installation:
+          type: object
+          additionalProperties: false
+          required: [id]
+          properties: { id: { type: string, format: uuid } }
+        agent:
+          type: object
+          additionalProperties: false
+          required: [version]
+          properties: { version: { type: string, minLength: 1, maxLength: 64 } }
+        environment:
+          type: object
+          additionalProperties: false
+          required: [os, architecture]
+          properties:
+            os: { type: string, enum: [linux, windows, darwin, other] }
+            architecture: { type: string, enum: [amd64, arm64, '386', other] }
+            hostname: { type: string, minLength: 1, maxLength: 255 }
+        metadata:
+          type: object
+          description: Untrusted JSON metadata limited to 4096 serialized UTF-8 bytes.
+          additionalProperties: true
+    EnrollmentResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [enrollment_id, installation_id, binding, credential, control_plane]
+          properties:
+            enrollment_id: { type: string, format: uuid }
+            installation_id: { type: string, format: uuid }
+            binding:
+              type: object
+              required: [id, node_id, status]
+              properties:
+                id: { type: string, format: uuid }
+                node_id: { type: string, format: uuid }
+                status: { type: string, enum: [active] }
+            credential:
+              type: object
+              required: [type, access_token]
+              properties:
+                type: { type: string, enum: [bearer] }
+                access_token: { type: string, writeOnly: false }
+            control_plane:
+              type: object
+              required: [base_url, poll_interval_seconds]
+              properties:
+                base_url: { type: string, format: uri, pattern: '^https://' }
+                poll_interval_seconds: { type: integer, default: 30, minimum: 1 }
+        meta:
+          type: object
+          required: [request_id]
+          properties: { request_id: { type: string } }

@@ -15,6 +15,9 @@ jest.mock('@modules/iam/iam.module', () => ({
 jest.mock('@platform/config', () => ({
   PlatformConfigModule: class PlatformConfigModule {},
 }));
+jest.mock('@nestjs/config', () => ({
+  ConfigService: class ConfigService {},
+}));
 jest.mock('@platform/database', () => ({
   DatabaseModule: class DatabaseModule {},
 }));
