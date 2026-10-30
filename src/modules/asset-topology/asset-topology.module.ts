@@ -151,7 +151,10 @@ import {
     },
     ListAssetsUseCase,
   ],
-  exports: [ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT],
+  exports: [
+    ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT,
+    ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
+  ],
 })
 export class AssetTopologyModule {}
 

@@ -44,6 +44,11 @@ export interface AssetReference {
 /** Independently provided Asset lookup for consumers that do not need topology. */
 export interface AssetTopologyAssetQueries {
   getAsset(assetId: AssetId): Promise<AssetReference | null>;
+  getAgentEnrollmentNodeEligibility(assetId: AssetId): Promise<{
+    readonly exists: boolean;
+    readonly active: boolean;
+    readonly hasActivePlacement: boolean;
+  }>;
   getAssetPlacementHistory(
     assetId: AssetId,
   ): Promise<readonly AssetPlacementHistoryEntry[] | null>;

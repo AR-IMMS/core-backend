@@ -1,0 +1,51 @@
+openapi: 3.1.2
+info:
+  title: AR-IMMS Core Agent Enrollment API
+  version: 0.1.0
+  description: I1 Admin API for Node-bound bootstrap token issuance.
+paths:
+  /api/v1/nodes/{nodeId}/agent-bootstrap-tokens:
+    post:
+      operationId: issueAgentBootstrapToken
+      summary: Issue a Node-bound single-use bootstrap token
+      description: Requires an authenticated human with agent:manage. Node must exist, be active, have an active placement, and have no active Agent binding. A new issue invalidates the previous unused token.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [agent:manage]
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Token created and returned once. Response is no-store.
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              description: no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: object
+                    required: [token_id, bootstrap_token, node_id, expires_at]
+                    properties:
+                      token_id: { type: string }
+                      bootstrap_token: { type: string, writeOnly: false }
+                      node_id: { type: string, format: uuid }
+                      expires_at: { type: string, format: date-time }
+                  meta:
+                    type: object
+                    required: [request_id]
+                    properties:
+                      request_id: { type: string }
+                      trace_id: { type: string }
+        '400': { $ref: './baseline.yaml#/components/responses/Problem' }
+        '401': { $ref: './baseline.yaml#/components/responses/Problem' }
+        '403': { $ref: './baseline.yaml#/components/responses/Problem' }
+        '404': { $ref: './baseline.yaml#/components/responses/Problem' }
+        '409': { $ref: './baseline.yaml#/components/responses/Problem' }

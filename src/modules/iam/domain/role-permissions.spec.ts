@@ -13,6 +13,7 @@ describe('IAM role permissions', () => {
       'user:grant',
       'asset:read',
       'asset:manage',
+      'agent:manage',
       'monitoring:read',
       'monitoring:manage',
       'incident:read',

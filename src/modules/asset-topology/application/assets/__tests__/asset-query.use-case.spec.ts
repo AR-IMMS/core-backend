@@ -3,6 +3,56 @@ import { AssetPlacement } from '../../../domain/placement/asset-placement';
 import { GetAssetUseCase, ListAssetsUseCase } from '../asset-query.use-case';
 
 describe('Asset query use cases', () => {
+  it('reports enrollment eligibility from Asset lifecycle and current placement', async () => {
+    const active = Asset.register({
+      id: 'asset-active',
+      name: 'Node',
+      type: { id: 'node' },
+    });
+    const retired = Asset.restore({
+      id: 'asset-retired',
+      name: 'Retired',
+      assetTypeId: 'node',
+      lifecycleState: 'RETIRED',
+    });
+    const assets = {
+      findById: jest
+        .fn()
+        .mockResolvedValueOnce(active)
+        .mockResolvedValueOnce(retired)
+        .mockResolvedValueOnce(null),
+    };
+    const placements = {
+      findActiveByAsset: jest
+        .fn()
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce(null),
+    };
+    const useCase = new GetAssetUseCase(assets as never, placements as never);
+
+    await expect(
+      useCase.getAgentEnrollmentNodeEligibility('asset-active' as never),
+    ).resolves.toEqual({
+      exists: true,
+      active: true,
+      hasActivePlacement: true,
+    });
+    await expect(
+      useCase.getAgentEnrollmentNodeEligibility('asset-retired' as never),
+    ).resolves.toEqual({
+      exists: true,
+      active: false,
+      hasActivePlacement: false,
+    });
+    await expect(
+      useCase.getAgentEnrollmentNodeEligibility('missing' as never),
+    ).resolves.toEqual({
+      exists: false,
+      active: false,
+      hasActivePlacement: false,
+    });
+  });
+
   it('returns canonical Asset facts with null placement and null for an absent Asset', async () => {
     const asset = Asset.register({
       id: 'asset-1',
