@@ -133,7 +133,7 @@ sequenceDiagram
 | **I1 — Bootstrap Issuance** | Authorized Admin, eligible Node, TTL, single-use model | Admin endpoint; token hashing, Mongo schema/index; NodeEligibility port | Invalid/retired/bound Node rejected; real TTL and expiry validation tests; no secret logging. |
 | **I2 — Enrollment Happy Path** | Request schema v1; installation; binding; credential | Agent endpoint + DTO, atomic registration transaction, initial response | Real Mongo integration test: token → 201 → correct binding and secret; concurrent uniqueness constraints exist. |
 | **I3 — Reliability & Recovery** | Idempotency, lost response, restart/retry, races | Persisted attempt, recovery security mechanism and stable 200 behavior | Same request recognized, conflicting request rejected, race and transaction rollback covered. Must freeze recovery mechanism before claiming complete. |
-| **I4 — Authentication & Revocation** | Credential validation bound to active binding | Agent auth guard and internal validation/revoke foundations | Invalid/revoked credentials rejected; history retained. Admin revoke API separately contracted when scheduled. |
+| **I4 — Authentication & Revocation** | Credential validation bound to active binding; Admin revoke | Agent auth guard, idempotent revoke API, indexes, migration and contracts | Invalid/revoked credentials rejected; revoke is atomic and audited once; history and stable installation identity retained. |
 | **I5 — Integration Readiness** | Admin visibility, audit, contract tests | OpenAPI conformance, Mock Agent tests, query endpoints as specified, audit instrumentation | Agent can enroll and invoke a protected test route; implementation matches contract. |
 
 Keep issues as five vertical increments, not dozens of file-based tasks. A PR can be smaller than an increment, but no increment is “done” without its negative tests and API contract alignment. I2 is a **development-only happy path** until I3 recovery is closed.
@@ -145,6 +145,8 @@ Baseline error codes: `INVALID_ENROLLMENT_PAYLOAD`, `INVALID_BOOTSTRAP_TOKEN`, `
 **Retry rule:** same attempt ID and immutable request for network timeouts / transient 5xx. Never mint a different attempt ID merely because response was lost. Request fingerprint must not expose bootstrap token in logs.
 
 **Approved I3 recovery:** Persist the complete result encrypted with AES-256-GCM in a separate recovery collection. The request fingerprint covers the bootstrap-token hash and canonical request payload. Recover only when attempt ID and fingerprint match; the attempt ID alone never authorizes recovery. The escrow expires after 24 hours, enforced by an explicit expiry check and MongoDB TTL cleanup. Keep durable attempt records after escrow cleanup so expired and legacy I2 attempts cannot silently start a second enrollment. Return `410 ENROLLMENT_RECOVERY_EXPIRED` when the matching attempt has no escrow or its escrow has expired. Return `503 ENROLLMENT_UNAVAILABLE` for corrupt escrow or decryption failure.
+
+After I4, recovery also verifies that the attempt's binding and credential remain active and associated with the same installation. Return `410 ENROLLMENT_RECOVERY_REVOKED` if either has been revoked; never return the escrowed credential after that point.
 
 Configure a base64-encoded 32-byte `AGENT_ENROLLMENT_RECOVERY_KEY` from the deployment secret manager. All Core instances must share the same key, which must remain stable until active escrow has expired. Do not rotate early or log key material, decrypted results, tokens or credentials. Existing I2 attempt records have no escrow; they are recognized by fingerprint and safely return recovery-expired without issuing a replacement credential.
 
@@ -165,6 +167,10 @@ Configure a base64-encoded 32-byte `AGENT_ENROLLMENT_RECOVERY_KEY` from the depl
 | DB transaction rollback or commit uncertainty | No half-created durable enrollment; retry resolves committed attempt safely. |
 | Response lost after commit | Same attempt recovered under approved secure recovery protocol (I3 gate). |
 | Matching retry after recovery TTL / legacy I2 attempt | `410 ENROLLMENT_RECOVERY_EXPIRED`; no second binding or credential is created. |
+| Matching retry after binding revocation | `410 ENROLLMENT_RECOVERY_REVOKED`; escrowed credential is not returned. |
+| Re-enroll a revoked stable installation | Existing installation row is updated; historical binding remains revoked and one new binding is active. |
+| Credential authentication | Only active credential + active consistent binding + existing installation resolves to a trusted Agent principal. |
+| Repeated Admin revocation | `204 No Content`; only the first call emits the audit fact. |
 | Secret leakage checks | No token or bearer credential in logs, audit, error details or persisted plaintext. |
 | Revoke binding (I4) | Credential fails authorization even if installation ID is known. |
 
@@ -203,8 +209,18 @@ This is a **logical grouping, not a required refactor**. Preserve the repository
 | Bootstrap reissue policy and concurrent issuance constraints | Core, before I1 merge |
 | IAM permission catalog entry and Dashboard auth semantics | Core IAM, I1 |
 | Credential recovery on lost response / replay window | Approved for I3: AES-256-GCM escrow, 24-hour TTL, matching attempt and fingerprint; expired recovery returns 410. |
-| Credential expiry, rotation, renewal and revocation endpoint contract | Core + Agent, I4 |
+| Credential expiry, rotation and renewal | Out of I4; credentials have no expiry in this increment. |
+| Agent authentication / binding revocation contract | Approved for I4: opaque Core-only bearer scheme, human `agent:manage` revoke API, idempotent 204. |
 | Trusted Core origin and generated Control Plane URL | Core + Agent, before real integration |
 | Agent control snapshot, heartbeat, uninstall reporting | Separate contract / later flow increments |
 
 **Definition of done for M1:** OpenAPI matches code; issue bootstrap; enroll from v1 payload; receive valid Node binding and credential; prevent duplicates; recover transient/lost responses under a documented security policy; secure storage/logging; pass real MongoDB contract + integration tests.
+
+## 11. I4 authentication and revocation
+
+- Agent-facing protected handlers opt in through `@AgentAuthenticated()`, which pairs the Agent credential guard with the route policy that bypasses Human IAM. Human/Admin handlers continue to require Human IAM and their declared permissions.
+- The Agent guard hashes the opaque bearer credential and resolves the trusted `installationId`, `bindingId`, and `nodeId` through Agent Management persistence. Authorization requires an active credential, active binding, and matching existing installation. It does not query Asset & Topology on each request.
+- Bootstrap tokens remain enrollment-only. Agent credentials do not authorize Human/Admin APIs and are not OTLP Gateway credentials. I4 adds no expiry or rotation behavior.
+- `POST /api/v1/agent-bindings/{bindingId}/revoke` requires `agent:manage`. In one MongoDB transaction, Core conditionally marks the binding and active credentials revoked and appends a secret-free audit fact. First and repeated calls return `204`; only the winning transition emits the fact.
+- Revocation preserves the installation record, revoked binding, Node and Asset placement. A new authorized enrollment may reuse the stable installation ID, update Agent version/environment/metadata, and create a separate active binding. Recovered I3 credentials are returned only while their associated binding and credential remain active; after revocation return `410 ENROLLMENT_RECOVERY_REVOKED`.
+- An authentication decision is based on persisted Core records. Requests authorized before a revocation commit may finish; later requests fail. An offline Agent and an independently authenticated OTLP Gateway are not immediately controlled by this API.
