@@ -22,6 +22,7 @@ import {
   BootstrapTokenInvalidError,
   EnrollmentAttemptConflictError,
   EnrollmentRecoveryExpiredError,
+  EnrollmentRecoveryRevokedError,
   EnrollmentRecoveryUnavailableError,
   InstallationAlreadyBoundError,
   NodeAlreadyBoundError,
@@ -119,6 +120,9 @@ export class EnrollmentController {
       }
       if (error instanceof EnrollmentRecoveryExpiredError) {
         throw new GoneException({ code: 'ENROLLMENT_RECOVERY_EXPIRED' });
+      }
+      if (error instanceof EnrollmentRecoveryRevokedError) {
+        throw new GoneException({ code: 'ENROLLMENT_RECOVERY_REVOKED' });
       }
       if (error instanceof EnrollmentRecoveryUnavailableError) {
         throw new ServiceUnavailableException({

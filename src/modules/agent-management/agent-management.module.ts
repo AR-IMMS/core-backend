@@ -22,6 +22,12 @@ import type { EnrollmentPersistencePort } from './application/enrollment.port';
 import { ENROLLMENT_RECOVERY_CIPHER } from './application/enrollment-recovery.port';
 import type { EnrollmentRecoveryCipherPort } from './application/enrollment-recovery.port';
 import { MongoEnrollmentStore } from './infrastructure/mongodb/mongo-enrollment.store';
+import { AGENT_ACCESS_PERSISTENCE_PORT } from './application/agent-access.port';
+import type { AgentAccessPersistencePort } from './application/agent-access.port';
+import { MongoAgentAccessStore } from './infrastructure/mongodb/mongo-agent-access.store';
+import { RevokeAgentBindingUseCase } from './application/revoke-agent-binding.use-case';
+import { AgentAuthenticationGuard } from './presentation/agent-authentication.guard';
+import { AgentBindingRevocationController } from './presentation/agent-binding-revocation.controller';
 import { EnrollmentRecoveryCipher } from './infrastructure/security/enrollment-recovery-cipher';
 import { EnrollmentController } from './presentation/enrollment.controller';
 import { MongoBootstrapTokenStore } from './infrastructure/mongodb/mongo-bootstrap-token.store';
@@ -29,7 +35,11 @@ import { BootstrapTokenController } from './presentation/bootstrap-token.control
 
 @Module({
   imports: [AssetTopologyModule],
-  controllers: [BootstrapTokenController, EnrollmentController],
+  controllers: [
+    BootstrapTokenController,
+    EnrollmentController,
+    AgentBindingRevocationController,
+  ],
   providers: [
     MongoBootstrapTokenStore,
     {
@@ -41,8 +51,27 @@ import { BootstrapTokenController } from './presentation/bootstrap-token.control
       inject: [ConfigService],
     },
     MongoEnrollmentStore,
+    MongoAgentAccessStore,
+    AgentAuthenticationGuard,
+    {
+      provide: AGENT_ACCESS_PERSISTENCE_PORT,
+      useExisting: MongoAgentAccessStore,
+    },
     { provide: BOOTSTRAP_TOKEN_STORE, useExisting: MongoBootstrapTokenStore },
     { provide: ENROLLMENT_PERSISTENCE_PORT, useExisting: MongoEnrollmentStore },
+    {
+      provide: RevokeAgentBindingUseCase,
+      useFactory: (
+        access: AgentAccessPersistencePort,
+        unitOfWork: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[2],
+        outbox: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[3],
+      ) => new RevokeAgentBindingUseCase(access, unitOfWork, outbox),
+      inject: [
+        AGENT_ACCESS_PERSISTENCE_PORT,
+        UNIT_OF_WORK_PORT,
+        OUTBOX_WRITER_PORT,
+      ],
+    },
     {
       provide: NODE_ELIGIBILITY_PORT,
       useFactory: (assets: AssetTopologyAssetQueries) => ({

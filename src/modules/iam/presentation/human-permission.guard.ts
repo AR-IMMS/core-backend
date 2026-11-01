@@ -33,7 +33,9 @@ export class HumanPermissionGuard implements CanActivate {
       HTTP_ROUTE_POLICY_METADATA,
       [context.getHandler(), context.getClass()],
     );
-    if (policy?.kind === 'public') return true;
+    if (policy?.kind === 'public' || policy?.kind === 'agent-authenticated') {
+      return true;
+    }
     const request = context.switchToHttp().getRequest<HumanPermissionRequest>();
     if (policy?.kind === 'authenticated') {
       if (!request.user || request.user.status !== 'ACTIVE') {

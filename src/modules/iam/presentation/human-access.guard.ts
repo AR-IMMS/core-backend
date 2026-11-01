@@ -47,7 +47,9 @@ export class HumanAccessGuard implements CanActivate {
       HTTP_ROUTE_POLICY_METADATA,
       [context.getHandler(), context.getClass()],
     );
-    if (policy?.kind === 'public') return true;
+    if (policy?.kind === 'public' || policy?.kind === 'agent-authenticated') {
+      return true;
+    }
 
     const token = extractBearerToken(request.headers.authorization);
     if (!token) throw new UnauthorizedException();

@@ -27,7 +27,9 @@ export class MongoEnrollmentStore implements EnrollmentPersistencePort {
     if (
       typeof attempt['requestFingerprint'] !== 'string' ||
       typeof attempt['status'] !== 'string' ||
-      !(attempt['committedAt'] instanceof Date)
+      !(attempt['committedAt'] instanceof Date) ||
+      typeof attempt['bindingId'] !== 'string' ||
+      typeof attempt['installationId'] !== 'string'
     ) {
       throw new EnrollmentRecoveryUnavailableError();
     }
@@ -35,6 +37,8 @@ export class MongoEnrollmentStore implements EnrollmentPersistencePort {
       requestFingerprint: attempt['requestFingerprint'],
       status: attempt['status'],
       committedAt: attempt['committedAt'],
+      bindingId: attempt['bindingId'],
+      installationId: attempt['installationId'],
     };
   }
 
@@ -85,6 +89,50 @@ export class MongoEnrollmentStore implements EnrollmentPersistencePort {
     );
   }
 
+  async isEnrollmentResultActive(input: {
+    readonly attemptId: string;
+    readonly bindingId: string;
+    readonly installationId: string;
+  }): Promise<boolean> {
+    const attempt = await this.connection
+      .collection('agent_management_enrollment_attempts')
+      .findOne(
+        { attemptId: input.attemptId },
+        {
+          projection: {
+            bindingId: 1,
+            credentialId: 1,
+            installationId: 1,
+          },
+        },
+      );
+    if (
+      !attempt ||
+      attempt['bindingId'] !== input.bindingId ||
+      attempt['installationId'] !== input.installationId ||
+      typeof attempt['credentialId'] !== 'string'
+    ) {
+      return false;
+    }
+
+    const [binding, credential, installation] = await Promise.all([
+      this.connection.collection('agent_management_bindings').findOne({
+        bindingId: input.bindingId,
+        installationId: input.installationId,
+        status: 'active',
+      }),
+      this.connection.collection('agent_management_credentials').findOne({
+        credentialId: attempt['credentialId'],
+        bindingId: input.bindingId,
+        status: 'active',
+      }),
+      this.connection
+        .collection('agent_management_installations')
+        .findOne({ installationId: input.installationId }),
+    ]);
+    return Boolean(binding && credential && installation);
+  }
+
   async enroll(
     input: Parameters<EnrollmentPersistencePort['enroll']>[0],
     context: UnitOfWorkContext,
@@ -121,9 +169,23 @@ export class MongoEnrollmentStore implements EnrollmentPersistencePort {
     }
 
     try {
-      await this.connection
-        .collection('agent_management_installations')
-        .insertOne(
+      const installations = this.connection.collection(
+        'agent_management_installations',
+      );
+      const existingInstallation = await installations.updateOne(
+        { installationId: input.installationId },
+        {
+          $set: {
+            agentVersion: input.agentVersion,
+            environment: input.environment,
+            metadata: input.metadata,
+            updatedAt: input.now,
+          },
+        },
+        options,
+      );
+      if (existingInstallation.matchedCount === 0) {
+        await installations.insertOne(
           {
             installationId: input.installationId,
             enrollmentId: input.enrollmentId,
@@ -134,6 +196,7 @@ export class MongoEnrollmentStore implements EnrollmentPersistencePort {
           },
           options,
         );
+      }
       const token = await tokens.findOne(
         { tokenHash: input.tokenHash },
         { session, projection: { nodeId: 1 } },

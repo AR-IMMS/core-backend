@@ -19,6 +19,8 @@ export interface EnrollmentPersistencePort {
     readonly requestFingerprint: string;
     readonly status: string;
     readonly committedAt: Date;
+    readonly bindingId: string;
+    readonly installationId: string;
   } | null>;
   findRecovery(attemptId: string): Promise<{
     readonly requestFingerprint: string;
@@ -31,6 +33,11 @@ export interface EnrollmentPersistencePort {
     readonly expiresAt: Date;
   } | null>;
   hasActiveBinding(nodeId: string): Promise<boolean>;
+  isEnrollmentResultActive(input: {
+    readonly attemptId: string;
+    readonly bindingId: string;
+    readonly installationId: string;
+  }): Promise<boolean>;
   enroll(
     input: {
       readonly tokenHash: string;
@@ -64,5 +71,6 @@ export class NodeAlreadyBoundError extends Error {}
 export class InstallationAlreadyBoundError extends Error {}
 export class EnrollmentAttemptConflictError extends Error {}
 export class EnrollmentRecoveryExpiredError extends Error {}
+export class EnrollmentRecoveryRevokedError extends Error {}
 export class EnrollmentRecoveryUnavailableError extends Error {}
 export class EnrollmentUnavailableError extends Error {}

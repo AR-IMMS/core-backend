@@ -20,6 +20,7 @@ import {
   BootstrapTokenInvalidError,
   EnrollmentAttemptConflictError,
   EnrollmentRecoveryExpiredError,
+  EnrollmentRecoveryRevokedError,
   EnrollmentRecoveryUnavailableError,
   NodeAlreadyBoundError,
 } from './enrollment.port';
@@ -196,6 +197,8 @@ export class EnrollAgentUseCase {
       readonly requestFingerprint: string;
       readonly status: string;
       readonly committedAt: Date;
+      readonly bindingId: string;
+      readonly installationId: string;
     },
     attemptId: string,
     requestFingerprint: string,
@@ -207,6 +210,7 @@ export class EnrollAgentUseCase {
     if (attempt.status !== 'committed') {
       throw new EnrollmentRecoveryUnavailableError();
     }
+    await this.ensureRecoveryActive(attemptId, attempt);
 
     let recovery: Awaited<
       ReturnType<EnrollmentPersistencePort['findRecovery']>
@@ -223,8 +227,9 @@ export class EnrollAgentUseCase {
       throw new EnrollmentRecoveryUnavailableError();
     }
 
+    let result: unknown;
     try {
-      const result: unknown = JSON.parse(
+      result = JSON.parse(
         this.recoveryCipher.decrypt(
           recovery.encryptedResult,
           recoveryAdditionalData(attemptId, requestFingerprint),
@@ -233,10 +238,36 @@ export class EnrollAgentUseCase {
       if (!isEnrollmentResult(result)) {
         throw new EnrollmentRecoveryUnavailableError();
       }
-      return { ...result, recovered: true };
     } catch {
       throw new EnrollmentRecoveryUnavailableError();
     }
+
+    await this.ensureRecoveryActive(attemptId, attempt);
+    if (
+      !isEnrollmentResult(result) ||
+      result.binding.id !== attempt.bindingId ||
+      result.installationId !== attempt.installationId
+    ) {
+      throw new EnrollmentRecoveryUnavailableError();
+    }
+    return { ...result, recovered: true };
+  }
+
+  private async ensureRecoveryActive(
+    attemptId: string,
+    attempt: { readonly bindingId: string; readonly installationId: string },
+  ): Promise<void> {
+    let active: boolean;
+    try {
+      active = await this.persistence.isEnrollmentResultActive({
+        attemptId,
+        bindingId: attempt.bindingId,
+        installationId: attempt.installationId,
+      });
+    } catch {
+      throw new EnrollmentRecoveryUnavailableError();
+    }
+    if (!active) throw new EnrollmentRecoveryRevokedError();
   }
 
   private auditFact(
