@@ -2,6 +2,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  GoneException,
   HttpCode,
   HttpStatus,
   Post,
@@ -20,6 +21,8 @@ import {
   BootstrapTokenExpiredError,
   BootstrapTokenInvalidError,
   EnrollmentAttemptConflictError,
+  EnrollmentRecoveryExpiredError,
+  EnrollmentRecoveryUnavailableError,
   InstallationAlreadyBoundError,
   NodeAlreadyBoundError,
 } from '../application/enrollment.port';
@@ -77,6 +80,7 @@ export class EnrollmentController {
         environment: body.environment,
         metadata: body.metadata,
       });
+      response.status(result.recovered ? HttpStatus.OK : HttpStatus.CREATED);
       return {
         enrollment_id: result.enrollmentId,
         installation_id: result.installationId,
@@ -112,6 +116,14 @@ export class EnrollmentController {
       }
       if (error instanceof EnrollmentAttemptConflictError) {
         throw new ConflictException({ code: 'ENROLLMENT_ATTEMPT_CONFLICT' });
+      }
+      if (error instanceof EnrollmentRecoveryExpiredError) {
+        throw new GoneException({ code: 'ENROLLMENT_RECOVERY_EXPIRED' });
+      }
+      if (error instanceof EnrollmentRecoveryUnavailableError) {
+        throw new ServiceUnavailableException({
+          code: 'ENROLLMENT_UNAVAILABLE',
+        });
       }
       throw new ServiceUnavailableException({ code: 'ENROLLMENT_UNAVAILABLE' });
     }

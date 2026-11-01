@@ -19,6 +19,10 @@ export const envSchema = z
         (value) => new URL(value).protocol === 'https:',
         'AGENT_CONTROL_PLANE_BASE_URL must use HTTPS',
       ),
+    AGENT_ENROLLMENT_RECOVERY_KEY: z.string().refine((value) => {
+      const key = Buffer.from(value, 'base64');
+      return key.length === 32 && key.toString('base64') === value;
+    }, 'AGENT_ENROLLMENT_RECOVERY_KEY must be a base64-encoded 32-byte key'),
 
     IAM_PRESENCE_HEARTBEAT_INTERVAL_SECONDS: z.coerce
       .number()

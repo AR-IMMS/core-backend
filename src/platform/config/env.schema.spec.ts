@@ -3,6 +3,7 @@ import { envSchema } from './env.schema';
 const validAgentConfiguration = {
   AGENT_CONTROL_PLANE_BASE_URL:
     'https://core.example.test/api/v1/agent-control',
+  AGENT_ENROLLMENT_RECOVERY_KEY: Buffer.alloc(32).toString('base64'),
 };
 
 describe('validated IAM runtime configuration', () => {
@@ -23,6 +24,16 @@ describe('validated IAM runtime configuration', () => {
     expect(
       envSchema.safeParse({ AGENT_CONTROL_PLANE_BASE_URL: 'http://core.test' })
         .success,
+    ).toBe(false);
+    expect(envSchema.safeParse(validAgentConfiguration).success).toBe(true);
+  });
+
+  test('requires a canonical base64-encoded 256-bit enrollment recovery key', () => {
+    expect(
+      envSchema.safeParse({
+        ...validAgentConfiguration,
+        AGENT_ENROLLMENT_RECOVERY_KEY: 'invalid',
+      }).success,
     ).toBe(false);
     expect(envSchema.safeParse(validAgentConfiguration).success).toBe(true);
   });

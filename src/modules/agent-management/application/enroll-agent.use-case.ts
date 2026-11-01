@@ -18,8 +18,14 @@ import {
   BootstrapTokenConsumedError,
   BootstrapTokenExpiredError,
   BootstrapTokenInvalidError,
+  EnrollmentAttemptConflictError,
+  EnrollmentRecoveryExpiredError,
+  EnrollmentRecoveryUnavailableError,
   NodeAlreadyBoundError,
 } from './enrollment.port';
+import type { EnrollmentRecoveryCipherPort } from './enrollment-recovery.port';
+
+const RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export class EnrollAgentUseCase {
   constructor(
@@ -28,6 +34,7 @@ export class EnrollAgentUseCase {
     private readonly unitOfWork: UnitOfWorkPort,
     private readonly outbox: OutboxWriterPort,
     private readonly controlPlaneBaseUrl: string,
+    private readonly recoveryCipher: EnrollmentRecoveryCipherPort,
     private readonly now: () => Date = () => new Date(),
     private readonly generateSecret: () => Buffer = () => randomBytes(32),
     private readonly generateId: () => string = randomUUID,
@@ -36,12 +43,49 @@ export class EnrollAgentUseCase {
   async execute(input: EnrollmentInput) {
     const now = this.now();
     const tokenHash = hash(input.bootstrapToken);
+    const requestFingerprint = fingerprint(input);
+    const existingAttempt = await this.readAttempt(input.attemptId);
+    if (existingAttempt) {
+      return this.recover(
+        existingAttempt,
+        input.attemptId,
+        requestFingerprint,
+        now,
+      );
+    }
+
     const token = await this.persistence.findToken(tokenHash);
-    if (!token) throw new BootstrapTokenInvalidError();
-    if (token.status === 'consumed') throw new BootstrapTokenConsumedError();
-    if (token.status !== 'active') throw new BootstrapTokenInvalidError();
+    if (!token) {
+      return this.recoverAfterRace(
+        new BootstrapTokenInvalidError(),
+        input.attemptId,
+        requestFingerprint,
+        now,
+      );
+    }
+    if (token.status === 'consumed') {
+      return this.recoverAfterRace(
+        new BootstrapTokenConsumedError(),
+        input.attemptId,
+        requestFingerprint,
+        now,
+      );
+    }
+    if (token.status !== 'active') {
+      return this.recoverAfterRace(
+        new BootstrapTokenInvalidError(),
+        input.attemptId,
+        requestFingerprint,
+        now,
+      );
+    }
     if (token.expiresAt.getTime() <= now.getTime()) {
-      throw new BootstrapTokenExpiredError();
+      return this.recoverAfterRace(
+        new BootstrapTokenExpiredError(),
+        input.attemptId,
+        requestFingerprint,
+        now,
+      );
     }
 
     const eligibility = await this.nodes.getEligibility(token.nodeId);
@@ -50,44 +94,28 @@ export class EnrollAgentUseCase {
       !eligibility.active ||
       !eligibility.hasActivePlacement
     ) {
-      throw new AgentNodeNotEligibleError();
+      return this.recoverAfterRace(
+        new AgentNodeNotEligibleError(),
+        input.attemptId,
+        requestFingerprint,
+        now,
+      );
     }
     if (await this.persistence.hasActiveBinding(token.nodeId)) {
-      throw new NodeAlreadyBoundError();
+      return this.recoverAfterRace(
+        new NodeAlreadyBoundError(),
+        input.attemptId,
+        requestFingerprint,
+        now,
+      );
     }
 
     const accessToken = `arimms_ac_${this.generateSecret().toString('base64url')}`;
     const enrollmentId = this.generateId();
     const bindingId = this.generateId();
     const credentialId = this.generateId();
-    const requestFingerprint = fingerprint(input);
     const metadata = input.metadata ?? {};
-
-    await this.unitOfWork.run(async (context) => {
-      await this.persistence.enroll(
-        {
-          tokenHash,
-          now,
-          attemptId: input.attemptId,
-          requestFingerprint,
-          installationId: input.installation.id,
-          enrollmentId,
-          agentVersion: input.agent.version,
-          environment: input.environment,
-          metadata,
-          bindingId,
-          credentialId,
-          credentialHash: hash(accessToken),
-        },
-        context,
-      );
-      await this.outbox.append(
-        this.auditFact(token.nodeId, enrollmentId, input),
-        context,
-      );
-    });
-
-    return {
+    const result = {
       enrollmentId,
       installationId: input.installation.id,
       binding: {
@@ -101,6 +129,114 @@ export class EnrollAgentUseCase {
         pollIntervalSeconds: 30,
       },
     };
+    const encryptedResult = this.recoveryCipher.encrypt(
+      JSON.stringify(result),
+      recoveryAdditionalData(input.attemptId, requestFingerprint),
+    );
+
+    try {
+      await this.unitOfWork.run(async (context) => {
+        await this.persistence.enroll(
+          {
+            tokenHash,
+            now,
+            attemptId: input.attemptId,
+            requestFingerprint,
+            installationId: input.installation.id,
+            enrollmentId,
+            agentVersion: input.agent.version,
+            environment: input.environment,
+            metadata,
+            bindingId,
+            credentialId,
+            credentialHash: hash(accessToken),
+            recoveryExpiresAt: new Date(now.getTime() + RECOVERY_WINDOW_MS),
+            encryptedResult,
+          },
+          context,
+        );
+        await this.outbox.append(
+          this.auditFact(token.nodeId, enrollmentId, input),
+          context,
+        );
+      });
+    } catch (error) {
+      return this.recoverAfterRace(
+        error,
+        input.attemptId,
+        requestFingerprint,
+        now,
+      );
+    }
+
+    return { ...result, recovered: false };
+  }
+
+  private async recoverAfterRace(
+    originalError: unknown,
+    attemptId: string,
+    requestFingerprint: string,
+    now: Date,
+  ) {
+    const attempt = await this.readAttempt(attemptId);
+    if (!attempt) throw originalError;
+    return this.recover(attempt, attemptId, requestFingerprint, now);
+  }
+
+  private async readAttempt(attemptId: string) {
+    try {
+      return await this.persistence.findAttempt(attemptId);
+    } catch {
+      throw new EnrollmentRecoveryUnavailableError();
+    }
+  }
+
+  private async recover(
+    attempt: {
+      readonly requestFingerprint: string;
+      readonly status: string;
+      readonly committedAt: Date;
+    },
+    attemptId: string,
+    requestFingerprint: string,
+    now: Date,
+  ) {
+    if (attempt.requestFingerprint !== requestFingerprint) {
+      throw new EnrollmentAttemptConflictError();
+    }
+    if (attempt.status !== 'committed') {
+      throw new EnrollmentRecoveryUnavailableError();
+    }
+
+    let recovery: Awaited<
+      ReturnType<EnrollmentPersistencePort['findRecovery']>
+    >;
+    try {
+      recovery = await this.persistence.findRecovery(attemptId);
+    } catch {
+      throw new EnrollmentRecoveryUnavailableError();
+    }
+    if (!recovery || recovery.expiresAt.getTime() <= now.getTime()) {
+      throw new EnrollmentRecoveryExpiredError();
+    }
+    if (recovery.requestFingerprint !== attempt.requestFingerprint) {
+      throw new EnrollmentRecoveryUnavailableError();
+    }
+
+    try {
+      const result: unknown = JSON.parse(
+        this.recoveryCipher.decrypt(
+          recovery.encryptedResult,
+          recoveryAdditionalData(attemptId, requestFingerprint),
+        ),
+      );
+      if (!isEnrollmentResult(result)) {
+        throw new EnrollmentRecoveryUnavailableError();
+      }
+      return { ...result, recovered: true };
+    } catch {
+      throw new EnrollmentRecoveryUnavailableError();
+    }
   }
 
   private auditFact(
@@ -131,6 +267,44 @@ export class EnrollAgentUseCase {
       context: {},
     };
   }
+}
+
+function recoveryAdditionalData(
+  attemptId: string,
+  fingerprint: string,
+): string {
+  return `${attemptId}:${fingerprint}`;
+}
+
+function isEnrollmentResult(value: unknown): value is {
+  enrollmentId: string;
+  installationId: string;
+  binding: { id: string; nodeId: string; status: 'active' };
+  accessToken: string;
+  controlPlane: { baseUrl: string; pollIntervalSeconds: number };
+} {
+  if (typeof value !== 'object' || value === null) return false;
+  const result = value as Record<string, unknown>;
+  if (
+    typeof result['enrollmentId'] !== 'string' ||
+    typeof result['installationId'] !== 'string' ||
+    typeof result['accessToken'] !== 'string' ||
+    typeof result['binding'] !== 'object' ||
+    result['binding'] === null ||
+    typeof result['controlPlane'] !== 'object' ||
+    result['controlPlane'] === null
+  ) {
+    return false;
+  }
+  const binding = result['binding'] as Record<string, unknown>;
+  const controlPlane = result['controlPlane'] as Record<string, unknown>;
+  return (
+    typeof binding['id'] === 'string' &&
+    typeof binding['nodeId'] === 'string' &&
+    binding['status'] === 'active' &&
+    typeof controlPlane['baseUrl'] === 'string' &&
+    typeof controlPlane['pollIntervalSeconds'] === 'number'
+  );
 }
 
 function hash(value: string): string {

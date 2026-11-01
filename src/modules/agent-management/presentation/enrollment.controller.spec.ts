@@ -4,6 +4,7 @@ import {
   EnrollmentController,
 } from './enrollment.controller';
 import { BootstrapTokenExpiredError } from '../application/enrollment.port';
+import { EnrollmentRecoveryExpiredError } from '../application/enrollment.port';
 
 describe('EnrollmentController', () => {
   const validRequest = {
@@ -50,7 +51,7 @@ describe('EnrollmentController', () => {
       }),
     };
     const controller = new EnrollmentController(useCase as never);
-    const response = { setHeader: jest.fn() };
+    const response = { setHeader: jest.fn(), status: jest.fn() };
     await expect(
       controller.enroll(validRequest as never, response as never),
     ).resolves.toEqual({
@@ -67,6 +68,47 @@ describe('EnrollmentController', () => {
       'Cache-Control',
       'no-store',
     );
+    expect(response.status).toHaveBeenCalledWith(201);
+  });
+
+  it('returns HTTP 200 for a recovered result', async () => {
+    const useCase = {
+      execute: jest.fn().mockResolvedValue({
+        enrollmentId: 'enrollment-id',
+        installationId: validRequest.installation.id,
+        binding: { id: 'binding-id', nodeId: 'node-id', status: 'active' },
+        accessToken: 'credential-secret',
+        controlPlane: {
+          baseUrl: 'https://core.test/api/v1/agent-control',
+          pollIntervalSeconds: 30,
+        },
+        recovered: true,
+      }),
+    };
+    const controller = new EnrollmentController(useCase as never);
+    const response = { setHeader: jest.fn(), status: jest.fn() };
+
+    await controller.enroll(validRequest as never, response as never);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+  });
+
+  it('maps expired recovery data to HTTP 410', async () => {
+    const controller = new EnrollmentController({
+      execute: jest
+        .fn()
+        .mockRejectedValue(new EnrollmentRecoveryExpiredError()),
+    } as never);
+
+    await expect(
+      controller.enroll(
+        validRequest as never,
+        { setHeader: jest.fn(), status: jest.fn() } as never,
+      ),
+    ).rejects.toMatchObject({
+      status: 410,
+      response: { code: 'ENROLLMENT_RECOVERY_EXPIRED' },
+    });
   });
 
   it('maps token expiration to a stable ProblemDetails code', async () => {

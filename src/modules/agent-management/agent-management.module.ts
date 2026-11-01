@@ -19,7 +19,10 @@ import { IssueBootstrapTokenUseCase } from './application/issue-bootstrap-token.
 import { EnrollAgentUseCase } from './application/enroll-agent.use-case';
 import { ENROLLMENT_PERSISTENCE_PORT } from './application/enrollment.port';
 import type { EnrollmentPersistencePort } from './application/enrollment.port';
+import { ENROLLMENT_RECOVERY_CIPHER } from './application/enrollment-recovery.port';
+import type { EnrollmentRecoveryCipherPort } from './application/enrollment-recovery.port';
 import { MongoEnrollmentStore } from './infrastructure/mongodb/mongo-enrollment.store';
+import { EnrollmentRecoveryCipher } from './infrastructure/security/enrollment-recovery-cipher';
 import { EnrollmentController } from './presentation/enrollment.controller';
 import { MongoBootstrapTokenStore } from './infrastructure/mongodb/mongo-bootstrap-token.store';
 import { BootstrapTokenController } from './presentation/bootstrap-token.controller';
@@ -29,6 +32,14 @@ import { BootstrapTokenController } from './presentation/bootstrap-token.control
   controllers: [BootstrapTokenController, EnrollmentController],
   providers: [
     MongoBootstrapTokenStore,
+    {
+      provide: ENROLLMENT_RECOVERY_CIPHER,
+      useFactory: (config: ConfigService): EnrollmentRecoveryCipherPort =>
+        new EnrollmentRecoveryCipher(
+          config.getOrThrow<string>('AGENT_ENROLLMENT_RECOVERY_KEY'),
+        ),
+      inject: [ConfigService],
+    },
     MongoEnrollmentStore,
     { provide: BOOTSTRAP_TOKEN_STORE, useExisting: MongoBootstrapTokenStore },
     { provide: ENROLLMENT_PERSISTENCE_PORT, useExisting: MongoEnrollmentStore },
@@ -63,6 +74,7 @@ import { BootstrapTokenController } from './presentation/bootstrap-token.control
         unitOfWork: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[2],
         outbox: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[3],
         config: ConfigService,
+        recoveryCipher: EnrollmentRecoveryCipherPort,
       ) =>
         new EnrollAgentUseCase(
           persistence,
@@ -70,6 +82,10 @@ import { BootstrapTokenController } from './presentation/bootstrap-token.control
           unitOfWork,
           outbox,
           config.getOrThrow<string>('AGENT_CONTROL_PLANE_BASE_URL'),
+          recoveryCipher,
+          undefined,
+          undefined,
+          undefined,
         ),
       inject: [
         ENROLLMENT_PERSISTENCE_PORT,
@@ -77,6 +93,7 @@ import { BootstrapTokenController } from './presentation/bootstrap-token.control
         UNIT_OF_WORK_PORT,
         OUTBOX_WRITER_PORT,
         ConfigService,
+        ENROLLMENT_RECOVERY_CIPHER,
       ],
     },
   ],

@@ -103,6 +103,13 @@ pnpm install
 pnpm start:dev
 ```
 
+Agent enrollment recovery requires `AGENT_ENROLLMENT_RECOVERY_KEY`, a
+base64-encoded 32-byte AES-256 key. Generate a deployment-specific value with
+`openssl rand -base64 32` and supply it through the deployment secret manager.
+All Core instances must share the same key. Keep it unchanged for at least the
+24-hour enrollment recovery window; rotating it sooner makes still-live recovery
+records unreadable.
+
 Common verification commands:
 
 ```bash

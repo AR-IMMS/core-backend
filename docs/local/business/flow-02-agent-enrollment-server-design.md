@@ -24,7 +24,7 @@ The authoritative request/response schema, status codes and naming live in the s
 
 Enrollment request fields: `bootstrap_token`, `enrollment_attempt_id`, `installation.id`, `agent.version`, `environment.os`, `environment.architecture`, optional `environment.hostname`, optional `metadata` (max 4 KiB). No `node_id` in the request. All deployments (Host, VM) use exactly the same protocol.
 
-First-time response `201`: `enrollment_id`, `installation_id`, `binding{id,node_id,status}`, `credential{type,access_token}`, `control_plane{base_url,poll_interval_seconds}`, `meta.request_id`. Recovery `200` is reserved/provisional; see §7.
+First-time response `201`: `enrollment_id`, `installation_id`, `binding{id,node_id,status}`, `credential{type,access_token}`, `control_plane{base_url,poll_interval_seconds}`, `meta.request_id`. A matching retry returns the original result with `200` for 24 hours; see §7.
 
 ## 3. Responsibilities and module boundaries
 
@@ -144,7 +144,9 @@ Baseline error codes: `INVALID_ENROLLMENT_PAYLOAD`, `INVALID_BOOTSTRAP_TOKEN`, `
 
 **Retry rule:** same attempt ID and immutable request for network timeouts / transient 5xx. Never mint a different attempt ID merely because response was lost. Request fingerprint must not expose bootstrap token in logs.
 
-**Open/blocking:** The initial `201` returns an opaque bearer token, but `200` credential recovery cannot safely be assumed yet. Choose an explicitly documented recovery model before finishing I3: e.g., short-lived encrypted result escrow with authenticated re-access, or an alternative credential-issuance/recovery handshake. Do not return a token on the basis of `attempt_id` alone; do not invent an uncontracted endpoint. Recovery storage and expiry must balance availability and secret exposure.
+**Approved I3 recovery:** Persist the complete result encrypted with AES-256-GCM in a separate recovery collection. The request fingerprint covers the bootstrap-token hash and canonical request payload. Recover only when attempt ID and fingerprint match; the attempt ID alone never authorizes recovery. The escrow expires after 24 hours, enforced by an explicit expiry check and MongoDB TTL cleanup. Keep durable attempt records after escrow cleanup so expired and legacy I2 attempts cannot silently start a second enrollment. Return `410 ENROLLMENT_RECOVERY_EXPIRED` when the matching attempt has no escrow or its escrow has expired. Return `503 ENROLLMENT_UNAVAILABLE` for corrupt escrow or decryption failure.
+
+Configure a base64-encoded 32-byte `AGENT_ENROLLMENT_RECOVERY_KEY` from the deployment secret manager. All Core instances must share the same key, which must remain stable until active escrow has expired. Do not rotate early or log key material, decrypted results, tokens or credentials. Existing I2 attempt records have no escrow; they are recognized by fingerprint and safely return recovery-expired without issuing a replacement credential.
 
 **Auth security:** Define credential validity/rotation later, and ensure Gateway ingress credential handling is explicitly separate from Core Control Plane credential handling. Do not silently treat enrollment credential as an OTLP Gateway credential.
 
@@ -162,6 +164,7 @@ Baseline error codes: `INVALID_ENROLLMENT_PAYLOAD`, `INVALID_BOOTSTRAP_TOKEN`, `
 | Same installation attempting two Node bindings | Only one active binding survives. |
 | DB transaction rollback or commit uncertainty | No half-created durable enrollment; retry resolves committed attempt safely. |
 | Response lost after commit | Same attempt recovered under approved secure recovery protocol (I3 gate). |
+| Matching retry after recovery TTL / legacy I2 attempt | `410 ENROLLMENT_RECOVERY_EXPIRED`; no second binding or credential is created. |
 | Secret leakage checks | No token or bearer credential in logs, audit, error details or persisted plaintext. |
 | Revoke binding (I4) | Credential fails authorization even if installation ID is known. |
 
@@ -199,7 +202,7 @@ This is a **logical grouping, not a required refactor**. Preserve the repository
 | Exact Node eligibility API and assigned-location requirement | Core + Asset & Topology, before I1 |
 | Bootstrap reissue policy and concurrent issuance constraints | Core, before I1 merge |
 | IAM permission catalog entry and Dashboard auth semantics | Core IAM, I1 |
-| Credential recovery on lost response / replay window | Core + Agent, before I3 |
+| Credential recovery on lost response / replay window | Approved for I3: AES-256-GCM escrow, 24-hour TTL, matching attempt and fingerprint; expired recovery returns 410. |
 | Credential expiry, rotation, renewal and revocation endpoint contract | Core + Agent, I4 |
 | Trusted Core origin and generated Control Plane URL | Core + Agent, before real integration |
 | Agent control snapshot, heartbeat, uninstall reporting | Separate contract / later flow increments |

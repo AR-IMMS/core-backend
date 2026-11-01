@@ -1,4 +1,5 @@
 import type { UnitOfWorkContext } from '@platform/events';
+import type { EncryptedEnrollmentResult } from './enrollment-recovery.port';
 
 export interface EnrollmentInput {
   readonly bootstrapToken: string;
@@ -14,6 +15,16 @@ export interface EnrollmentInput {
 }
 
 export interface EnrollmentPersistencePort {
+  findAttempt(attemptId: string): Promise<{
+    readonly requestFingerprint: string;
+    readonly status: string;
+    readonly committedAt: Date;
+  } | null>;
+  findRecovery(attemptId: string): Promise<{
+    readonly requestFingerprint: string;
+    readonly expiresAt: Date;
+    readonly encryptedResult: EncryptedEnrollmentResult;
+  } | null>;
   findToken(tokenHash: string): Promise<{
     readonly nodeId: string;
     readonly status: string;
@@ -34,6 +45,8 @@ export interface EnrollmentPersistencePort {
       readonly bindingId: string;
       readonly credentialId: string;
       readonly credentialHash: string;
+      readonly recoveryExpiresAt: Date;
+      readonly encryptedResult: EncryptedEnrollmentResult;
     },
     context: UnitOfWorkContext,
   ): Promise<void>;
@@ -50,4 +63,6 @@ export class AgentNodeNotEligibleError extends Error {}
 export class NodeAlreadyBoundError extends Error {}
 export class InstallationAlreadyBoundError extends Error {}
 export class EnrollmentAttemptConflictError extends Error {}
+export class EnrollmentRecoveryExpiredError extends Error {}
+export class EnrollmentRecoveryUnavailableError extends Error {}
 export class EnrollmentUnavailableError extends Error {}
