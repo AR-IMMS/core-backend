@@ -154,9 +154,14 @@ its data remains in the named `mongodb-data` volume. Use
 ### Logging
 
 The application uses Pino structured JSON logging on `stdout`, including HTTP
-request logs. Request serialization omits query strings and sensitive headers
-are redacted. Logs are available through the container or process output;
-centralized aggregation with Loki/Grafana is deferred to a later phase.
+request logs. Access logs include the method, query-stripped path, response
+status, content type, and duration for successful requests. Set `LOG_LEVEL` to
+`debug` to also log standard HTTP response envelopes for inspection; secret-like
+fields such as tokens, passwords, credentials, cookies, and API keys are
+redacted. Set `LOG_LEVEL` to `info` to disable response detail logs. Sensitive
+request headers are redacted at every level. Logs are available through the
+container or process output; centralized aggregation with Loki/Grafana is
+deferred to a later phase.
 
 ### Continuous Integration
 

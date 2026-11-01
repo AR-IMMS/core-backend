@@ -47,9 +47,16 @@ describe('EnrollmentController HTTP response contract', () => {
     app.setGlobalPrefix('api/v1');
     app.useGlobalPipes(new CoreZodValidationPipe());
     app.useGlobalInterceptors(
-      new ApiResponseInterceptor(new Reflector(), {
-        getId: () => 'request-enrollment-1',
-      } as never),
+      new ApiResponseInterceptor(
+        new Reflector(),
+        {
+          getId: () => 'request-enrollment-1',
+        } as never,
+        {
+          logger: { isLevelEnabled: () => false },
+          debug: () => undefined,
+        } as never,
+      ),
     );
     await app.init();
   });

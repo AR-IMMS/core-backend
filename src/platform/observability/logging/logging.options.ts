@@ -13,7 +13,13 @@ interface SerializedRequest {
 }
 
 interface SerializedResponse {
-  statusCode: number;
+  statusCode: number | null;
+  contentType?: string;
+}
+
+interface PinoSerializedResponse {
+  statusCode: number | null;
+  headers?: Record<string, number | string | string[] | undefined>;
 }
 
 export function createPinoHttpOptions(
@@ -22,6 +28,19 @@ export function createPinoHttpOptions(
 ) {
   return {
     level,
+    customSuccessMessage: (
+      request: IncomingMessage,
+      response: ServerResponse,
+      responseTime: number,
+    ): string => {
+      const contentType = response.getHeader('content-type');
+      const responseType =
+        typeof contentType === 'string'
+          ? ` ${contentType.split(';', 1)[0]}`
+          : '';
+
+      return `${request.method ?? 'UNKNOWN'} ${stripQueryString(request.url)} -> ${response.statusCode}${responseType} (${Math.round(responseTime)} ms)`;
+    },
     ...(environment === 'development'
       ? {
           transport: {
@@ -36,12 +55,6 @@ export function createPinoHttpOptions(
               translateTime: 'SYS:HH:MM:ss',
             },
           },
-          customSuccessMessage: (
-            request: IncomingMessage,
-            response: ServerResponse,
-            responseTime: number,
-          ): string =>
-            `${request.method ?? 'UNKNOWN'} ${stripQueryString(request.url)} -> ${response.statusCode} (${Math.round(responseTime)} ms)`,
         }
       : {}),
 
@@ -108,10 +121,13 @@ export function serializeRequest(
 }
 
 export function serializeResponse(
-  response: ServerResponse,
+  response: PinoSerializedResponse,
 ): SerializedResponse {
+  const contentType = response.headers?.['content-type'];
+
   return {
     statusCode: response.statusCode,
+    ...(typeof contentType === 'string' ? { contentType } : {}),
   };
 }
 

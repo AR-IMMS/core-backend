@@ -66,15 +66,18 @@ describe('Pino HTTP logging options', () => {
     });
   });
 
-  it('serializes the response status without response headers', () => {
-    const request = new IncomingMessage(new Socket());
-    const response = new ServerResponse(request);
-
-    response.statusCode = 503;
-    response.setHeader('Set-Cookie', 'session=secret');
-
-    expect(serializeResponse(response)).toEqual({
+  it('serializes the response status and safe content type without cookies', () => {
+    expect(
+      serializeResponse({
+        statusCode: 503,
+        headers: {
+          'content-type': 'application/problem+json',
+          'set-cookie': ['session=secret'],
+        },
+      }),
+    ).toEqual({
       statusCode: 503,
+      contentType: 'application/problem+json',
     });
   });
 
@@ -148,23 +151,19 @@ describe('Pino HTTP logging options', () => {
     );
   });
 
-  /** It writes concise request lines with the method, sanitized URL, status, and duration. */
-  it('formats successful HTTP requests in one line', () => {
+  /** It writes concise success logs with method, sanitized URL, status, content type, and duration. */
+  it('formats successful HTTP requests in every environment', () => {
     const request = new IncomingMessage(new Socket());
     const response = new ServerResponse(request);
-    const options = createPinoHttpOptions('info', 'development');
-    const customSuccessMessage = options.customSuccessMessage as (
-      request: IncomingMessage,
-      response: ServerResponse,
-      responseTime: number,
-    ) => string;
+    const options = createPinoHttpOptions('info', 'production');
 
     request.method = 'POST';
     request.url = '/api/v1/auth/logout?session=secret';
-    response.statusCode = 204;
+    response.statusCode = 201;
+    response.setHeader('Content-Type', 'application/json; charset=utf-8');
 
-    expect(customSuccessMessage(request, response, 12.4)).toBe(
-      'POST /api/v1/auth/logout -> 204 (12 ms)',
+    expect(options.customSuccessMessage(request, response, 12.4)).toBe(
+      'POST /api/v1/auth/logout -> 201 application/json (12 ms)',
     );
   });
 
