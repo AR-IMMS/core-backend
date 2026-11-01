@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Controller,
   HttpCode,
   HttpStatus,
@@ -15,6 +14,7 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import {
   CurrentHumanPrincipal,
@@ -27,7 +27,9 @@ import {
 } from '../application/agent-access.port';
 import { RevokeAgentBindingUseCase } from '../application/revoke-agent-binding.use-case';
 
-const bindingIdSchema = z.uuid();
+const bindingIdParamsSchema = z.object({ bindingId: z.uuid() }).strict();
+
+class BindingIdParamsDto extends createZodDto(bindingIdParamsSchema) {}
 
 @ApiTags('Agent Bindings')
 @ApiBearerAuth('HumanAccessToken')
@@ -44,15 +46,12 @@ export class AgentBindingRevocationController {
     description: 'Binding is revoked or already revoked.',
   })
   async revoke(
-    @Param('bindingId') rawBindingId: string,
+    @Param() params: BindingIdParamsDto,
     @CurrentHumanPrincipal() principal: AuthenticatedHumanContext,
   ): Promise<void> {
-    const bindingId = bindingIdSchema.safeParse(rawBindingId);
-    if (!bindingId.success) throw new BadRequestException();
-
     try {
       await this.revokeBinding.execute({
-        bindingId: bindingId.data,
+        bindingId: params.bindingId,
         actorId: principal.userId,
       });
     } catch (error) {

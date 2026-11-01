@@ -1,3 +1,5 @@
+import type { ArgumentMetadata } from '@nestjs/common';
+import { CoreZodValidationPipe } from '@platform/http/validation/zod-validation.pipe';
 import { HTTP_ROUTE_POLICY_METADATA } from '@platform/http/api';
 import { AgentBindingNotFoundError } from '../../application/agent-access.port';
 import { AgentBindingRevocationController } from '../agent-binding-revocation.controller';
@@ -22,7 +24,7 @@ describe('AgentBindingRevocationController', () => {
     const controller = new AgentBindingRevocationController(useCase as never);
 
     await expect(
-      controller.revoke(bindingId, principal as never),
+      controller.revoke({ bindingId }, principal as never),
     ).resolves.toBeUndefined();
 
     expect(useCase.execute).toHaveBeenCalledWith({
@@ -32,15 +34,23 @@ describe('AgentBindingRevocationController', () => {
   });
 
   it('rejects malformed binding IDs before invoking the use case', async () => {
-    const useCase = { execute: jest.fn() };
-    const controller = new AgentBindingRevocationController(useCase as never);
+    const [paramsMetatype] = Reflect.getMetadata(
+      'design:paramtypes',
+      AgentBindingRevocationController.prototype,
+      'revoke',
+    ) as unknown[];
+    const pipe = new CoreZodValidationPipe();
 
     await expect(
-      controller.revoke('bad-id', principal as never),
-    ).rejects.toMatchObject({
-      status: 400,
-    });
-    expect(useCase.execute).not.toHaveBeenCalled();
+      pipe.transform(
+        { bindingId: 'bad-id' },
+        {
+          type: 'param',
+          metatype: paramsMetatype as ArgumentMetadata['metatype'],
+          data: undefined,
+        },
+      ),
+    ).rejects.toMatchObject({ status: 400 });
   });
 
   it('maps unknown bindings to the existing not-found ProblemDetails code', async () => {
@@ -49,7 +59,7 @@ describe('AgentBindingRevocationController', () => {
     } as never);
 
     await expect(
-      controller.revoke(bindingId, principal as never),
+      controller.revoke({ bindingId }, principal as never),
     ).rejects.toMatchObject({
       status: 404,
       response: { code: 'NOT_FOUND' },

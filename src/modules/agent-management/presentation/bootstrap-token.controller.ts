@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Controller,
   HttpCode,
@@ -10,6 +9,7 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import {
   ApiBearerAuth,
@@ -34,7 +34,9 @@ import {
   BootstrapTokenIssuanceConflictError,
 } from '../infrastructure/mongodb/mongo-bootstrap-token.store';
 
-const nodeIdSchema = z.uuid();
+const nodeIdParamsSchema = z.object({ nodeId: z.uuid() }).strict();
+
+class NodeIdParamsDto extends createZodDto(nodeIdParamsSchema) {}
 
 @ApiTags('Agent Bootstrap')
 @ApiBearerAuth('HumanAccessToken')
@@ -50,16 +52,14 @@ export class BootstrapTokenController {
   @ApiCreatedResponse({ description: 'Token created and shown once.' })
   @ApiNotFoundResponse({ description: 'Node does not exist.' })
   async issue(
-    @Param('nodeId') rawNodeId: string,
+    @Param() params: NodeIdParamsDto,
     @CurrentHumanPrincipal() principal: AuthenticatedHumanContext,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const nodeId = nodeIdSchema.safeParse(rawNodeId);
-    if (!nodeId.success) throw new BadRequestException();
     response.setHeader('Cache-Control', 'no-store');
     try {
       const result = await this.issueToken.execute({
-        nodeId: nodeId.data,
+        nodeId: params.nodeId,
         createdBy: principal.userId,
       });
       return {

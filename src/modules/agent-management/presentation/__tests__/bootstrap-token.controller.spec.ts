@@ -23,7 +23,7 @@ describe('BootstrapTokenController', () => {
     const response = { setHeader: jest.fn() };
     await expect(
       controller.issue(
-        result.nodeId,
+        { nodeId: result.nodeId },
         { userId: 'admin' } as never,
         response as never,
       ),
@@ -46,7 +46,7 @@ describe('BootstrapTokenController', () => {
     const controller = new BootstrapTokenController(useCase as never);
     await expect(
       controller.issue(
-        'a3cb4e2c-15c1-4c3d-8cc9-110a47ac7001',
+        { nodeId: 'a3cb4e2c-15c1-4c3d-8cc9-110a47ac7001' },
         { userId: 'admin' } as never,
         { setHeader: jest.fn() } as never,
       ),
