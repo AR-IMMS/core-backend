@@ -1,10 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { AuditFactV2 } from '@platform/events';
 import { EnrollAgentUseCase } from '../enroll-agent.use-case';
-import type {
-  EnrollmentInput,
-  EnrollmentPersistencePort,
-} from '../enrollment.port';
+import type { EnrollmentInput } from '../../enrollment-input';
+import type { EnrollmentPersistencePort } from '../../ports/enrollment.port';
 import {
   AgentNodeNotEligibleError,
   BootstrapTokenConsumedError,
@@ -14,7 +12,7 @@ import {
   EnrollmentRecoveryExpiredError,
   EnrollmentRecoveryRevokedError,
   NodeAlreadyBoundError,
-} from '../enrollment.port';
+} from '../../../../domain/errors/registration.errors';
 
 describe('EnrollAgentUseCase', () => {
   const request: EnrollmentInput = {

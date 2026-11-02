@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
+import { IssueBootstrapTokenUseCase } from '../issue-bootstrap-token.use-case';
 import {
   AgentNodeNotEligibleError,
   AgentNodeNotFoundError,
-  IssueBootstrapTokenUseCase,
-} from '../issue-bootstrap-token.use-case';
-import { BootstrapTokenIssuanceConflictError } from '../../infrastructure/mongodb/mongo-bootstrap-token.store';
+} from '../../../../domain/errors/registration.errors';
+import { BootstrapTokenIssuanceConflictError } from '../../errors/bootstrap-token-issuance-conflict.error';
 
 describe('IssueBootstrapTokenUseCase', () => {
   const secret = Buffer.from('01234567890123456789012345678901');

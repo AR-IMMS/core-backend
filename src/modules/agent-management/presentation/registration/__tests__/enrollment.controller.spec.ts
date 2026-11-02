@@ -3,9 +3,11 @@ import {
   enrollmentRequestSchema,
   EnrollmentController,
 } from '../enrollment.controller';
-import { BootstrapTokenExpiredError } from '../../application/enrollment.port';
-import { EnrollmentRecoveryExpiredError } from '../../application/enrollment.port';
-import { EnrollmentRecoveryRevokedError } from '../../application/enrollment.port';
+import {
+  BootstrapTokenExpiredError,
+  EnrollmentRecoveryExpiredError,
+  EnrollmentRecoveryRevokedError,
+} from '../../../domain/errors/registration.errors';
 
 describe('EnrollmentController', () => {
   const validRequest = {

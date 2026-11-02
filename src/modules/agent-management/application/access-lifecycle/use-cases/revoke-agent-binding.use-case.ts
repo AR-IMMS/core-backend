@@ -8,15 +8,13 @@ import {
   AUDIT_FACT_EVENT_TYPE,
   AUDIT_FACT_EVENT_VERSION_V2,
 } from '@platform/events';
-import type { AgentAccessPersistencePort } from './agent-access.port';
-import {
-  AgentBindingNotFoundError,
-  AgentBindingRevocationUnavailableError,
-} from './agent-access.port';
+import type { BindingRevocationPort } from '../ports/binding-revocation.port';
+import { AgentBindingNotFoundError } from '../../../domain/errors/agent-binding.errors';
+import { AgentBindingRevocationUnavailableError } from '../errors/binding-revocation-unavailable.error';
 
 export class RevokeAgentBindingUseCase {
   constructor(
-    private readonly persistence: AgentAccessPersistencePort,
+    private readonly persistence: BindingRevocationPort,
     private readonly unitOfWork: UnitOfWorkPort,
     private readonly outbox: OutboxWriterPort,
     private readonly now: () => Date = () => new Date(),
@@ -28,9 +26,7 @@ export class RevokeAgentBindingUseCase {
     readonly actorId: string;
   }) {
     const revokedAt = this.now();
-    let result: Awaited<
-      ReturnType<AgentAccessPersistencePort['revokeBinding']>
-    >;
+    let result: Awaited<ReturnType<BindingRevocationPort['revokeBinding']>>;
     try {
       result = await this.unitOfWork.run(async (context) => {
         const outcome = await this.persistence.revokeBinding(

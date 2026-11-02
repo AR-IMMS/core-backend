@@ -6,7 +6,7 @@ import request from 'supertest';
 import { ClsService } from 'nestjs-cls';
 import { CoreZodValidationPipe } from '@platform/http/validation/zod-validation.pipe';
 import { ApiResponseInterceptor } from '@platform/http/api';
-import { EnrollAgentUseCase } from '../../application/enroll-agent.use-case';
+import { EnrollAgentUseCase } from '../../../application/registration/use-cases/enroll-agent.use-case';
 import { EnrollmentController } from '../enrollment.controller';
 
 describe('EnrollmentController HTTP response contract', () => {

@@ -1,11 +1,9 @@
 import type { AuditFactV2 } from '@platform/events';
 
 import { RevokeAgentBindingUseCase } from '../revoke-agent-binding.use-case';
-import {
-  AgentBindingNotFoundError,
-  AgentBindingRevocationUnavailableError,
-} from '../agent-access.port';
-import type { AgentAccessPersistencePort } from '../agent-access.port';
+import { AgentBindingNotFoundError } from '../../../../domain/errors/agent-binding.errors';
+import { AgentBindingRevocationUnavailableError } from '../../errors/binding-revocation-unavailable.error';
+import type { BindingRevocationPort } from '../../ports/binding-revocation.port';
 
 describe('RevokeAgentBindingUseCase', () => {
   function harness(
@@ -17,8 +15,7 @@ describe('RevokeAgentBindingUseCase', () => {
       if (!outcome) throw new Error('No revocation outcome configured');
       return Promise.resolve(outcome);
     });
-    const persistence: AgentAccessPersistencePort = {
-      findActivePrincipalByCredentialHash: jest.fn(),
+    const persistence: BindingRevocationPort = {
       revokeBinding,
     };
     const unitOfWork = {

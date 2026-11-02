@@ -14,7 +14,7 @@ import type { Response } from 'express';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { PublicRoute } from '@platform/http/api';
-import { EnrollAgentUseCase } from '../application/enroll-agent.use-case';
+import { EnrollAgentUseCase } from '../../application/registration/use-cases/enroll-agent.use-case';
 import {
   AgentNodeNotEligibleError,
   BootstrapTokenConsumedError,
@@ -23,10 +23,10 @@ import {
   EnrollmentAttemptConflictError,
   EnrollmentRecoveryExpiredError,
   EnrollmentRecoveryRevokedError,
-  EnrollmentRecoveryUnavailableError,
   InstallationAlreadyBoundError,
   NodeAlreadyBoundError,
-} from '../application/enrollment.port';
+} from '../../domain/errors/registration.errors';
+import { EnrollmentRecoveryUnavailableError } from '../../application/registration/errors/enrollment-availability.errors';
 
 export const enrollmentRequestSchema = z
   .object({

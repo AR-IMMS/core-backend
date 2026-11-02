@@ -1,18 +1,6 @@
 import type { UnitOfWorkContext } from '@platform/events';
 import type { EncryptedEnrollmentResult } from './enrollment-recovery.port';
-
-export interface EnrollmentInput {
-  readonly bootstrapToken: string;
-  readonly attemptId: string;
-  readonly installation: { readonly id: string };
-  readonly agent: { readonly version: string };
-  readonly environment: {
-    readonly os: string;
-    readonly architecture: string;
-    readonly hostname?: string;
-  };
-  readonly metadata?: Record<string, unknown>;
-}
+import type { EnrollmentInput } from '../enrollment-input';
 
 export interface EnrollmentPersistencePort {
   findAttempt(attemptId: string): Promise<{
@@ -62,15 +50,3 @@ export interface EnrollmentPersistencePort {
 export const ENROLLMENT_PERSISTENCE_PORT = Symbol(
   'ENROLLMENT_PERSISTENCE_PORT',
 );
-
-export class BootstrapTokenInvalidError extends Error {}
-export class BootstrapTokenExpiredError extends Error {}
-export class BootstrapTokenConsumedError extends Error {}
-export class AgentNodeNotEligibleError extends Error {}
-export class NodeAlreadyBoundError extends Error {}
-export class InstallationAlreadyBoundError extends Error {}
-export class EnrollmentAttemptConflictError extends Error {}
-export class EnrollmentRecoveryExpiredError extends Error {}
-export class EnrollmentRecoveryRevokedError extends Error {}
-export class EnrollmentRecoveryUnavailableError extends Error {}
-export class EnrollmentUnavailableError extends Error {}

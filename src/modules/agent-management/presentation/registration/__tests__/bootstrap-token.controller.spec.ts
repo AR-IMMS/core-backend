@@ -1,6 +1,6 @@
 import { HTTP_ROUTE_POLICY_METADATA } from '@platform/http/api';
 import { BootstrapTokenController } from '../bootstrap-token.controller';
-import { AgentNodeNotEligibleError } from '../../application/issue-bootstrap-token.use-case';
+import { AgentNodeNotEligibleError } from '../../../domain/errors/registration.errors';
 
 describe('BootstrapTokenController', () => {
   it('requires agent management permission', () => {

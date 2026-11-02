@@ -8,11 +8,9 @@ import {
   AUDIT_FACT_EVENT_TYPE,
   AUDIT_FACT_EVENT_VERSION_V2,
 } from '@platform/events';
-import type { NodeEligibilityPort } from './bootstrap-token.port';
-import type {
-  EnrollmentInput,
-  EnrollmentPersistencePort,
-} from './enrollment.port';
+import type { NodeEligibilityPort } from '../ports/bootstrap-token.port';
+import type { EnrollmentPersistencePort } from '../ports/enrollment.port';
+import type { EnrollmentInput } from '../enrollment-input';
 import {
   AgentNodeNotEligibleError,
   BootstrapTokenConsumedError,
@@ -21,10 +19,10 @@ import {
   EnrollmentAttemptConflictError,
   EnrollmentRecoveryExpiredError,
   EnrollmentRecoveryRevokedError,
-  EnrollmentRecoveryUnavailableError,
   NodeAlreadyBoundError,
-} from './enrollment.port';
-import type { EnrollmentRecoveryCipherPort } from './enrollment-recovery.port';
+} from '../../../domain/errors/registration.errors';
+import { EnrollmentRecoveryUnavailableError } from '../errors/enrollment-availability.errors';
+import type { EnrollmentRecoveryCipherPort } from '../ports/enrollment-recovery.port';
 
 const RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1000;
 

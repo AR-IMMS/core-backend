@@ -24,15 +24,12 @@ import {
   CurrentHumanPrincipal,
 } from '@modules/iam/presentation/authorization.decorators';
 import type { AuthenticatedHumanContext } from '@modules/iam/presentation/authorization.decorators';
+import { IssueBootstrapTokenUseCase } from '../../application/registration/use-cases/issue-bootstrap-token.use-case';
+import { BootstrapTokenIssuanceConflictError } from '../../application/registration/errors/bootstrap-token-issuance-conflict.error';
 import {
-  IssueBootstrapTokenUseCase,
-  AgentNodeNotFoundError,
   AgentNodeNotEligibleError,
-} from '../application/issue-bootstrap-token.use-case';
-import {
-  ActiveAgentBindingError,
-  BootstrapTokenIssuanceConflictError,
-} from '../infrastructure/mongodb/mongo-bootstrap-token.store';
+  AgentNodeNotFoundError,
+} from '../../domain/errors/registration.errors';
 
 const nodeIdParamsSchema = z.object({ nodeId: z.uuid() }).strict();
 
@@ -71,10 +68,7 @@ export class BootstrapTokenController {
     } catch (error) {
       if (error instanceof AgentNodeNotFoundError)
         throw new NotFoundException();
-      if (
-        error instanceof AgentNodeNotEligibleError ||
-        error instanceof ActiveAgentBindingError
-      ) {
+      if (error instanceof AgentNodeNotEligibleError) {
         throw new ConflictException({ code: 'NODE_NOT_ELIGIBLE' });
       }
       if (error instanceof BootstrapTokenIssuanceConflictError) {

@@ -3,7 +3,7 @@ import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { ServiceUnavailableException } from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
 import { HTTP_ROUTE_POLICY_METADATA } from '@platform/http/api';
-import type { AgentAccessPersistencePort } from '../../application/agent-access.port';
+import type { AgentCredentialAuthorizationPort } from '../../../application/access-lifecycle/ports/agent-credential-authorization.port';
 import { AgentAuthenticationGuard } from '../agent-authentication.guard';
 import { AgentAuthenticated } from '../agent-authenticated.decorator';
 
@@ -16,9 +16,8 @@ describe('AgentAuthenticationGuard', () => {
 
   it('resolves the trusted principal from the hash of the opaque bearer', async () => {
     const findPrincipal = jest.fn().mockResolvedValue(principal);
-    const access: AgentAccessPersistencePort = {
+    const access: AgentCredentialAuthorizationPort = {
       findActivePrincipalByCredentialHash: findPrincipal,
-      revokeBinding: jest.fn(),
     };
     const guard = new AgentAuthenticationGuard(access);
     const request = {
@@ -37,9 +36,8 @@ describe('AgentAuthenticationGuard', () => {
     'rejects missing or malformed bearer header %s without querying storage',
     async (authorization) => {
       const findPrincipal = jest.fn();
-      const access: AgentAccessPersistencePort = {
+      const access: AgentCredentialAuthorizationPort = {
         findActivePrincipalByCredentialHash: findPrincipal,
-        revokeBinding: jest.fn(),
       };
       const guard = new AgentAuthenticationGuard(access);
 
@@ -56,7 +54,6 @@ describe('AgentAuthenticationGuard', () => {
   it('does not disclose whether a credential is unknown or revoked', async () => {
     const guard = new AgentAuthenticationGuard({
       findActivePrincipalByCredentialHash: jest.fn().mockResolvedValue(null),
-      revokeBinding: jest.fn(),
     });
 
     await expect(
@@ -74,7 +71,6 @@ describe('AgentAuthenticationGuard', () => {
       findActivePrincipalByCredentialHash: jest
         .fn()
         .mockRejectedValue(new Error('credential secret leaked by driver')),
-      revokeBinding: jest.fn(),
     });
 
     const error = await guard

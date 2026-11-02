@@ -1,7 +1,7 @@
 import type { ArgumentMetadata } from '@nestjs/common';
 import { CoreZodValidationPipe } from '@platform/http/validation/zod-validation.pipe';
 import { HTTP_ROUTE_POLICY_METADATA } from '@platform/http/api';
-import { AgentBindingNotFoundError } from '../../application/agent-access.port';
+import { AgentBindingNotFoundError } from '../../../domain/errors/agent-binding.errors';
 import { AgentBindingRevocationController } from '../agent-binding-revocation.controller';
 
 describe('AgentBindingRevocationController', () => {

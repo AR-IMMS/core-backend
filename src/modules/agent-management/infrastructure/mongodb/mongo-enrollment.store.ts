@@ -2,18 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
 import type { UnitOfWorkContext } from '@platform/events';
-import type { EnrollmentPersistencePort } from '../../application/enrollment.port';
+import type { EnrollmentPersistencePort } from '../../application/registration/ports/enrollment.port';
 import {
   BootstrapTokenConsumedError,
   BootstrapTokenExpiredError,
   BootstrapTokenInvalidError,
   EnrollmentAttemptConflictError,
-  EnrollmentRecoveryUnavailableError,
-  EnrollmentUnavailableError,
   InstallationAlreadyBoundError,
   NodeAlreadyBoundError,
-} from '../../application/enrollment.port';
-import type { EncryptedEnrollmentResult } from '../../application/enrollment-recovery.port';
+} from '../../domain/errors/registration.errors';
+import {
+  EnrollmentRecoveryUnavailableError,
+  EnrollmentUnavailableError,
+} from '../../application/registration/errors/enrollment-availability.errors';
+import type { EncryptedEnrollmentResult } from '../../application/registration/ports/enrollment-recovery.port';
 
 @Injectable()
 export class MongoEnrollmentStore implements EnrollmentPersistencePort {

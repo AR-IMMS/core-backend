@@ -11,10 +11,11 @@ import {
 import type {
   BootstrapTokenStorePort,
   NodeEligibilityPort,
-} from './bootstrap-token.port';
-
-export class AgentNodeNotFoundError extends Error {}
-export class AgentNodeNotEligibleError extends Error {}
+} from '../ports/bootstrap-token.port';
+import {
+  AgentNodeNotEligibleError,
+  AgentNodeNotFoundError,
+} from '../../../domain/errors/registration.errors';
 
 export class IssueBootstrapTokenUseCase {
   constructor(

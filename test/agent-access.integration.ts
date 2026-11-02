@@ -7,10 +7,10 @@ import { BOOTSTRAP_TOKEN_INDEXES_MIGRATION } from '@modules/agent-management/inf
 import { ENROLLMENT_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/enrollment-indexes.migration';
 import { ENROLLMENT_RECOVERY_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/enrollment-recovery.migration';
 import { AGENT_ACCESS_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/agent-access-indexes.migration';
-import { EnrollAgentUseCase } from '@modules/agent-management/application/enroll-agent.use-case';
-import { EnrollmentRecoveryRevokedError } from '@modules/agent-management/application/enrollment.port';
-import { AgentBindingRevocationUnavailableError } from '@modules/agent-management/application/agent-access.port';
-import { RevokeAgentBindingUseCase } from '@modules/agent-management/application/revoke-agent-binding.use-case';
+import { EnrollAgentUseCase } from '@modules/agent-management/application/registration/use-cases/enroll-agent.use-case';
+import { EnrollmentRecoveryRevokedError } from '@modules/agent-management/domain/errors/registration.errors';
+import { AgentBindingRevocationUnavailableError } from '@modules/agent-management/application/access-lifecycle/errors/binding-revocation-unavailable.error';
+import { RevokeAgentBindingUseCase } from '@modules/agent-management/application/access-lifecycle/use-cases/revoke-agent-binding.use-case';
 import { EnrollmentRecoveryCipher } from '@modules/agent-management/infrastructure/security/enrollment-recovery-cipher';
 import { MongoOutboxStore } from '@platform/events/infrastructure/mongodb/mongo-outbox.store';
 import type { MongoOutboxModel } from '@platform/events/infrastructure/mongodb/mongo-outbox.store';

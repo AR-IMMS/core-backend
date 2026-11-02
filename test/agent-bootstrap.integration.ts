@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { createConnection } from 'mongoose';
 import { MongoBootstrapTokenStore } from '@modules/agent-management/infrastructure/mongodb/mongo-bootstrap-token.store';
 import { BOOTSTRAP_TOKEN_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/bootstrap-token-indexes.migration';
-import { IssueBootstrapTokenUseCase } from '@modules/agent-management/application/issue-bootstrap-token.use-case';
+import { IssueBootstrapTokenUseCase } from '@modules/agent-management/application/registration/use-cases/issue-bootstrap-token.use-case';
 import { MongoOutboxStore } from '@platform/events/infrastructure/mongodb/mongo-outbox.store';
 import type { MongoOutboxModel } from '@platform/events/infrastructure/mongodb/mongo-outbox.store';
 import { MongoUnitOfWork } from '@platform/events/infrastructure/mongodb/mongo-unit-of-work';

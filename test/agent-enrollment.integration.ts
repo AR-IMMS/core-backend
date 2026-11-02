@@ -5,8 +5,8 @@ import { MongoEnrollmentStore } from '@modules/agent-management/infrastructure/m
 import { BOOTSTRAP_TOKEN_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/bootstrap-token-indexes.migration';
 import { ENROLLMENT_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/enrollment-indexes.migration';
 import { ENROLLMENT_RECOVERY_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/enrollment-recovery.migration';
-import { EnrollAgentUseCase } from '@modules/agent-management/application/enroll-agent.use-case';
-import { EnrollmentRecoveryExpiredError } from '@modules/agent-management/application/enrollment.port';
+import { EnrollAgentUseCase } from '@modules/agent-management/application/registration/use-cases/enroll-agent.use-case';
+import { EnrollmentRecoveryExpiredError } from '@modules/agent-management/domain/errors/registration.errors';
 import { EnrollmentRecoveryCipher } from '@modules/agent-management/infrastructure/security/enrollment-recovery-cipher';
 import { MongoOutboxStore } from '@platform/events/infrastructure/mongodb/mongo-outbox.store';
 import type { MongoOutboxModel } from '@platform/events/infrastructure/mongodb/mongo-outbox.store';

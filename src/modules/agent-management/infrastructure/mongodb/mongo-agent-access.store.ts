@@ -3,12 +3,15 @@ import { InjectConnection } from '@nestjs/mongoose';
 import type { ClientSession, Connection } from 'mongoose';
 import type { UnitOfWorkContext } from '@platform/events';
 import type {
-  AgentAccessPersistencePort,
+  AgentCredentialAuthorizationPort,
   AgentPrincipal,
-} from '../../application/agent-access.port';
+} from '../../application/access-lifecycle/ports/agent-credential-authorization.port';
+import type { BindingRevocationPort } from '../../application/access-lifecycle/ports/binding-revocation.port';
 
 @Injectable()
-export class MongoAgentAccessStore implements AgentAccessPersistencePort {
+export class MongoAgentAccessStore
+  implements AgentCredentialAuthorizationPort, BindingRevocationPort
+{
   constructor(@InjectConnection() private readonly connection: Connection) {}
 
   async findActivePrincipalByCredentialHash(

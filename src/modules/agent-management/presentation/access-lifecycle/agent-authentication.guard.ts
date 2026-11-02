@@ -7,10 +7,10 @@ import {
 } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import type {
-  AgentAccessPersistencePort,
+  AgentCredentialAuthorizationPort,
   AgentPrincipal,
-} from '../application/agent-access.port';
-import { AGENT_ACCESS_PERSISTENCE_PORT } from '../application/agent-access.port';
+} from '../../application/access-lifecycle/ports/agent-credential-authorization.port';
+import { AGENT_CREDENTIAL_AUTHORIZATION_PORT } from '../../application/access-lifecycle/ports/agent-credential-authorization.port';
 
 interface AgentAuthenticationRequest {
   readonly headers: { readonly authorization?: string };
@@ -21,8 +21,8 @@ interface AgentAuthenticationRequest {
 @Injectable()
 export class AgentAuthenticationGuard implements CanActivate {
   constructor(
-    @Inject(AGENT_ACCESS_PERSISTENCE_PORT)
-    private readonly access: AgentAccessPersistencePort,
+    @Inject(AGENT_CREDENTIAL_AUTHORIZATION_PORT)
+    private readonly access: AgentCredentialAuthorizationPort,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

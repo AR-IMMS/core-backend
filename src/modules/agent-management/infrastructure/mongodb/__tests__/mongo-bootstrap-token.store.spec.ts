@@ -1,7 +1,5 @@
-import {
-  BootstrapTokenIssuanceConflictError,
-  MongoBootstrapTokenStore,
-} from '../mongo-bootstrap-token.store';
+import { BootstrapTokenIssuanceConflictError } from '../../../application/registration/errors/bootstrap-token-issuance-conflict.error';
+import { MongoBootstrapTokenStore } from '../mongo-bootstrap-token.store';
 
 describe('MongoBootstrapTokenStore', () => {
   it('surfaces a unique-index race as an issuance conflict', async () => {

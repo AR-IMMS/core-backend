@@ -7,7 +7,7 @@ import {
 import type { ExecutionContext } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { defineHttpRoutePolicy } from '@platform/http/api';
-import type { AgentPrincipal } from '../application/agent-access.port';
+import type { AgentPrincipal } from '../../application/access-lifecycle/ports/agent-credential-authorization.port';
 import { AgentAuthenticationGuard } from './agent-authentication.guard';
 
 /** Applies the Agent-only credential guard and its paired Human IAM bypass policy. */

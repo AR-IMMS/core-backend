@@ -11,9 +11,9 @@ import {
   IAM_HUMAN_SESSION_ACCESS,
 } from '@modules/iam/application/ports/human-session-access.token';
 import { IAM_PERMISSION_CATALOG_PORT } from '@modules/iam/application/ports/permission-catalog.token';
-import type { AgentPrincipal } from '../../application/agent-access.port';
-import { AGENT_ACCESS_PERSISTENCE_PORT } from '../../application/agent-access.port';
-import { RevokeAgentBindingUseCase } from '../../application/revoke-agent-binding.use-case';
+import type { AgentPrincipal } from '../../../application/access-lifecycle/ports/agent-credential-authorization.port';
+import { AGENT_CREDENTIAL_AUTHORIZATION_PORT } from '../../../application/access-lifecycle/ports/agent-credential-authorization.port';
+import { RevokeAgentBindingUseCase } from '../../../application/access-lifecycle/use-cases/revoke-agent-binding.use-case';
 import { AgentAuthenticationGuard } from '../agent-authentication.guard';
 import {
   AgentAuthenticated,
@@ -47,7 +47,6 @@ describe('Agent authentication and Admin revocation HTTP boundaries', () => {
           : null,
       ),
     ),
-    revokeBinding: jest.fn(),
   };
   const tokenVerifier = {
     verifyAccessToken: jest.fn((token: string) =>
@@ -80,7 +79,7 @@ describe('Agent authentication and Admin revocation HTTP boundaries', () => {
       controllers: [AgentProbeController, AgentBindingRevocationController],
       providers: [
         AgentAuthenticationGuard,
-        { provide: AGENT_ACCESS_PERSISTENCE_PORT, useValue: access },
+        { provide: AGENT_CREDENTIAL_AUTHORIZATION_PORT, useValue: access },
         { provide: RevokeAgentBindingUseCase, useValue: revoke },
         { provide: IAM_ACCESS_TOKEN_VERIFIER, useValue: tokenVerifier },
         { provide: IAM_HUMAN_SESSION_ACCESS, useValue: sessionAccess },

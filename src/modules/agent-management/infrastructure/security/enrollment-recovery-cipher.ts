@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import type {
   EncryptedEnrollmentResult,
   EnrollmentRecoveryCipherPort,
-} from '../../application/enrollment-recovery.port';
+} from '../../application/registration/ports/enrollment-recovery.port';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_VERSION = 'v1';

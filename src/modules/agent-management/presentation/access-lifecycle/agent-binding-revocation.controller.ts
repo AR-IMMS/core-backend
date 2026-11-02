@@ -21,11 +21,9 @@ import {
   RequirePermissions,
 } from '@modules/iam/presentation/authorization.decorators';
 import type { AuthenticatedHumanContext } from '@modules/iam/presentation/authorization.decorators';
-import {
-  AgentBindingNotFoundError,
-  AgentBindingRevocationUnavailableError,
-} from '../application/agent-access.port';
-import { RevokeAgentBindingUseCase } from '../application/revoke-agent-binding.use-case';
+import { RevokeAgentBindingUseCase } from '../../application/access-lifecycle/use-cases/revoke-agent-binding.use-case';
+import { AgentBindingRevocationUnavailableError } from '../../application/access-lifecycle/errors/binding-revocation-unavailable.error';
+import { AgentBindingNotFoundError } from '../../domain/errors/agent-binding.errors';
 
 const bindingIdParamsSchema = z.object({ bindingId: z.uuid() }).strict();
 
