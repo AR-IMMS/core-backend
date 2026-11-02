@@ -19,6 +19,7 @@ Implement the server side of Agent enrollment so that Agent developers can indep
 | --- | --- | --- | --- |
 | Admin Dashboard | `POST /api/v1/nodes/{nodeId}/agent-bootstrap-tokens` | Issue one-time Node-bound bootstrap token | I1 |
 | Telemetry Agent | `POST /api/v1/agent-enrollments` | Validate attempt, create binding, issue credential | I2–I3 |
+| Admin Dashboard | `GET /api/v1/agents`, `GET /api/v1/agents/{installationId}`, `GET /api/v1/agents/{installationId}/bindings` | Read installations, current binding and binding history | I6 |
 
 The authoritative request/response schema, status codes and naming live in the shared **OpenAPI YAML**, not duplicate NestJS-only DTO documentation. All client-facing JSON uses `snake_case`; reuse the existing API response envelope and `application/problem+json` policy.
 
@@ -135,8 +136,9 @@ sequenceDiagram
 | **I3 — Reliability & Recovery** | Idempotency, lost response, restart/retry, races | Persisted attempt, recovery security mechanism and stable 200 behavior | Same request recognized, conflicting request rejected, race and transaction rollback covered. Must freeze recovery mechanism before claiming complete. |
 | **I4 — Authentication & Revocation** | Credential validation bound to active binding; Admin revoke | Agent auth guard, idempotent revoke API, indexes, migration and contracts | Invalid/revoked credentials rejected; revoke is atomic and audited once; history and stable installation identity retained. |
 | **I5 — Backend Readiness & Handoff** | Contract conformance and independent enrollment integration | Verified OpenAPI, existing I1-I4 behavior checks, and shared Agent integration handoff | Enrollment and lifecycle contracts match runtime. Agent operational readiness is reported separately because Control Plane operations are not implemented. |
+| **I6 — Agent Registry** | Read-only Admin installation and binding visibility | Three `agent:manage`-protected query APIs, cursor pagination and history index | List/filter, detail, and historical binding queries expose no arbitrary metadata or secret material. |
 
-Keep issues as five vertical increments, not dozens of file-based tasks. A PR can be smaller than an increment, but no increment is “done” without its negative tests and API contract alignment. I2 is a **development-only happy path** until I3 recovery is closed.
+Keep issues as vertical increments, not dozens of file-based tasks. A PR can be smaller than an increment, but no increment is “done” without its negative tests and API contract alignment. I2 is a **development-only happy path** until I3 recovery is closed.
 
 ## 7. Error, idempotency and credential recovery
 
@@ -230,3 +232,13 @@ This is a **logical grouping, not a required refactor**. Preserve the repository
 - The published enrollment contract contains bootstrap-token issuance, initial/recovered enrollment, and Admin binding revocation. The `agentBearer` scheme is reusable documentation for future Agent-authenticated operations; no production I1-I4 operation currently accepts an Agent credential. I5 must verify the guard through existing test harnesses without adding a production test endpoint.
 - Enrollment returns the configured HTTPS `AGENT_CONTROL_PLANE_BASE_URL` unchanged with `poll_interval_seconds: 30`. This value is only a future Control Plane pointer; no Control Plane operation is available at that URL in I5.
 - Report **Backend Enrollment Ready** separately from **Agent Operational Ready**. Enrollment readiness covers token issuance, enrollment/recovery, credential persistence, and revocation contracts. Agent operational readiness requires authenticated Agent APIs and Control Plane functionality that are outside I5.
+
+## 13. I6 Agent Registry
+
+- Registry is a read-only capability over the existing Installation and Binding persistence. It does not create a new aggregate or collection and does not query Asset & Topology; responses contain `node_id` references only.
+- `GET /api/v1/agents` lists installations in installation-ID order using the standard cursor envelope. `page_size` is 1–100 (default 20); optional `node_id` selects the installation with the current active binding to that Node.
+- `GET /api/v1/agents/{installationId}` returns installation ID, Agent version, environment, timestamps, and the current active binding or `null`. `GET /api/v1/agents/{installationId}/bindings` returns active and revoked bindings in descending creation order with cursor pagination.
+- All three routes require Human IAM permission `agent:manage`. Invalid IDs, filters, and cursors return `400`; missing installation returns `404`.
+- Admin responses omit arbitrary enrollment metadata, credential/token hashes, plaintext credentials/tokens, and encrypted recovery data. A revoked binding includes its persisted `revoked_at` timestamp; an installation without an active binding (including after revocation) returns `current_binding: null`. `updated_at` is null until re-enrollment updates the installation. `revoked_by` remains available through Audit and is not duplicated in Registry history.
+- Unexpected Registry persistence failures use the existing ProblemDetails `500` response. The query path has no explicit service-unavailable mapping, so it does not declare `503`.
+- Registry describes registration and binding state only; it does not report connectivity, Collector activation, or telemetry health. The local `api/v1/agent-enrollment.yaml` is synchronized to the shared OpenAPI contract.

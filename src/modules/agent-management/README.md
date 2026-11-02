@@ -10,15 +10,18 @@ module checks eligibility through its public contract.
   and recovers matching enrollment attempts.
 - `application/access-lifecycle/` resolves active Agent credentials and revokes
   bindings. Matching HTTP adapters live in `presentation/`.
+- `application/agent-registry/` provides read-only installation and binding
+  history queries for authorized Admins; `presentation/agent-registry/` exposes
+  the cursor-paginated HTTP APIs. Registry responses omit arbitrary enrollment
+  metadata and all credential, token, and recovery material.
 
 MongoDB and cryptographic adapters remain under `infrastructure/`. Business
 outcome errors are framework-free under `domain/errors/`; operational failures
 remain with their application capability.
 
-## Future Flow 2 capabilities
+## Not implemented
 
-Agent Registry management visibility and Agent Control APIs are not implemented
-yet. Add their capability folders when the corresponding business use cases and
-contracts are approved; do not use these capabilities to imply that those APIs
-already exist. No Control Plane, heartbeat, telemetry ingestion, Collector
-activation, or uninstall endpoint is provided by the current implementation.
+Agent Control APIs are not implemented. No Control Plane, heartbeat, telemetry
+ingestion, Collector activation, or uninstall endpoint is provided by the current
+implementation. A registered installation or active binding does not indicate
+Agent connectivity or telemetry health.

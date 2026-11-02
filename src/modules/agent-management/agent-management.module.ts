@@ -33,6 +33,13 @@ import { EnrollmentRecoveryCipher } from './infrastructure/security/enrollment-r
 import { EnrollmentController } from './presentation/registration/enrollment.controller';
 import { MongoBootstrapTokenStore } from './infrastructure/mongodb/mongo-bootstrap-token.store';
 import { BootstrapTokenController } from './presentation/registration/bootstrap-token.controller';
+import { AgentRegistryController } from './presentation/agent-registry/agent-registry.controller';
+import { AGENT_REGISTRY_QUERY_PORT } from './application/agent-registry/ports/agent-registry-query.port';
+import type { AgentRegistryQueryPort } from './application/agent-registry/ports/agent-registry-query.port';
+import { ListAgentInstallationsUseCase } from './application/agent-registry/use-cases/list-agent-installations.use-case';
+import { GetAgentInstallationUseCase } from './application/agent-registry/use-cases/get-agent-installation.use-case';
+import { ListInstallationBindingsUseCase } from './application/agent-registry/use-cases/list-installation-bindings.use-case';
+import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-agent-registry-query.store';
 
 @Module({
   imports: [AssetTopologyModule],
@@ -40,6 +47,7 @@ import { BootstrapTokenController } from './presentation/registration/bootstrap-
     BootstrapTokenController,
     EnrollmentController,
     AgentBindingRevocationController,
+    AgentRegistryController,
   ],
   providers: [
     MongoBootstrapTokenStore,
@@ -53,6 +61,29 @@ import { BootstrapTokenController } from './presentation/registration/bootstrap-
     },
     MongoEnrollmentStore,
     MongoAgentAccessStore,
+    MongoAgentRegistryQueryStore,
+    {
+      provide: AGENT_REGISTRY_QUERY_PORT,
+      useExisting: MongoAgentRegistryQueryStore,
+    },
+    {
+      provide: ListAgentInstallationsUseCase,
+      useFactory: (query: AgentRegistryQueryPort) =>
+        new ListAgentInstallationsUseCase(query),
+      inject: [AGENT_REGISTRY_QUERY_PORT],
+    },
+    {
+      provide: GetAgentInstallationUseCase,
+      useFactory: (query: AgentRegistryQueryPort) =>
+        new GetAgentInstallationUseCase(query),
+      inject: [AGENT_REGISTRY_QUERY_PORT],
+    },
+    {
+      provide: ListInstallationBindingsUseCase,
+      useFactory: (query: AgentRegistryQueryPort) =>
+        new ListInstallationBindingsUseCase(query),
+      inject: [AGENT_REGISTRY_QUERY_PORT],
+    },
     AgentAuthenticationGuard,
     {
       provide: AGENT_CREDENTIAL_AUTHORIZATION_PORT,

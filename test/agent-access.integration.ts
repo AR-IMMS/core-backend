@@ -3,10 +3,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createConnection } from 'mongoose';
 import { MongoEnrollmentStore } from '@modules/agent-management/infrastructure/mongodb/mongo-enrollment.store';
 import { MongoAgentAccessStore } from '@modules/agent-management/infrastructure/mongodb/mongo-agent-access.store';
+import { MongoAgentRegistryQueryStore } from '@modules/agent-management/infrastructure/mongodb/mongo-agent-registry-query.store';
 import { BOOTSTRAP_TOKEN_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/bootstrap-token-indexes.migration';
 import { ENROLLMENT_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/enrollment-indexes.migration';
 import { ENROLLMENT_RECOVERY_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/enrollment-recovery.migration';
 import { AGENT_ACCESS_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/agent-access-indexes.migration';
+import { AGENT_REGISTRY_QUERY_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/agent-registry-query-indexes.migration';
 import { EnrollAgentUseCase } from '@modules/agent-management/application/registration/use-cases/enroll-agent.use-case';
 import { EnrollmentRecoveryRevokedError } from '@modules/agent-management/domain/errors/registration.errors';
 import { AgentBindingRevocationUnavailableError } from '@modules/agent-management/application/access-lifecycle/errors/binding-revocation-unavailable.error';
@@ -37,6 +39,13 @@ async function main(): Promise<void> {
     await ENROLLMENT_INDEXES_MIGRATION.up(connection);
     await ENROLLMENT_RECOVERY_MIGRATION.up(connection);
     await AGENT_ACCESS_INDEXES_MIGRATION.up(connection);
+    await AGENT_REGISTRY_QUERY_INDEXES_MIGRATION.up(connection);
+    assert.equal(
+      await connection
+        .collection('agent_management_bindings')
+        .indexExists('ix_agent_bindings_installation_history'),
+      true,
+    );
 
     const outboxModel = connection.model(OUTBOX_ENTRY_MODEL, OutboxEntrySchema);
     await outboxModel.init();
@@ -46,6 +55,7 @@ async function main(): Promise<void> {
     const unitOfWork = new MongoUnitOfWork(connection);
     const enrollmentStore = new MongoEnrollmentStore(connection);
     const accessStore = new MongoAgentAccessStore(connection);
+    const registryStore = new MongoAgentRegistryQueryStore(connection);
     const recoveryCipher = new EnrollmentRecoveryCipher(
       Buffer.alloc(32, 7).toString('base64'),
     );
@@ -113,6 +123,16 @@ async function main(): Promise<void> {
       await accessStore.findActivePrincipalByCredentialHash(credentialHash),
       null,
     );
+    const installationAfterRevocation =
+      await registryStore.findInstallation(installationId);
+    assert(installationAfterRevocation);
+    assert.equal(installationAfterRevocation.currentBinding, null);
+    assert.equal(installationAfterRevocation.updatedAt, null);
+    const nodeFilterAfterRevocation = await registryStore.listInstallations({
+      pageSize: 20,
+      nodeId: 'node-agent-access',
+    });
+    assert.equal(nodeFilterAfterRevocation.items.length, 0);
     await connection
       .collection('agent_management_bindings')
       .updateOne(
@@ -244,6 +264,83 @@ async function main(): Promise<void> {
     const reEnrolled =
       await createEnrollmentUseCase().execute(reEnrollmentInput);
     assert.notEqual(reEnrolled.binding.id, created.binding.id);
+    const activeForNode = await registryStore.listInstallations({
+      pageSize: 20,
+      nodeId: 'node-agent-access',
+    });
+    assert.equal(activeForNode.items.length, 1);
+    assert.equal(activeForNode.items[0]?.installationId, installationId);
+    assert.equal(
+      activeForNode.items[0]?.currentBinding?.bindingId,
+      reEnrolled.binding.id,
+    );
+    assert.equal(activeForNode.items[0]?.agentVersion, '0.2.0');
+    assert(!('metadata' in (activeForNode.items[0] ?? {})));
+    const installationAfterReRegistration =
+      await registryStore.findInstallation(installationId);
+    assert(installationAfterReRegistration);
+    assert.equal(
+      installationAfterReRegistration.currentBinding?.bindingId,
+      reEnrolled.binding.id,
+    );
+    assert(installationAfterReRegistration.updatedAt instanceof Date);
+    assert(
+      installationAfterReRegistration.updatedAt.getTime() >=
+        originalCreatedAt.getTime(),
+    );
+    const firstInstallationPage = await registryStore.listInstallations({
+      pageSize: 1,
+    });
+    assert.equal(firstInstallationPage.items.length, 1);
+    assert.equal(firstInstallationPage.hasMore, true);
+    const secondInstallationPage = await registryStore.listInstallations({
+      pageSize: 1,
+      afterInstallationId: firstInstallationPage.items[0].installationId,
+    });
+    assert.equal(secondInstallationPage.items.length, 1);
+    assert.equal(secondInstallationPage.hasMore, false);
+    assert.notEqual(
+      firstInstallationPage.items[0]?.installationId,
+      secondInstallationPage.items[0]?.installationId,
+    );
+    const registryHistory = await registryStore.listBindings({
+      installationId,
+      pageSize: 1,
+    });
+    assert(registryHistory);
+    assert.equal(registryHistory.hasMore, true);
+    const previousHistoryPage = await registryStore.listBindings({
+      installationId,
+      pageSize: 1,
+      after: {
+        createdAt: registryHistory.items[0].createdAt,
+        bindingId: registryHistory.items[0].bindingId,
+      },
+    });
+    assert(previousHistoryPage);
+    const pagedHistory = [
+      ...registryHistory.items,
+      ...previousHistoryPage.items,
+    ];
+    assert.deepEqual(
+      pagedHistory.map(({ bindingId }) => bindingId).sort(),
+      [created.binding.id, reEnrolled.binding.id].sort(),
+    );
+    assert.deepEqual(pagedHistory.map(({ status }) => status).sort(), [
+      'active',
+      'revoked',
+    ]);
+    const expectedOrder = [...pagedHistory]
+      .sort(
+        (left, right) =>
+          right.createdAt.getTime() - left.createdAt.getTime() ||
+          right.bindingId.localeCompare(left.bindingId),
+      )
+      .map(({ bindingId }) => bindingId);
+    assert.deepEqual(
+      pagedHistory.map(({ bindingId }) => bindingId),
+      expectedOrder,
+    );
     const installation = await connection
       .collection('agent_management_installations')
       .findOne({ installationId });
@@ -323,6 +420,11 @@ async function main(): Promise<void> {
         revocationRollbackOnOutboxFailure: true,
         sameInstallationReRegisteredWithHistory: true,
         uniqueBindingAndActiveBindingIndexes: true,
+        registryHistoryIndexVerified: true,
+        currentBindingClearedAfterRevocation: true,
+        nodeFilterAndInstallationCursorPaginationVerified: true,
+        bindingHistoryCursorPaginationVerified: true,
+        updatedAtSemanticsVerified: true,
       }),
     );
   } finally {
