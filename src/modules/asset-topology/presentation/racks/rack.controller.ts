@@ -12,6 +12,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   Res,
   UnprocessableEntityException,
@@ -26,6 +27,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiHeader,
+  ApiQuery,
   ApiResponse,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -48,11 +50,13 @@ import { parseTopologyRequest } from '../topology.schemas';
 import { layoutEtag, requireLayoutRevision } from '../layout-etag';
 import {
   CreateRackRequestDto,
+  RackListQueryDto,
   MoveRackRequestDto,
   RackIdParamsDto,
   RackRoomParamsDto,
   UpdateRackRequestDto,
   createRackSchema,
+  rackListQuerySchema,
   moveRackSchema,
   rackIdParamsSchema,
   rackRoomParamsSchema,
@@ -83,6 +87,28 @@ export class RackController {
     private readonly racks: RackManagementUseCases,
     private readonly queries: RackQueryUseCase,
   ) {}
+
+  @Get('racks')
+  @RequirePermissions('asset:read')
+  @ApiOperation({ summary: 'List Racks by canonical ID' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Case-insensitive partial match against Rack Name.',
+  })
+  @ApiOkResponse({ description: 'Racks in stable Rack ID order.' })
+  @ApiBadRequestResponse({ description: 'The search query is invalid.' })
+  listRacks(@Query() rawQuery: RackListQueryDto) {
+    return this.execute(async () => {
+      const query = parseTopologyRequest(
+        rackListQuerySchema,
+        rawQuery,
+        'Invalid Rack list query',
+      );
+      const racks = await this.queries.listRacks(query.search);
+      return racks.map(serializeRack);
+    });
+  }
 
   @Get('rooms/:room_id/map')
   @RequirePermissions('asset:read')

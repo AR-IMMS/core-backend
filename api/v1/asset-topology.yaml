@@ -576,6 +576,31 @@ paths:
         '428': { $ref: ../baseline.yaml#/components/responses/Problem }
         '422': { $ref: ../baseline.yaml#/components/responses/Problem }
 
+  /api/v1/asset-topology/racks:
+    get:
+      operationId: listRacks
+      summary: List Racks by canonical ID
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      parameters:
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive partial match against Rack Name.
+          schema: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        '200':
+          description: Racks in stable Rack ID order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RackResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+
   /api/v1/asset-topology/racks/{rack_id}:
     parameters:
       - name: rack_id

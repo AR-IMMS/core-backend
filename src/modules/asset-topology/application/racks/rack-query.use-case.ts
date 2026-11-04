@@ -28,6 +28,15 @@ export class RackQueryUseCase implements AssetTopologyRackQueries {
     return this.toReference(rack, await this.racks.getActiveLocation(rack.id));
   }
 
+  async listRacks(search?: string): Promise<readonly RackReference[]> {
+    const racks = await this.racks.listRacks(search);
+    return Promise.all(
+      racks.map(async (rack) =>
+        this.toReference(rack, await this.racks.getActiveLocation(rack.id)),
+      ),
+    );
+  }
+
   async getRoomMap(roomId: RoomId): Promise<RoomMapReference | null> {
     const room = await this.topology.getRoom(roomId);
     if (!room) return null;
