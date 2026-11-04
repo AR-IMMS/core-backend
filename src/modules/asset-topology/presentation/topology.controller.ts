@@ -13,6 +13,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   Res,
   UnprocessableEntityException,
@@ -29,6 +30,7 @@ import {
   ApiOperation,
   ApiHeader,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -53,6 +55,7 @@ import {
   DataCenterParamsDto,
   RoomParamsDto,
   SiteParamsDto,
+  TopologyListQueryDto,
   UpdateRoomRequestDto,
   UpdateSiteRequestDto,
   createRoomSchema,
@@ -61,6 +64,7 @@ import {
   parseTopologyRequest,
   roomParamsSchema,
   siteParamsSchema,
+  topologyListQuerySchema,
   updateRoomSchema,
   updateSiteSchema,
 } from './topology.schemas';
@@ -102,9 +106,17 @@ export class TopologyController {
   @RequirePermissions('asset:read')
   @ApiOperation({ summary: 'List Sites beneath a Data Center' })
   @ApiParam({ name: 'data_center_id', required: true, type: String })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Case-insensitive partial match against Site Name.',
+  })
   @ApiOkResponse({ description: 'Sites beneath the requested Data Center.' })
   @ApiNotFoundResponse({ description: 'Data Center was not found.' })
-  listSites(@Param() rawParams: DataCenterParamsDto) {
+  listSites(
+    @Param() rawParams: DataCenterParamsDto,
+    @Query() rawQuery: TopologyListQueryDto = {},
+  ) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
         dataCenterParamsSchema,
@@ -113,6 +125,11 @@ export class TopologyController {
       );
       const sites = await this.topology.listSites(
         params.data_center_id as never,
+        parseTopologyRequest(
+          topologyListQuerySchema,
+          rawQuery,
+          'Invalid Site list query',
+        ).search,
       );
       return sites.map(serializeSite);
     });
@@ -206,16 +223,32 @@ export class TopologyController {
   @RequirePermissions('asset:read')
   @ApiOperation({ summary: 'List Rooms beneath a Site' })
   @ApiParam({ name: 'site_id', required: true, type: String })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Case-insensitive partial match against Room Name.',
+  })
   @ApiOkResponse({ description: 'Rooms beneath the requested Site.' })
   @ApiNotFoundResponse({ description: 'Site was not found.' })
-  listRooms(@Param() rawParams: SiteParamsDto) {
+  listRooms(
+    @Param() rawParams: SiteParamsDto,
+    @Query() rawQuery: TopologyListQueryDto = {},
+  ) {
     return this.execute(async () => {
       const params = parseTopologyRequest(
         siteParamsSchema,
         rawParams,
         'Invalid Site ID',
       );
-      const rooms = await this.topology.listRooms(params.site_id as never);
+      const query = parseTopologyRequest(
+        topologyListQuerySchema,
+        rawQuery,
+        'Invalid Room list query',
+      );
+      const rooms = await this.topology.listRooms(
+        params.site_id as never,
+        query.search,
+      );
       return rooms.map(serializeRoom);
     });
   }

@@ -65,6 +65,20 @@ describe('TopologyController', () => {
     ).toEqual(pathParams);
   });
 
+  it('passes optional name search to the scoped Site and Room list queries', async () => {
+    useCases.listSites.mockResolvedValue([]);
+    useCases.listRooms.mockResolvedValue([]);
+
+    await controller.listSites(
+      { data_center_id: 'dc-default' },
+      { search: 'building' },
+    );
+    await controller.listRooms({ site_id: 'site-1' }, { search: 'server' });
+
+    expect(useCases.listSites).toHaveBeenCalledWith('dc-default', 'building');
+    expect(useCases.listRooms).toHaveBeenCalledWith('site-1', 'server');
+  });
+
   it('publishes request body schemas for topology create routes in Swagger', async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [TopologyController, RackController],

@@ -241,6 +241,12 @@ paths:
       security:
         - HumanAccessToken: []
       x-required-permissions: [asset:read]
+      parameters:
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive partial match against Site Name.
+          schema: { type: string, minLength: 1, maxLength: 128 }
       responses:
         '200':
           description: Sites under the requested Data Center.
@@ -344,6 +350,12 @@ paths:
       security:
         - HumanAccessToken: []
       x-required-permissions: [asset:read]
+      parameters:
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive partial match against Room Name.
+          schema: { type: string, minLength: 1, maxLength: 128 }
       responses:
         '200':
           description: Active Rooms under the requested Site. Retired Rooms are excluded.

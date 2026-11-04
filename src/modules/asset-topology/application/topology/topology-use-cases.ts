@@ -106,10 +106,13 @@ export class TopologyUseCases {
     return dataCenter;
   }
 
-  async listSites(dataCenterId: DataCenterId): Promise<readonly Site[]> {
+  async listSites(
+    dataCenterId: DataCenterId,
+    search?: string,
+  ): Promise<readonly Site[]> {
     const dataCenter = await this.store.getDataCenter(dataCenterId);
     if (!dataCenter) throw new TopologyResourceNotFoundError('Data Center');
-    return this.store.listSites(dataCenterId);
+    return this.store.listSites(dataCenterId, search);
   }
 
   async createSite(
@@ -178,10 +181,10 @@ export class TopologyUseCases {
     });
   }
 
-  async listRooms(siteId: SiteId): Promise<readonly Room[]> {
+  async listRooms(siteId: SiteId, search?: string): Promise<readonly Room[]> {
     const site = await this.store.getSite(siteId);
     if (!site) throw new TopologyResourceNotFoundError('Site');
-    return this.store.listRooms(siteId);
+    return this.store.listRooms(siteId, search);
   }
 
   async createRoom(

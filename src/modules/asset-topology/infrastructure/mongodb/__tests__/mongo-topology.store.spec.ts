@@ -62,6 +62,25 @@ describe('MongoTopologyStore', () => {
     });
   });
 
+  it('filters Site and active Room lists by escaped case-insensitive name', async () => {
+    const queryChain = query([]);
+    siteModel.find.mockReturnValue(queryChain as never);
+    roomModel.find.mockReturnValue(queryChain as never);
+
+    await store.listSites('dc-default', 'Building.*');
+    await store.listRooms('site-1', 'Server+Room');
+
+    expect(siteModel.find).toHaveBeenCalledWith({
+      dataCenterId: 'dc-default',
+      name: { $regex: 'Building\\.\\*', $options: 'i' },
+    });
+    expect(roomModel.find).toHaveBeenCalledWith({
+      siteId: 'site-1',
+      status: { $ne: 'RETIRED' },
+      name: { $regex: 'Server\\+Room', $options: 'i' },
+    });
+  });
+
   it('maps persisted Site fields into an immutable domain reference', async () => {
     siteModel.findOne.mockReturnValue(
       query({
