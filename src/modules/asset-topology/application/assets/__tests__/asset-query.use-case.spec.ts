@@ -91,6 +91,7 @@ describe('Asset query use cases', () => {
     };
     const placements = {
       listActiveByAssetIds: jest.fn().mockResolvedValue([]),
+      listActiveAssetIdsByRack: jest.fn().mockResolvedValue(['asset-1']),
     };
     const useCase = new ListAssetsUseCase(store as never, placements as never);
 
@@ -108,6 +109,36 @@ describe('Asset query use cases', () => {
       'asset-1',
       'asset-2',
     ]);
+  });
+
+  it('combines Rack, Type, lifecycle, and text filters with cursor pagination', async () => {
+    const store = {
+      list: jest.fn().mockResolvedValue({ items: [], hasMore: false }),
+    };
+    const placements = {
+      listActiveAssetIdsByRack: jest.fn().mockResolvedValue(['asset-1']),
+      listActiveByAssetIds: jest.fn().mockResolvedValue([]),
+    };
+    const useCase = new ListAssetsUseCase(store as never, placements as never);
+
+    await useCase.execute({
+      pageSize: 20,
+      afterAssetId: 'asset-0',
+      assetTypeId: 'type-node',
+      lifecycleState: 'ACTIVE',
+      rackId: 'rack-1',
+      search: 'node',
+    });
+
+    expect(placements.listActiveAssetIdsByRack).toHaveBeenCalledWith('rack-1');
+    expect(store.list).toHaveBeenCalledWith({
+      afterAssetId: 'asset-0',
+      limit: 20,
+      assetTypeId: 'type-node',
+      lifecycleState: 'ACTIVE',
+      assetIds: ['asset-1'],
+      search: 'node',
+    });
   });
 
   it('returns the confirmed active Rack U placement on the Asset reference', async () => {

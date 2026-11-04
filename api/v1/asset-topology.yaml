@@ -13,7 +13,7 @@ paths:
     get:
       operationId: listAssets
       summary: List Assets by canonical ID
-      description: Lists Assets in stable Asset ID order. AT-03 has no filters.
+      description: Lists Assets in stable Asset ID order, optionally filtered by type, lifecycle state, current Rack placement, or a partial match against Asset Name or manufacturer serial number.
       security:
         - HumanAccessToken: []
       x-required-permissions: [asset:read]
@@ -27,6 +27,23 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: asset_type
+          in: query
+          required: false
+          schema: { type: string, enum: [NODE] }
+        - name: lifecycle_state
+          in: query
+          required: false
+          schema: { type: string, enum: [ACTIVE, MAINTENANCE, RETIRED] }
+        - name: rack_id
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive partial match against Asset Name or manufacturer serial number.
+          schema: { type: string, minLength: 1, maxLength: 128 }
       responses:
         '200':
           description: Cursor-paginated Asset list.

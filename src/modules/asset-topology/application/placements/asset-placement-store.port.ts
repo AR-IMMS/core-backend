@@ -15,6 +15,7 @@ export interface AssetPlacementStorePort {
   listActiveByAssetIds(
     assetIds: readonly string[],
   ): Promise<readonly AssetPlacement[]>;
+  listActiveAssetIdsByRack(rackId: string): Promise<readonly string[]>;
   listHistoryByAsset(assetId: string): Promise<readonly AssetPlacement[]>;
   save(placement: AssetPlacement, context: UnitOfWorkContext): Promise<void>;
   closeActive(

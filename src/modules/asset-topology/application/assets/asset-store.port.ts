@@ -7,5 +7,9 @@ export interface AssetStorePort {
   list(input: {
     readonly afterAssetId?: string;
     readonly limit: number;
+    readonly assetTypeId?: string;
+    readonly lifecycleState?: 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
+    readonly assetIds?: readonly string[];
+    readonly search?: string;
   }): Promise<{ readonly items: readonly Asset[]; readonly hasMore: boolean }>;
 }

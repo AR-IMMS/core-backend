@@ -30,7 +30,7 @@ import {
   assetParamsSchema,
   parseAssetRequest,
 } from './asset-registry.schemas';
-import { assetTypeCodeFromId } from './asset-type-code';
+import { assetTypeCodeFromId, assetTypeIdFromCode } from './asset-type-code';
 
 @ApiTags('Asset Registry')
 @ApiBearerAuth('HumanAccessToken')
@@ -55,6 +55,19 @@ export class AssetReadController {
     required: false,
     schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
   })
+  @ApiQuery({ name: 'asset_type', required: false, enum: ['NODE'] })
+  @ApiQuery({
+    name: 'lifecycle_state',
+    required: false,
+    enum: ['ACTIVE', 'MAINTENANCE', 'RETIRED'],
+  })
+  @ApiQuery({ name: 'rack_id', required: false, type: String })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description:
+      'Partial match against Asset Name or manufacturer serial number.',
+  })
   @ApiOkResponse({ description: 'Cursor-paginated Assets.' })
   @ApiBadRequestResponse({ description: 'The cursor or page size is invalid.' })
   async list(@Query() rawQuery: AssetListQueryDto) {
@@ -69,6 +82,12 @@ export class AssetReadController {
     const page = await this.listAssets.execute({
       pageSize: query.page_size,
       afterAssetId,
+      assetTypeId: query.asset_type
+        ? assetTypeIdFromCode(query.asset_type)
+        : undefined,
+      lifecycleState: query.lifecycle_state,
+      rackId: query.rack_id,
+      search: query.search,
     });
     return createPaginatedResult(
       page.assets.map((asset) =>
