@@ -22,7 +22,10 @@ describe('IssueBootstrapTokenUseCase', () => {
     };
     const outbox = { append: jest.fn().mockResolvedValue(undefined) };
     const useCase = new IssueBootstrapTokenUseCase(
-      { getEligibility: jest.fn().mockResolvedValue(eligibility) },
+      {
+        getEligibility: jest.fn().mockResolvedValue(eligibility),
+        serializeEnrollmentEligibility: jest.fn().mockResolvedValue(true),
+      },
       tokens,
       unitOfWork as never,
       outbox as never,
@@ -96,7 +99,10 @@ describe('IssueBootstrapTokenUseCase', () => {
       }),
     };
     const useCase = new IssueBootstrapTokenUseCase(
-      { getEligibility: jest.fn().mockResolvedValue(eligible) },
+      {
+        getEligibility: jest.fn().mockResolvedValue(eligible),
+        serializeEnrollmentEligibility: jest.fn().mockResolvedValue(true),
+      },
       tokens,
       {
         run: jest.fn(async (operation: (context: object) => Promise<unknown>) =>

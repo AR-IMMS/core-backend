@@ -47,6 +47,7 @@ describe('EnrollAgentUseCase', () => {
         active: true,
         hasActivePlacement: true,
       }),
+      serializeEnrollmentEligibility: jest.fn().mockResolvedValue(true),
     };
     const unitOfWork = {
       run: jest.fn(async (operation: (context: object) => Promise<unknown>) =>
@@ -170,6 +171,37 @@ describe('EnrollAgentUseCase', () => {
     await expect(useCase.execute(request)).rejects.toBeInstanceOf(
       NodeAlreadyBoundError,
     );
+    expect(store.enroll).not.toHaveBeenCalled();
+  });
+
+  it('rechecks and serializes Asset eligibility inside the enrollment transaction', async () => {
+    const { useCase, nodeEligibility, store, unitOfWork } = harness();
+    nodeEligibility.serializeEnrollmentEligibility.mockResolvedValue(false);
+
+    await expect(useCase.execute(request)).rejects.toBeInstanceOf(
+      AgentNodeNotEligibleError,
+    );
+
+    expect(nodeEligibility.serializeEnrollmentEligibility).toHaveBeenCalledWith(
+      'node-1',
+      expect.any(Object),
+    );
+    expect(store.hasActiveBinding).toHaveBeenCalledTimes(1);
+    expect(store.enroll).not.toHaveBeenCalled();
+    expect(unitOfWork.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('rechecks active Agent bindings inside the enrollment transaction', async () => {
+    const { useCase, nodeEligibility, store } = harness();
+    store.hasActiveBinding
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    await expect(useCase.execute(request)).rejects.toBeInstanceOf(
+      NodeAlreadyBoundError,
+    );
+
+    expect(nodeEligibility.serializeEnrollmentEligibility).toHaveBeenCalled();
     expect(store.enroll).not.toHaveBeenCalled();
   });
 

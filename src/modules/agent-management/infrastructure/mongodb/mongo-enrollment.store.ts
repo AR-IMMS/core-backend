@@ -34,11 +34,19 @@ export class MongoEnrollmentStore implements EnrollmentPersistencePort {
     };
   }
 
-  async hasActiveBinding(nodeId: string): Promise<boolean> {
+  async hasActiveBinding(
+    nodeId: string,
+    context?: UnitOfWorkContext,
+  ): Promise<boolean> {
+    const session = context as unknown as
+      import('mongoose').ClientSession | undefined;
     return (
       (await this.connection
         .collection('agent_management_bindings')
-        .countDocuments({ nodeId, status: 'active' })) > 0
+        .countDocuments(
+          { nodeId, status: 'active' },
+          session ? { session } : undefined,
+        )) > 0
     );
   }
 

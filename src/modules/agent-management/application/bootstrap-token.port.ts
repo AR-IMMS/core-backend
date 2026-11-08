@@ -22,6 +22,10 @@ export interface NodeEligibilityPort {
     readonly active: boolean;
     readonly hasActivePlacement: boolean;
   }>;
+  serializeEnrollmentEligibility(
+    nodeId: string,
+    context: UnitOfWorkContext,
+  ): Promise<boolean>;
 }
 
 export const NODE_ELIGIBILITY_PORT = Symbol('NODE_ELIGIBILITY_PORT');
