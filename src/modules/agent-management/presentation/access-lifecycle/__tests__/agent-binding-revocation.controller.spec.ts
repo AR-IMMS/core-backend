@@ -1,4 +1,5 @@
 import type { ArgumentMetadata } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { CoreZodValidationPipe } from '@platform/http/validation/zod-validation.pipe';
 import { HTTP_ROUTE_POLICY_METADATA } from '@platform/http/api';
 import { AgentBindingNotFoundError } from '../../../domain/errors/agent-binding.errors';
@@ -33,7 +34,7 @@ describe('AgentBindingRevocationController', () => {
     });
   });
 
-  it('rejects malformed binding IDs before invoking the use case', async () => {
+  it('rejects malformed binding IDs before invoking the use case', () => {
     const [paramsMetatype] = Reflect.getMetadata(
       'design:paramtypes',
       AgentBindingRevocationController.prototype,
@@ -41,7 +42,7 @@ describe('AgentBindingRevocationController', () => {
     ) as unknown[];
     const pipe = new CoreZodValidationPipe();
 
-    await expect(
+    expect(() =>
       pipe.transform(
         { bindingId: 'bad-id' },
         {
@@ -50,7 +51,7 @@ describe('AgentBindingRevocationController', () => {
           data: undefined,
         },
       ),
-    ).rejects.toMatchObject({ status: 400 });
+    ).toThrow(BadRequestException);
   });
 
   it('maps unknown bindings to the existing not-found ProblemDetails code', async () => {
