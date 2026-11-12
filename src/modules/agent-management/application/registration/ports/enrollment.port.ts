@@ -20,7 +20,10 @@ export interface EnrollmentPersistencePort {
     readonly status: string;
     readonly expiresAt: Date;
   } | null>;
-  hasActiveBinding(nodeId: string): Promise<boolean>;
+  hasActiveBinding(
+    nodeId: string,
+    context?: UnitOfWorkContext,
+  ): Promise<boolean>;
   isEnrollmentResultActive(input: {
     readonly attemptId: string;
     readonly bindingId: string;

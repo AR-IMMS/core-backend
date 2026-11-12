@@ -8,10 +8,12 @@ describe('AssetWriteController', () => {
     const register = { execute: jest.fn() };
     const update = { execute: jest.fn() };
     const getAsset = { execute: jest.fn() };
+    const retire = { execute: jest.fn() };
     const controller = new AssetWriteController(
       register as never,
       update as never,
       getAsset as never,
+      retire as never,
     );
 
     await expect(
@@ -39,6 +41,7 @@ describe('AssetWriteController', () => {
     };
     const controller = new AssetWriteController(
       register as never,
+      {} as never,
       {} as never,
       {} as never,
     );
@@ -82,11 +85,49 @@ describe('AssetWriteController', () => {
       AssetWriteController.prototype,
       'update',
     )?.value as object;
+    const retireHandler = Object.getOwnPropertyDescriptor(
+      AssetWriteController.prototype,
+      'retire',
+    )?.value as object;
     expect(
       Reflect.getMetadata(HTTP_ROUTE_POLICY_METADATA, createHandler),
     ).toEqual({ kind: 'permissions', permissions: ['asset:manage'] });
     expect(
       Reflect.getMetadata(HTTP_ROUTE_POLICY_METADATA, updateHandler),
     ).toEqual({ kind: 'permissions', permissions: ['asset:manage'] });
+    expect(
+      Reflect.getMetadata(HTTP_ROUTE_POLICY_METADATA, retireHandler),
+    ).toEqual({ kind: 'permissions', permissions: ['asset:manage'] });
+    expect(Reflect.getMetadata('__httpCode__', retireHandler)).toBe(204);
+  });
+
+  it('requires an IT Admin and dispatches retirement by Asset ID', async () => {
+    const retire = { execute: jest.fn().mockResolvedValue(undefined) };
+    const controller = new AssetWriteController(
+      {} as never,
+      {} as never,
+      {} as never,
+      retire as never,
+    );
+    const assetId = '00000000-0000-4000-8000-000000000001';
+
+    await expect(
+      controller.retire(
+        { user: { userId: 'operator', role: 'OPERATOR' } },
+        { asset_id: assetId },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(retire.execute).not.toHaveBeenCalled();
+
+    await expect(
+      controller.retire(
+        { user: { userId: 'admin-1', role: 'IT_ADMIN' } },
+        { asset_id: assetId },
+      ),
+    ).resolves.toBeUndefined();
+    expect(retire.execute).toHaveBeenCalledWith(assetId, {
+      type: 'user',
+      id: 'admin-1',
+    });
   });
 });

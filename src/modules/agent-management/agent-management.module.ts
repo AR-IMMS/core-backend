@@ -1,12 +1,18 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OUTBOX_WRITER_PORT, UNIT_OF_WORK_PORT } from '@platform/events';
+import type { UnitOfWorkContext } from '@platform/events';
 import { AssetTopologyModule } from '@modules/asset-topology/asset-topology.module';
-import { ASSET_TOPOLOGY_ASSET_QUERIES_PORT } from '@modules/asset-topology/contracts';
+import {
+  ASSET_TOPOLOGY_AGENT_ENROLLMENT_COMMANDS_PORT,
+  ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
+} from '@modules/asset-topology/contracts';
 import type {
+  AssetTopologyAgentEnrollmentCommands,
   AssetTopologyAssetQueries,
   AssetId,
 } from '@modules/asset-topology/contracts';
+import { AGENT_BINDING_QUERIES_PORT } from './contracts';
 import {
   BOOTSTRAP_TOKEN_STORE,
   NODE_ELIGIBILITY_PORT,
@@ -42,7 +48,7 @@ import { ListInstallationBindingsUseCase } from './application/agent-registry/us
 import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-agent-registry-query.store';
 
 @Module({
-  imports: [AssetTopologyModule],
+  imports: [forwardRef(() => AssetTopologyModule)],
   controllers: [
     BootstrapTokenController,
     EnrollmentController,
@@ -105,12 +111,30 @@ import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-age
       inject: [BINDING_REVOCATION_PORT, UNIT_OF_WORK_PORT, OUTBOX_WRITER_PORT],
     },
     {
+      provide: AGENT_BINDING_QUERIES_PORT,
+      useFactory: (persistence: EnrollmentPersistencePort) => ({
+        hasActiveBindingForNode: (nodeId: string, context: UnitOfWorkContext) =>
+          persistence.hasActiveBinding(nodeId, context),
+      }),
+      inject: [ENROLLMENT_PERSISTENCE_PORT],
+    },
+    {
       provide: NODE_ELIGIBILITY_PORT,
-      useFactory: (assets: AssetTopologyAssetQueries) => ({
+      useFactory: (
+        assets: AssetTopologyAssetQueries,
+        assetCommands: AssetTopologyAgentEnrollmentCommands,
+      ) => ({
         getEligibility: (nodeId: string) =>
           assets.getAgentEnrollmentNodeEligibility(nodeId as AssetId),
+        serializeEnrollmentEligibility: (
+          nodeId: string,
+          context: UnitOfWorkContext,
+        ) => assetCommands.serializeAgentEnrollment(nodeId as AssetId, context),
       }),
-      inject: [ASSET_TOPOLOGY_ASSET_QUERIES_PORT],
+      inject: [
+        ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
+        ASSET_TOPOLOGY_AGENT_ENROLLMENT_COMMANDS_PORT,
+      ],
     },
     {
       provide: IssueBootstrapTokenUseCase,
@@ -158,5 +182,6 @@ import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-age
       ],
     },
   ],
+  exports: [AGENT_BINDING_QUERIES_PORT],
 })
 export class AgentManagementModule {}

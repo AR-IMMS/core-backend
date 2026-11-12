@@ -1,3 +1,7 @@
+jest.mock('@modules/agent-management/agent-management.module', () => ({
+  AgentManagementModule: class AgentManagementModule {},
+}));
+
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import { OUTBOX_WRITER_PORT, UNIT_OF_WORK_PORT } from '@platform/events';

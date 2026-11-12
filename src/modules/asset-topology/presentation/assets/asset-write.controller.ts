@@ -4,6 +4,7 @@ import {
   ConflictException,
   Controller,
   ForbiddenException,
+  HttpCode,
   NotFoundException,
   Param,
   Patch,
@@ -14,6 +15,8 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiCreatedResponse,
+  ApiConflictResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -26,6 +29,8 @@ import {
   RegisterAssetUseCase,
 } from '../../application/assets/asset-registration.use-case';
 import { UpdateAssetUseCase } from '../../application/assets/asset-update.use-case';
+import { RetireAssetUseCase } from '../../application/assets/retire-asset.use-case';
+import { AssetRetirementConflictError } from '../../application/assets/asset-retirement.errors';
 import { GetAssetUseCase } from '../../application/assets/asset-query.use-case';
 import { RequirePermissions } from '@modules/iam';
 import {
@@ -50,6 +55,7 @@ export class AssetWriteController {
     private readonly registerAsset: RegisterAssetUseCase,
     private readonly updateAsset: UpdateAssetUseCase,
     private readonly getAsset: GetAssetUseCase,
+    private readonly retireAsset: RetireAssetUseCase,
   ) {}
 
   @Post()
@@ -122,12 +128,45 @@ export class AssetWriteController {
     });
   }
 
+  @Post(':asset_id/retire')
+  @HttpCode(204)
+  @RequirePermissions('asset:manage')
+  @ApiOperation({ summary: 'Retire an unassigned, unbound Asset' })
+  @ApiNoContentResponse({ description: 'Asset retired or already retired.' })
+  @ApiNotFoundResponse({ description: 'Asset was not found.' })
+  @ApiConflictResponse({
+    description:
+      'Asset is in maintenance, assigned to a Rack, or has an active Agent binding.',
+  })
+  async retire(
+    @Req() request: AssetHttpRequest,
+    @Param() rawParams: AssetParamsDto,
+  ): Promise<void> {
+    return this.execute(async () => {
+      const actor = requireAssetAdmin(request);
+      const params = parseAssetRequest(
+        assetParamsSchema,
+        rawParams,
+        'Invalid Asset ID',
+      );
+      await this.retireAsset.execute(params.asset_id, actor);
+    });
+  }
+
   private async execute<T>(operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
     } catch (error) {
       if (error instanceof AssetReferenceNotFoundError)
         throw new NotFoundException(error.message);
+      if (error instanceof AssetRetirementConflictError)
+        throw new ConflictException(error.message);
+      if (
+        error instanceof DomainError &&
+        error.code === 'ASSET_INVALID_RETIREMENT'
+      ) {
+        throw new ConflictException(error.message);
+      }
       if (error instanceof DomainError)
         throw new BadRequestException({ message: error.message });
       if (error instanceof QrMappingConflictError)

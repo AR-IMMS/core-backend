@@ -96,6 +96,46 @@ describe('Asset', () => {
     expect(asset.lifecycleState).toBe('ACTIVE');
   });
 
+  it('retires an ACTIVE Asset and treats repeated retirement as a no-op', () => {
+    const asset = Asset.register({
+      id: 'asset-1',
+      name: 'Node 01',
+      type: nodeType,
+    });
+
+    const retired = asset.retire();
+
+    expect(retired.lifecycleState).toBe('RETIRED');
+    expect(retired.retire()).toBe(retired);
+    expect(asset.lifecycleState).toBe('ACTIVE');
+  });
+
+  it('rejects retiring an Asset in maintenance', () => {
+    const asset = Asset.register({
+      id: 'asset-1',
+      name: 'Node 01',
+      type: nodeType,
+    }).changeMaintenanceState('MAINTENANCE');
+
+    expect(() => asset.retire()).toThrow(DomainError);
+  });
+
+  it('rejects descriptive changes after retirement', () => {
+    const asset = Asset.restore({
+      id: 'asset-1',
+      name: 'Node 01',
+      assetTypeId: 'type-node',
+      lifecycleState: 'RETIRED',
+    });
+
+    expect(() => asset.updateDescription({ name: 'Renamed' })).toThrow(
+      'Retired Assets cannot be modified',
+    );
+    expect(() => asset.rename('Renamed')).toThrow(
+      'Retired Assets cannot be modified',
+    );
+  });
+
   it('treats a repeated maintenance state as a no-op and rejects retired Assets', () => {
     const asset = Asset.register({
       id: 'asset-1',

@@ -135,6 +135,17 @@ export class EnrollAgentUseCase {
 
     try {
       await this.unitOfWork.run(async (context) => {
+        if (
+          !(await this.nodes.serializeEnrollmentEligibility(
+            token.nodeId,
+            context,
+          ))
+        ) {
+          throw new AgentNodeNotEligibleError();
+        }
+        if (await this.persistence.hasActiveBinding(token.nodeId, context)) {
+          throw new NodeAlreadyBoundError();
+        }
         await this.persistence.enroll(
           {
             tokenHash,

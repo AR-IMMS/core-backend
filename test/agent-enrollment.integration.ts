@@ -55,6 +55,7 @@ async function main(): Promise<void> {
               active: true,
               hasActivePlacement: true,
             }),
+          serializeEnrollmentEligibility: () => Promise.resolve(true),
         },
         unitOfWork,
         outbox,

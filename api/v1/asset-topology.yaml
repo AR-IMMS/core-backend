@@ -123,6 +123,28 @@ paths:
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
 
+  /api/v1/asset-topology/assets/{asset_id}/retire:
+    parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    post:
+      operationId: retireAsset
+      summary: Retire an unassigned, unbound Asset
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '204':
+          description: Asset retired or already retired.
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+
   /api/v1/asset-topology/data-centers/default:
     get:
       operationId: getDefaultDataCenter

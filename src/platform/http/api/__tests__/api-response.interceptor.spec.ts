@@ -10,7 +10,7 @@ describe('ApiResponseInterceptor', () => {
     const debug = jest.fn();
     const logger = {
       debug,
-      logger: { isLevelEnabled: jest.fn(() => true) },
+      logger: { isLevelEnabled: jest.fn((level: string) => level === 'debug') },
     };
     const cls = { getId: jest.fn(() => 'request-123') };
     const interceptor = new ApiResponseInterceptor(
@@ -59,7 +59,7 @@ describe('ApiResponseInterceptor', () => {
     const debug = jest.fn();
     const logger = {
       debug,
-      logger: { isLevelEnabled: jest.fn(() => false) },
+      logger: { isLevelEnabled: jest.fn((level: string) => level !== 'debug') },
     };
     const interceptor = new ApiResponseInterceptor(
       { getAllAndOverride: jest.fn(() => false) } as unknown as Reflector,
