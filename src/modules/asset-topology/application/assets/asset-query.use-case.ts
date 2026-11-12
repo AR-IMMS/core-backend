@@ -43,6 +43,18 @@ export class GetAssetUseCase implements AssetTopologyAssetQueries {
     return this.execute(assetId);
   }
 
+  async getAgentEnrollmentNodeEligibility(assetId: AssetId) {
+    const asset = await this.assets.findById(assetId);
+    if (!asset)
+      return { exists: false, active: false, hasActivePlacement: false };
+    const placement = await this.placements.findActiveByAsset(asset.id);
+    return {
+      exists: true,
+      active: asset.lifecycleState === 'ACTIVE',
+      hasActivePlacement: placement !== null,
+    };
+  }
+
   async getAssetPlacementHistory(
     assetId: AssetId,
   ): Promise<readonly AssetPlacementHistoryEntry[] | null> {

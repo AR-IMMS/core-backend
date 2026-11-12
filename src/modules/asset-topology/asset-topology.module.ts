@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { TopologyUseCases } from './application/topology/topology-use-cases';
 import { TOPOLOGY_STORE } from './application/topology/topology-store.token';
@@ -42,6 +42,7 @@ import {
 } from './application/assets/asset-query.use-case';
 import {
   ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
+  ASSET_TOPOLOGY_AGENT_ENROLLMENT_COMMANDS_PORT,
   ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT,
   ASSET_TOPOLOGY_RACK_QUERIES_PORT,
 } from './contracts';
@@ -77,10 +78,14 @@ import {
   RACK_CLOCK,
   RACK_ID_GENERATOR,
 } from './application/racks/rack-runtime.token';
+import { AgentManagementModule } from '@modules/agent-management/agent-management.module';
+import { RetireAssetUseCase } from './application/assets/retire-asset.use-case';
+import { AgentEnrollmentEligibilityUseCase } from './application/assets/agent-enrollment-eligibility.use-case';
 
 /** Asset & Topology's Dashboard API and owned persistence adapters. */
 @Module({
   imports: [
+    forwardRef(() => AgentManagementModule),
     MongooseModule.forFeature([
       { name: TOPOLOGY_DATA_CENTER_MODEL, schema: TopologyDataCenterSchema },
       { name: TOPOLOGY_SITE_MODEL, schema: TopologySiteSchema },
@@ -129,6 +134,8 @@ import {
     { provide: ASSET_CLOCK, useValue: () => new Date() },
     { provide: ASSET_ID_GENERATOR, useValue: randomUUID },
     RegisterAssetUseCase,
+    RetireAssetUseCase,
+    AgentEnrollmentEligibilityUseCase,
     QrMappingUseCases,
     ExportAssetLabelsUseCase,
     LabelDocumentRenderer,
@@ -142,6 +149,10 @@ import {
       useExisting: GetAssetUseCase,
     },
     {
+      provide: ASSET_TOPOLOGY_AGENT_ENROLLMENT_COMMANDS_PORT,
+      useExisting: AgentEnrollmentEligibilityUseCase,
+    },
+    {
       provide: ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT,
       useExisting: ChangeAssetMaintenanceStateUseCase,
     },
@@ -151,7 +162,11 @@ import {
     },
     ListAssetsUseCase,
   ],
-  exports: [ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT],
+  exports: [
+    ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT,
+    ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
+    ASSET_TOPOLOGY_AGENT_ENROLLMENT_COMMANDS_PORT,
+  ],
 })
 export class AssetTopologyModule {}
 

@@ -11,6 +11,14 @@ export const envSchema = z
       .default('info'),
 
     APP_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
+    AGENT_CONTROL_PLANE_BASE_URL: z
+      .string()
+      .trim()
+      .url()
+      .refine(
+        (value) => new URL(value).protocol === 'https:',
+        'AGENT_CONTROL_PLANE_BASE_URL must use HTTPS',
+      ),
 
     IAM_PRESENCE_HEARTBEAT_INTERVAL_SECONDS: z.coerce
       .number()

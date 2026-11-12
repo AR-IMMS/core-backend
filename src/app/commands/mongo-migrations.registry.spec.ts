@@ -4,6 +4,15 @@ import { APPLICATION_MONGO_MIGRATIONS } from './mongo-migrations.registry';
 const IAM_INDEXES_MIGRATION_ID = '20261017T000000Z_iam_collection_indexes';
 
 describe('application Mongo migration registry', () => {
+  test('registers the Agent enrollment indexes migration', () => {
+    expect(
+      APPLICATION_MONGO_MIGRATIONS.some(
+        (migration) =>
+          migration.id === '20261031T000000Z_agent_enrollment_indexes',
+      ),
+    ).toBe(true);
+  });
+
   /** It registers an IAM migration that creates every declared user and session index. */
   test('applies the IAM collection indexes', async () => {
     const migration = APPLICATION_MONGO_MIGRATIONS.find(
