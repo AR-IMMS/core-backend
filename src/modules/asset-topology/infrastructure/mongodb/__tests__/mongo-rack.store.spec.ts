@@ -3,6 +3,19 @@ import { RackLocation } from '../../../domain/topology/rack-location';
 import { MongoRackStore } from '../mongo-rack.store';
 
 describe('MongoRackStore', () => {
+  it('filters Racks by a case-insensitive partial name match', async () => {
+    const racks = {
+      find: jest.fn(() => query([])),
+    };
+    const store = new MongoRackStore(racks as never, {} as never);
+
+    await store.listRacks('Core.*');
+
+    expect(racks.find).toHaveBeenCalledWith({
+      name: { $regex: 'Core\\.\\*', $options: 'i' },
+    });
+  });
+
   it('restores the persisted Rack name', async () => {
     const rackDoc = {
       id: 'rack-1',

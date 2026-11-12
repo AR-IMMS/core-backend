@@ -6,12 +6,12 @@ import type { Site } from '../../domain/topology/site';
 /** Persistence boundary for Asset & Topology-owned location records. */
 export interface TopologyStorePort {
   getDataCenter(id: string): Promise<DataCenterReference | null>;
-  listSites(dataCenterId: string): Promise<readonly Site[]>;
+  listSites(dataCenterId: string, search?: string): Promise<readonly Site[]>;
   getSite(id: string): Promise<Site | null>;
   /** Saves the Site and increments its Audit sequence in the active transaction. */
   saveSite(site: Site, context: UnitOfWorkContext): Promise<number>;
   /** Lists active Rooms; retired Rooms remain available through getRoom for history. */
-  listRooms(siteId: string): Promise<readonly Room[]>;
+  listRooms(siteId: string, search?: string): Promise<readonly Room[]>;
   /** Retrieves active or retired Rooms so historical references remain resolvable. */
   getRoom(id: string, context?: UnitOfWorkContext): Promise<Room | null>;
   /**

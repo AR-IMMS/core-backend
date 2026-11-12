@@ -15,9 +15,10 @@ import {
 } from '@modules/asset-topology/infrastructure/mongodb/asset-placement.schema';
 import { MongoAssetStore } from '@modules/asset-topology/infrastructure/mongodb/mongo-asset.store';
 import { MongoAssetPlacementStore } from '@modules/asset-topology/infrastructure/mongodb/mongo-asset-placement.store';
-import { AgentNodeNotEligibleError } from '@modules/agent-management/application/enrollment.port';
-import { EnrollAgentUseCase } from '@modules/agent-management/application/enroll-agent.use-case';
+import { AgentNodeNotEligibleError } from '@modules/agent-management/domain/errors/registration.errors';
+import { EnrollAgentUseCase } from '@modules/agent-management/application/registration/use-cases/enroll-agent.use-case';
 import { MongoEnrollmentStore } from '@modules/agent-management/infrastructure/mongodb/mongo-enrollment.store';
+import { EnrollmentRecoveryCipher } from '@modules/agent-management/infrastructure/security/enrollment-recovery-cipher';
 import { BOOTSTRAP_TOKEN_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/bootstrap-token-indexes.migration';
 import { ENROLLMENT_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/enrollment-indexes.migration';
 import { MongoOutboxStore } from '@platform/events/infrastructure/mongodb/mongo-outbox.store';
@@ -127,6 +128,9 @@ async function main(): Promise<void> {
         unitOfWork,
         outbox,
         'https://core.example.test/api/v1/agent-control',
+        new EnrollmentRecoveryCipher(
+          Buffer.from('01234567890123456789012345678901').toString('base64'),
+        ),
         () => new Date(),
         () => Buffer.from('01234567890123456789012345678901'),
         () => randomUUID(),

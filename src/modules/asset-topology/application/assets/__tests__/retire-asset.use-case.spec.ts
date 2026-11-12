@@ -16,6 +16,7 @@ describe('RetireAssetUseCase', () => {
     findActiveByAsset: jest.Mock;
     findActiveByRackU: jest.Mock;
     listActiveByAssetIds: jest.Mock;
+    listActiveAssetIdsByRack: jest.Mock;
     listHistoryByAsset: jest.Mock;
     save: jest.Mock;
     closeActive: jest.Mock;
@@ -40,6 +41,7 @@ describe('RetireAssetUseCase', () => {
       findActiveByAsset: jest.fn().mockResolvedValue(null),
       findActiveByRackU: jest.fn(),
       listActiveByAssetIds: jest.fn(),
+      listActiveAssetIdsByRack: jest.fn(),
       listHistoryByAsset: jest.fn(),
       save: jest.fn(),
       closeActive: jest.fn(),

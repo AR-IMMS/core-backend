@@ -2,7 +2,9 @@ import { InjectConnection } from '@nestjs/mongoose';
 import { Injectable } from '@nestjs/common';
 import type { Connection } from 'mongoose';
 import type { UnitOfWorkContext } from '@platform/events';
-import type { BootstrapTokenStorePort } from '../../application/bootstrap-token.port';
+import type { BootstrapTokenStorePort } from '../../application/registration/ports/bootstrap-token.port';
+import { BootstrapTokenIssuanceConflictError } from '../../application/registration/errors/bootstrap-token-issuance-conflict.error';
+import { AgentNodeNotEligibleError } from '../../domain/errors/registration.errors';
 
 @Injectable()
 export class MongoBootstrapTokenStore implements BootstrapTokenStorePort {
@@ -36,7 +38,7 @@ export class MongoBootstrapTokenStore implements BootstrapTokenStorePort {
       const activeBinding = await this.connection
         .collection('agent_management_bindings')
         .findOne({ nodeId: input.nodeId, status: 'active' }, { session });
-      if (activeBinding) throw new ActiveAgentBindingError();
+      if (activeBinding) throw new AgentNodeNotEligibleError();
       const now = new Date();
       await tokens.updateMany(
         { nodeId: input.nodeId, status: 'active' },
@@ -53,20 +55,6 @@ export class MongoBootstrapTokenStore implements BootstrapTokenStorePort {
       }
       throw error;
     }
-  }
-}
-
-export class ActiveAgentBindingError extends Error {
-  constructor() {
-    super('Node already has an active Agent binding');
-    this.name = 'ActiveAgentBindingError';
-  }
-}
-
-export class BootstrapTokenIssuanceConflictError extends Error {
-  constructor() {
-    super('Bootstrap token issuance conflicts with a concurrent operation');
-    this.name = 'BootstrapTokenIssuanceConflictError';
   }
 }
 

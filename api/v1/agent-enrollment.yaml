@@ -1,137 +1,609 @@
-openapi: 3.1.2
+openapi: 3.1.0
 info:
-  title: AR-IMMS Core Agent Enrollment API
+  title: AR-IMMS Agent Enrollment API
   version: 0.1.0
-  description: I1 bootstrap token issuance and I2 Agent enrollment.
+  description: |
+    Core enrollment contract for Flow 2 / Agent Enrollment (increments I1-I6).
+    This specification defines bootstrap-token issuance, Agent enrollment, and
+    Agent binding revocation. It does not define Control Plane, heartbeat,
+    credential renewal, telemetry ingestion, or uninstall APIs.
+
+    The reusable agentBearer scheme describes authentication for explicitly
+    Agent-authenticated Core operations. No operation in this contract currently
+    accepts an Agent credential. The enrollment response's control_plane URL is
+    configuration data only; it does not imply that the referenced API exists.
+
+    The request and success response shapes are stable v1. A matching retry within
+    24 hours returns the committed result and credential after Core verifies the
+    original bootstrap token and immutable request fingerprint.
+servers:
+  - url: https://core.example.com
+    description: Example deployment; configure a trusted Core origin in production
+tags:
+  - name: Bootstrap
+    description: Admin-facing enrollment preparation
+  - name: Enrollment
+    description: Agent-facing initial registration
+  - name: Bindings
+    description: Admin-facing Agent binding lifecycle
+  - name: Agent Registry
+    description: Admin-facing read-only installation and binding queries
 paths:
   /api/v1/nodes/{nodeId}/agent-bootstrap-tokens:
     post:
+      tags: [Bootstrap]
       operationId: issueAgentBootstrapToken
       summary: Issue a Node-bound single-use bootstrap token
-      description: Requires an authenticated human with agent:manage. Node must exist, be active, have an active placement, and have no active Agent binding. A new issue invalidates the previous unused token.
+      description: |
+        Requires an authenticated, authorized human administrator.
+        The Node must exist, have active lifecycle status and an active placement,
+        and have no active Agent binding. QR mapping is not required.
+        Token lifetime is 600 seconds. Core stores only a verifier/hash and displays
+        the plaintext bootstrap token once in this response. A new issuance invalidates
+        any earlier unconsumed token for the same Node.
       security:
         - HumanAccessToken: []
-      x-required-permissions: [agent:manage]
       parameters:
         - name: nodeId
           in: path
           required: true
-          schema: { type: string, format: uuid }
+          schema:
+            type: string
+            format: uuid
+          description: Existing Asset & Topology Node ID
       responses:
         '201':
-          description: Token created and returned once. Response is no-store.
+          description: Bootstrap token created
           headers:
             Cache-Control:
               schema: { type: string }
-              description: no-store
+              description: Core sends no-store because this response contains a secret.
           content:
             application/json:
               schema:
-                type: object
-                required: [data, meta]
-                properties:
-                  data:
-                    type: object
-                    required: [token_id, bootstrap_token, node_id, expires_at]
-                    properties:
-                      token_id: { type: string }
-                      bootstrap_token: { type: string, writeOnly: false }
-                      node_id: { type: string, format: uuid }
-                      expires_at: { type: string, format: date-time }
-                  meta:
-                    type: object
-                    required: [request_id]
-                    properties:
-                      request_id: { type: string }
-                      trace_id: { type: string }
-        '400': { $ref: './baseline.yaml#/components/responses/Problem' }
-        '401': { $ref: './baseline.yaml#/components/responses/Problem' }
-        '403': { $ref: './baseline.yaml#/components/responses/Problem' }
-        '404': { $ref: './baseline.yaml#/components/responses/Problem' }
-        '409': { $ref: './baseline.yaml#/components/responses/Problem' }
+                $ref: '#/components/schemas/BootstrapTokenResponse'
+              example:
+                data:
+                  token_id: bt_01JEXAMPLE
+                  bootstrap_token: arimms_bt_example-secret
+                  node_id: a3cb4e2c-15c1-4c3d-8cc9-110a47ac7001
+                  expires_at: '2026-10-30T10:10:00Z'
+                meta:
+                  request_id: req_01JEXAMPLE
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/RateLimitedProblem' }
+        '500': { $ref: '#/components/responses/Problem' }
+  /api/v1/agent-bindings/{bindingId}/revoke:
+    post:
+      tags: [Bindings]
+      operationId: revokeAgentBinding
+      summary: Revoke an Agent binding and its credentials
+      description: |
+        Requires an authenticated human with the `agent:manage` permission.
+        Revocation is idempotent: the first and repeated calls return 204. Core
+        retains the installation and historical binding, marks associated active
+        credentials revoked, and records one audit fact in the same transaction.
+        A revoked installation can enroll again with a new bootstrap token and
+        attempt ID; Core reuses its installation identity and updates software,
+        environment, and metadata while retaining the old binding.
+      security:
+        - HumanAccessToken: []
+      parameters:
+        - name: bindingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Existing Agent binding ID
+      responses:
+        '204':
+          description: Binding is now revoked or was already revoked
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/RateLimitedProblem' }
   /api/v1/agent-enrollments:
     post:
+      tags: [Enrollment]
       operationId: enrollAgent
       summary: Enroll an Agent installation and bind it to a Node
+      description: |
+        HTTPS-only endpoint. The bootstrap token is the enrollment secret; no Agent
+        bearer token is required for the initial request. Core resolves the Node
+        from the bootstrap token, never from Agent-supplied metadata.
+
+        The installation ID persists across restart and upgrade. Generate and durably
+        persist the enrollment_attempt_id and immutable request before the first send.
+        Retries of the same operation must reuse the same request and attempt ID.
+        Token validation, consumption, binding uniqueness, credential issuance and
+        attempt recording are coordinated atomically using MongoDB transactions.
+
+        201 indicates a newly committed enrollment. If the response was lost, the
+        same attempt ID, bootstrap token and immutable request recover the original
+        committed result for 24 hours. Core stores the recovery result only as
+        authenticated ciphertext. The request fingerprint is deterministic over
+        canonical enrollment fields and the bootstrap-token hash. The attempt ID
+        alone never authorizes recovery.
+        After the recovery window, Core returns 410 while retaining the binding and
+        credential hash; it does not create another enrollment.
+        If the associated binding or credential has been revoked, Core returns
+        410 ENROLLMENT_RECOVERY_REVOKED and never returns the encrypted credential.
+        A new authorized enrollment may reuse the same installation ID after
+        revocation; Core updates the installation's Agent version, environment,
+        and metadata and creates a new binding and credential.
+        Enrollment success does not mean Collector activation or telemetry health.
       security: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/EnrollmentRequest' }
+            schema:
+              $ref: '#/components/schemas/EnrollmentRequest'
+            example:
+              bootstrap_token: arimms_bt_example-secret
+              enrollment_attempt_id: d99c38f2-7668-4814-9e70-6416014f83fe
+              installation:
+                id: 5baf0cba-cf5a-4d39-a3d4-e76263b70810
+              agent:
+                version: 0.1.4
+              environment:
+                os: linux
+                architecture: amd64
+                hostname: node-01
+              metadata:
+                deployment_kind: vm
+                hypervisor: kvm
+                custom_label: development
       responses:
         '201':
-          description: Enrollment committed; response is no-store
+          description: Newly committed enrollment
           headers:
-            Cache-Control: { schema: { type: string }, description: no-store }
+            Cache-Control:
+              schema: { type: string }
+              description: Core sends no-store because this response contains a credential.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/EnrollmentResponse' }
-        '400': { $ref: './baseline.yaml#/components/responses/Problem' }
-        '401': { $ref: './baseline.yaml#/components/responses/Problem' }
-        '409': { $ref: './baseline.yaml#/components/responses/Problem' }
-        '503': { $ref: './baseline.yaml#/components/responses/Problem' }
+              schema:
+                $ref: '#/components/schemas/EnrollmentResponse'
+              example:
+                data:
+                  enrollment_id: e4fdf407-96b1-4ff1-b659-c9cf4470b5f9
+                  installation_id: 5baf0cba-cf5a-4d39-a3d4-e76263b70810
+                  binding:
+                    id: e9a95012-1c46-4e85-97a0-a6b909b5c935
+                    node_id: a3cb4e2c-15c1-4c3d-8cc9-110a47ac7001
+                    status: active
+                  credential:
+                    type: bearer
+                    access_token: '<secret>'
+                  control_plane:
+                    base_url: https://core.example.com/api/v1/agent-control
+                    poll_interval_seconds: 30
+                meta:
+                  request_id: req_01JEXAMPLE
+        '200':
+          description: Original committed enrollment result recovered after a matching retry
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              description: Core sends no-store because this response contains a credential.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrollmentResponse'
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '410': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/RateLimitedProblem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/agents:
+    get:
+      tags: [Agent Registry]
+      operationId: listAgentInstallations
+      summary: List Agent installations
+      description: |
+        Requires an authenticated human with `agent:manage`. Results use the
+        standard cursor pagination envelope and are ordered by installation ID.
+        `node_id` matches the current active binding. Arbitrary enrollment
+        metadata and credential, token, and recovery data are never returned.
+        Registration state does not indicate connectivity or telemetry health.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [agent:manage]
+      parameters:
+        - name: page_size
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, maxLength: 512 }
+        - name: node_id
+          in: query
+          required: false
+          description: Return the installation currently bound to this Node, if any.
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Cursor-paginated installations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentInstallationListResponse'
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
+  /api/v1/agents/{installationId}:
+    get:
+      tags: [Agent Registry]
+      operationId: getAgentInstallation
+      summary: Get an Agent installation
+      description: |
+        Requires an authenticated human with `agent:manage`. Returns installation
+        identity, software version, environment and current active binding, if
+        present. It does not return arbitrary metadata or secret material.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [agent:manage]
+      parameters:
+        - name: installationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Installation and current binding, if present
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentInstallationResponse' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
+  /api/v1/agents/{installationId}/bindings:
+    get:
+      tags: [Agent Registry]
+      operationId: listAgentInstallationBindings
+      summary: List binding history for an Agent installation
+      description: |
+        Requires an authenticated human with `agent:manage`. Includes active and
+        revoked binding records in reverse creation order. Revoking actor data is
+        available through Audit, not this Registry response.
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [agent:manage]
+      parameters:
+        - name: installationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: page_size
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, maxLength: 512 }
+      responses:
+        '200':
+          description: Cursor-paginated binding history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentBindingHistoryListResponse'
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
 components:
+  securitySchemes:
+    HumanAccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Human IAM authentication; actual browser-cookie transport may also be supported by Core.
+    agentBearer:
+      type: http
+      scheme: bearer
+      description: Opaque credential reserved for explicitly Agent-authenticated Core APIs; no current operation in this contract accepts it. Core resolves trusted installationId, bindingId, and nodeId only when credential and binding are active and the installation association is consistent. It is not valid for Human/Admin APIs or OTLP Gateway authentication.
   schemas:
+    BootstrapTokenResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [token_id, bootstrap_token, node_id, expires_at]
+          properties:
+            token_id: { type: string }
+            bootstrap_token:
+              {
+                type: string,
+                writeOnly: false,
+                description: Opaque single-use secret accepted only by enrollment; it cannot authenticate Agent API requests.,
+              }
+            node_id: { type: string, format: uuid }
+            expires_at: { type: string, format: date-time }
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
     EnrollmentRequest:
       type: object
       additionalProperties: false
-      required: [bootstrap_token, enrollment_attempt_id, installation, agent, environment]
+      required:
+        [
+          bootstrap_token,
+          enrollment_attempt_id,
+          installation,
+          agent,
+          environment,
+        ]
       properties:
-        bootstrap_token: { type: string, minLength: 1, writeOnly: true }
-        enrollment_attempt_id: { type: string, format: uuid }
+        bootstrap_token:
+          type: string
+          minLength: 1
+          description: Node-bound, single-use secret, 10-minute validity
+        enrollment_attempt_id:
+          type: string
+          format: uuid
+          description: Same UUID and immutable payload for all retries of one attempt
         installation:
-          type: object
-          additionalProperties: false
-          required: [id]
-          properties: { id: { type: string, format: uuid } }
+          $ref: '#/components/schemas/InstallationIdentity'
         agent:
+          $ref: '#/components/schemas/AgentSoftware'
+        environment:
+          $ref: '#/components/schemas/AgentEnvironment'
+        metadata:
+          type: object
+          description: |
+            Optional JSON object for non-secret, untrusted extension metadata.
+            Maximum serialized UTF-8 JSON size: 4096 bytes (enforced by server).
+            Unrecognized keys must not grant permissions or alter enrollment policy.
+          additionalProperties: true
+          default: {}
+    InstallationIdentity:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Stable installation UUID, not an authentication secret
+    AgentSoftware:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: { type: string, minLength: 1, maxLength: 64 }
+    AgentEnvironment:
+      type: object
+      additionalProperties: false
+      required: [os, architecture]
+      properties:
+        os:
+          type: string
+          enum: [linux, windows, darwin, other]
+        architecture:
+          type: string
+          enum: [amd64, arm64, '386', other]
+        hostname:
+          type: string
+          minLength: 1
+          maxLength: 255
+    EnrollmentResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/EnrollmentResult'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    EnrollmentResult:
+      type: object
+      additionalProperties: false
+      required:
+        [enrollment_id, installation_id, binding, credential, control_plane]
+      properties:
+        enrollment_id: { type: string, format: uuid }
+        installation_id: { type: string, format: uuid }
+        binding:
           type: object
           additionalProperties: false
-          required: [version]
-          properties: { version: { type: string, minLength: 1, maxLength: 64 } }
+          required: [id, node_id, status]
+          properties:
+            id: { type: string, format: uuid }
+            node_id: { type: string, format: uuid }
+            status: { type: string, enum: [active] }
+        credential:
+          type: object
+          additionalProperties: false
+          required: [type, access_token]
+          properties:
+            type: { type: string, enum: [bearer] }
+            access_token:
+              type: string
+              minLength: 1
+              description: Opaque bearer secret reserved for future explicitly Agent-authenticated Core APIs; none are currently published.
+        control_plane:
+          type: object
+          description: |
+            Configuration data returned as supplied by Core. The URL is a future
+            Control Plane location; this contract defines no operations at it.
+          additionalProperties: false
+          required: [base_url, poll_interval_seconds]
+          properties:
+            base_url: { type: string, format: uri, pattern: '^https://' }
+            poll_interval_seconds: { type: integer, minimum: 1 }
+    ResponseMeta:
+      type: object
+      additionalProperties: true
+      required: [request_id]
+      properties:
+        request_id: { type: string }
+    ProblemDetails:
+      type: object
+      description: Core Problem Details (RFC 9457) with a stable application error code. The code catalog distinguishes business outcomes, platform validation/authorization failures, and infrastructure availability failures.
+      required: [type, title, status, code]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - BAD_REQUEST
+            - UNAUTHORIZED
+            - CONFLICT
+            - INVALID_BOOTSTRAP_TOKEN
+            - BOOTSTRAP_TOKEN_EXPIRED
+            - BOOTSTRAP_TOKEN_CONSUMED
+            - NODE_ALREADY_BOUND
+            - INSTALLATION_ALREADY_BOUND
+            - ENROLLMENT_ATTEMPT_CONFLICT
+            - ENROLLMENT_RECOVERY_EXPIRED
+            - ENROLLMENT_RECOVERY_REVOKED
+            - INVALID_AGENT_CREDENTIAL
+            - AGENT_AUTHENTICATION_UNAVAILABLE
+            - AGENT_REVOCATION_UNAVAILABLE
+            - ENROLLMENT_UNAVAILABLE
+            - INTERNAL_SERVER_ERROR
+            - NODE_NOT_ELIGIBLE
+            - FORBIDDEN
+            - NOT_FOUND
+            - TOO_MANY_REQUESTS
+        request_id: { type: string }
+    AgentInstallationResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/AgentInstallation' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    AgentInstallationListResponse:
+      type: object
+      required: [data, meta, pagination]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AgentInstallation' }
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+        pagination: { $ref: '#/components/schemas/CursorPagination' }
+    AgentBindingHistoryListResponse:
+      type: object
+      required: [data, meta, pagination]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AgentBindingHistoryItem' }
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+        pagination: { $ref: '#/components/schemas/CursorPagination' }
+    AgentInstallation:
+      type: object
+      additionalProperties: false
+      required: [installation_id, agent_version, environment, created_at, updated_at, current_binding]
+      properties:
+        installation_id: { type: string, format: uuid }
+        agent_version: { type: string }
         environment:
           type: object
           additionalProperties: false
           required: [os, architecture]
           properties:
-            os: { type: string, enum: [linux, windows, darwin, other] }
-            architecture: { type: string, enum: [amd64, arm64, '386', other] }
-            hostname: { type: string, minLength: 1, maxLength: 255 }
-        metadata:
-          type: object
-          description: Untrusted JSON metadata limited to 4096 serialized UTF-8 bytes.
-          additionalProperties: true
-    EnrollmentResponse:
+            os: { type: string }
+            architecture: { type: string }
+            hostname: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at:
+          type: [string, 'null']
+          format: date-time
+          description: Null until the installation is updated by re-enrollment; thereafter the most recent update time.
+        current_binding:
+          description: Null when the installation has no active binding, including after revocation.
+          oneOf:
+            - $ref: '#/components/schemas/AgentActiveBinding'
+            - type: 'null'
+    AgentActiveBinding:
       type: object
-      required: [data, meta]
+      additionalProperties: false
+      required: [binding_id, node_id, status, created_at]
       properties:
-        data:
-          type: object
-          required: [enrollment_id, installation_id, binding, credential, control_plane]
+        binding_id: { type: string, format: uuid }
+        node_id: { type: string, format: uuid }
+        status: { type: string, const: active }
+        created_at: { type: string, format: date-time }
+    AgentBindingHistoryItem:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [binding_id, node_id, status, created_at]
           properties:
-            enrollment_id: { type: string, format: uuid }
-            installation_id: { type: string, format: uuid }
-            binding:
-              type: object
-              required: [id, node_id, status]
-              properties:
-                id: { type: string, format: uuid }
-                node_id: { type: string, format: uuid }
-                status: { type: string, enum: [active] }
-            credential:
-              type: object
-              required: [type, access_token]
-              properties:
-                type: { type: string, enum: [bearer] }
-                access_token: { type: string, writeOnly: false }
-            control_plane:
-              type: object
-              required: [base_url, poll_interval_seconds]
-              properties:
-                base_url: { type: string, format: uri, pattern: '^https://' }
-                poll_interval_seconds: { type: integer, default: 30, minimum: 1 }
-        meta:
-          type: object
-          required: [request_id]
-          properties: { request_id: { type: string } }
+            binding_id: { type: string, format: uuid }
+            node_id: { type: string, format: uuid }
+            status: { type: string, const: active }
+            created_at: { type: string, format: date-time }
+        - type: object
+          additionalProperties: false
+          required: [binding_id, node_id, status, created_at, revoked_at]
+          properties:
+            binding_id: { type: string, format: uuid }
+            node_id: { type: string, format: uuid }
+            status: { type: string, const: revoked }
+            created_at: { type: string, format: date-time }
+            revoked_at:
+              type: string
+              format: date-time
+              description: Timestamp recorded atomically when the binding is revoked.
+    CursorPagination:
+      type: object
+      additionalProperties: false
+      required: [type, next_cursor]
+      properties:
+        type: { type: string, const: cursor }
+        next_cursor: { type: [string, 'null'] }
+  responses:
+    Problem:
+      description: Failure described by the response status and application code
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://docs.ar-imms.dev/problems/bootstrap-token-expired
+            title: Bootstrap token expired
+            status: 401
+            code: BOOTSTRAP_TOKEN_EXPIRED
+            detail: The enrollment token has expired.
+            request_id: req_01JEXAMPLE
+    RateLimitedProblem:
+      description: |
+        Optional response from a deployment edge when it applies rate limits.
+        Core does not implement rate limiting for these operations. If the edge
+        returns this response, Agent clients should respect Retry-After when present.
+      headers:
+        Retry-After:
+          schema: { type: string }
+          description: Number of seconds or HTTP-date
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'

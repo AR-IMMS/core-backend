@@ -4,6 +4,9 @@ import { createZodDto } from 'nestjs-zod';
 const id = z.string().trim().min(1).max(128);
 export const rackIdParamsSchema = z.strictObject({ rack_id: id });
 export const rackRoomParamsSchema = z.strictObject({ room_id: id });
+export const rackListQuerySchema = z.strictObject({
+  search: z.string().trim().min(1).max(128).optional(),
+});
 export const createRackSchema = z.strictObject({
   column: z.number().int().nonnegative(),
   row: z.number().int().nonnegative(),
@@ -39,6 +42,7 @@ export const moveRackSchema = z.strictObject({
 
 export class RackIdParamsDto extends createZodDto(rackIdParamsSchema) {}
 export class RackRoomParamsDto extends createZodDto(rackRoomParamsSchema) {}
+export class RackListQueryDto extends createZodDto(rackListQuerySchema) {}
 export class CreateRackRequestDto extends createZodDto(createRackSchema) {}
 export class UpdateRackRequestDto extends createZodDto(updateRackSchema) {}
 export class MoveRackRequestDto extends createZodDto(moveRackSchema) {}

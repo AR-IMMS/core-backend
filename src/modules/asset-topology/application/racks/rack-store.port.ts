@@ -5,7 +5,7 @@ import type { RackLocation } from '../../domain/topology/rack-location';
 /** Persistence boundary for Rack identity and time-bounded Room locations. */
 export interface RackStorePort {
   getRack(id: string, context?: UnitOfWorkContext): Promise<Rack | null>;
-  listRacks(): Promise<readonly Rack[]>;
+  listRacks(search?: string): Promise<readonly Rack[]>;
   listActiveLocationsInRoom(
     roomId: string,
     context?: UnitOfWorkContext,

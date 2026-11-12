@@ -61,8 +61,16 @@ export class MongoRackStore implements RackStorePort {
     return doc ? toRack(doc) : null;
   }
 
-  async listRacks(): Promise<readonly Rack[]> {
-    const docs = await this.racks.find({}).sort({ id: 1 }).lean().exec();
+  async listRacks(search?: string): Promise<readonly Rack[]> {
+    const filter = search
+      ? {
+          name: {
+            $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+            $options: 'i',
+          },
+        }
+      : {};
+    const docs = await this.racks.find(filter).sort({ id: 1 }).lean().exec();
     return docs.map(toRack);
   }
 

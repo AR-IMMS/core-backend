@@ -8,6 +8,9 @@ const name = z.string().trim().min(1).max(128);
 export const dataCenterParamsSchema = z.strictObject({ data_center_id: id });
 export const siteParamsSchema = z.strictObject({ site_id: id });
 export const roomParamsSchema = z.strictObject({ room_id: id });
+export const topologyListQuerySchema = z.strictObject({
+  search: z.string().trim().min(1).max(128).optional(),
+});
 export const createSiteSchema = z.strictObject({ name });
 export const updateSiteSchema = createSiteSchema;
 export const createRoomSchema = z.strictObject({
@@ -38,6 +41,9 @@ export const updateRoomSchema = z
 export class DataCenterParamsDto extends createZodDto(dataCenterParamsSchema) {}
 export class SiteParamsDto extends createZodDto(siteParamsSchema) {}
 export class RoomParamsDto extends createZodDto(roomParamsSchema) {}
+export class TopologyListQueryDto extends createZodDto(
+  topologyListQuerySchema,
+) {}
 export class CreateSiteRequestDto extends createZodDto(createSiteSchema) {}
 export class UpdateSiteRequestDto extends createZodDto(updateSiteSchema) {}
 export class CreateRoomRequestDto extends createZodDto(createRoomSchema) {}

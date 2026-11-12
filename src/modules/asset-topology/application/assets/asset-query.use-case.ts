@@ -81,14 +81,25 @@ export class ListAssetsUseCase {
   async execute(input: {
     readonly pageSize: number;
     readonly afterAssetId?: string;
+    readonly assetTypeId?: string;
+    readonly lifecycleState?: 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
+    readonly rackId?: string;
+    readonly search?: string;
   }): Promise<{
     readonly assets: readonly Asset[];
     readonly currentPlacements: ReadonlyMap<string, AssetCurrentPlacement>;
     readonly nextCursorAssetId: string | null;
   }> {
+    const assetIds = input.rackId
+      ? await this.placements.listActiveAssetIdsByRack(input.rackId)
+      : undefined;
     const result = await this.assets.list({
       afterAssetId: input.afterAssetId,
       limit: input.pageSize,
+      assetTypeId: input.assetTypeId,
+      lifecycleState: input.lifecycleState,
+      assetIds,
+      search: input.search,
     });
     const activePlacements = await this.placements.listActiveByAssetIds(
       result.items.map((item) => item.id),

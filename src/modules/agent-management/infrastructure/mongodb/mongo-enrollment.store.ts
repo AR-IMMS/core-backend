@@ -2,20 +2,69 @@ import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
 import type { UnitOfWorkContext } from '@platform/events';
-import type { EnrollmentPersistencePort } from '../../application/enrollment.port';
+import type { EnrollmentPersistencePort } from '../../application/registration/ports/enrollment.port';
 import {
   BootstrapTokenConsumedError,
   BootstrapTokenExpiredError,
   BootstrapTokenInvalidError,
   EnrollmentAttemptConflictError,
-  EnrollmentUnavailableError,
   InstallationAlreadyBoundError,
   NodeAlreadyBoundError,
-} from '../../application/enrollment.port';
+} from '../../domain/errors/registration.errors';
+import {
+  EnrollmentRecoveryUnavailableError,
+  EnrollmentUnavailableError,
+} from '../../application/registration/errors/enrollment-availability.errors';
+import type { EncryptedEnrollmentResult } from '../../application/registration/ports/enrollment-recovery.port';
 
 @Injectable()
 export class MongoEnrollmentStore implements EnrollmentPersistencePort {
   constructor(@InjectConnection() private readonly connection: Connection) {}
+
+  async findAttempt(attemptId: string) {
+    const attempt = await this.connection
+      .collection('agent_management_enrollment_attempts')
+      .findOne({ attemptId });
+    if (!attempt) return null;
+    if (
+      typeof attempt['requestFingerprint'] !== 'string' ||
+      typeof attempt['status'] !== 'string' ||
+      !(attempt['committedAt'] instanceof Date) ||
+      typeof attempt['bindingId'] !== 'string' ||
+      typeof attempt['installationId'] !== 'string'
+    ) {
+      throw new EnrollmentRecoveryUnavailableError();
+    }
+    return {
+      requestFingerprint: attempt['requestFingerprint'],
+      status: attempt['status'],
+      committedAt: attempt['committedAt'],
+      bindingId: attempt['bindingId'],
+      installationId: attempt['installationId'],
+    };
+  }
+
+  async findRecovery(attemptId: string) {
+    const recovery = await this.connection
+      .collection('agent_management_enrollment_recovery')
+      .findOne({ attemptId });
+    if (!recovery) return null;
+    const requestFingerprint: unknown = recovery['requestFingerprint'];
+    const expiresAt: unknown = recovery['expiresAt'];
+    const encryptedResult: unknown = recovery['encryptedResult'];
+    if (
+      typeof requestFingerprint !== 'string' ||
+      !(expiresAt instanceof Date) ||
+      !isEncryptedEnrollmentResult(encryptedResult)
+    ) {
+      throw new EnrollmentRecoveryUnavailableError();
+    }
+    return {
+      requestFingerprint,
+      expiresAt,
+      encryptedResult,
+    };
+  }
 
   async findToken(tokenHash: string) {
     const token = await this.connection
@@ -48,6 +97,50 @@ export class MongoEnrollmentStore implements EnrollmentPersistencePort {
           session ? { session } : undefined,
         )) > 0
     );
+  }
+
+  async isEnrollmentResultActive(input: {
+    readonly attemptId: string;
+    readonly bindingId: string;
+    readonly installationId: string;
+  }): Promise<boolean> {
+    const attempt = await this.connection
+      .collection('agent_management_enrollment_attempts')
+      .findOne(
+        { attemptId: input.attemptId },
+        {
+          projection: {
+            bindingId: 1,
+            credentialId: 1,
+            installationId: 1,
+          },
+        },
+      );
+    if (
+      !attempt ||
+      attempt['bindingId'] !== input.bindingId ||
+      attempt['installationId'] !== input.installationId ||
+      typeof attempt['credentialId'] !== 'string'
+    ) {
+      return false;
+    }
+
+    const [binding, credential, installation] = await Promise.all([
+      this.connection.collection('agent_management_bindings').findOne({
+        bindingId: input.bindingId,
+        installationId: input.installationId,
+        status: 'active',
+      }),
+      this.connection.collection('agent_management_credentials').findOne({
+        credentialId: attempt['credentialId'],
+        bindingId: input.bindingId,
+        status: 'active',
+      }),
+      this.connection
+        .collection('agent_management_installations')
+        .findOne({ installationId: input.installationId }),
+    ]);
+    return Boolean(binding && credential && installation);
   }
 
   async enroll(
@@ -86,9 +179,23 @@ export class MongoEnrollmentStore implements EnrollmentPersistencePort {
     }
 
     try {
-      await this.connection
-        .collection('agent_management_installations')
-        .insertOne(
+      const installations = this.connection.collection(
+        'agent_management_installations',
+      );
+      const existingInstallation = await installations.updateOne(
+        { installationId: input.installationId },
+        {
+          $set: {
+            agentVersion: input.agentVersion,
+            environment: input.environment,
+            metadata: input.metadata,
+            updatedAt: input.now,
+          },
+        },
+        options,
+      );
+      if (existingInstallation.matchedCount === 0) {
+        await installations.insertOne(
           {
             installationId: input.installationId,
             enrollmentId: input.enrollmentId,
@@ -99,6 +206,7 @@ export class MongoEnrollmentStore implements EnrollmentPersistencePort {
           },
           options,
         );
+      }
       const token = await tokens.findOne(
         { tokenHash: input.tokenHash },
         { session, projection: { nodeId: 1 } },
@@ -141,6 +249,18 @@ export class MongoEnrollmentStore implements EnrollmentPersistencePort {
           },
           options,
         );
+      await this.connection
+        .collection('agent_management_enrollment_recovery')
+        .insertOne(
+          {
+            attemptId: input.attemptId,
+            requestFingerprint: input.requestFingerprint,
+            encryptedResult: input.encryptedResult,
+            committedAt: input.now,
+            expiresAt: input.recoveryExpiresAt,
+          },
+          options,
+        );
     } catch (error) {
       if (!isDuplicateKeyError(error)) throw error;
       const keyPattern = duplicateKeyPattern(error);
@@ -169,4 +289,17 @@ function duplicateKeyPattern(error: unknown): Record<string, unknown> | null {
   return typeof pattern === 'object' && pattern !== null
     ? (pattern as Record<string, unknown>)
     : null;
+}
+
+function isEncryptedEnrollmentResult(
+  value: unknown,
+): value is EncryptedEnrollmentResult {
+  if (typeof value !== 'object' || value === null) return false;
+  const result = value as Record<string, unknown>;
+  return (
+    typeof result['keyVersion'] === 'string' &&
+    typeof result['iv'] === 'string' &&
+    typeof result['ciphertext'] === 'string' &&
+    typeof result['authTag'] === 'string'
+  );
 }
