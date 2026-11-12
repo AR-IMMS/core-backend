@@ -3,10 +3,10 @@ info:
   title: AR-IMMS Core IAM API
   version: 1.0.0
   description: |
-    Proposed HTTP contract for human identity, authentication, and access
-    administration. The routes in this document describe SPEC-002 and are not
-    evidence that those routes are implemented. Public responses use the Core
-    `{data, meta}` envelope and Problem Details errors from the API baseline.
+    HTTP contract for the implemented human identity, authentication, and access
+    administration APIs. The routes were verified against the IAM controllers
+    on 2026-11-12. Public responses use the Core `{data, meta}` envelope and
+    Problem Details errors from the API baseline.
 
     Native clients use JSON access and refresh tokens. The browser Dashboard
     uses a JSON access token and an HttpOnly refresh cookie on the dedicated
