@@ -68,7 +68,7 @@ describe('HumanAccessService', () => {
     ).resolves.toBe(false);
     await expect(service.hasAllPermissions('user-1', [])).resolves.toBe(false);
     await expect(
-      service.hasAllPermissions('user-1', ['agent:manage' as never]),
+      service.hasAllPermissions('user-1', ['agent:manage']),
     ).resolves.toBe(false);
   });
 });
