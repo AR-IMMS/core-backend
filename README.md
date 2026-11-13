@@ -189,6 +189,14 @@ Pull requests should target `dev`, including a brief description of changes and 
 
 ## Development Principles
 
+The isolated Flow 04 P1-A read-only Zammad adapter is documented in
+[`src/modules/ticket/README.md`](src/modules/ticket/README.md), with configuration,
+test commands and execution evidence. It is not yet composed into the public API.
+
+The [Flow 04 architecture design](docs/local/architecture/flow04-ticket-zammad-backend-design.md)
+documents the current implementation, verified P0 behavior, proposed workflows
+and pending approval gates, with Mermaid diagrams.
+
 - Prioritize small, explainable changes backed by appropriate tests.
 - Prevent modules from directly accessing internal parts of other modules; communication must occur via public application contracts or defined internal events.
 - Do not place business logic into `shared` or `platform` purely for convenience of importing.
