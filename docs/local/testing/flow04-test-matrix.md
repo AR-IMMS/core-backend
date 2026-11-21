@@ -1,6 +1,6 @@
 # Flow 04 — P0 test traceability
 
-Status: planned implementation tests; P0 probes are separate evidence. No Flow 04 implementation test or CI automation is claimed complete. See the [P0 report](../integration/flow04-p0-zammad-verification.md).
+Status: 13 backend verified, 5 partial and 4 blocked after the secured PoC run on 2026-11-21. The IDs, layer requirements and planned CI placements are unchanged. No physical Web/Mobile/MR or staged CI pass is claimed. [Current acceptance evidence](../integration/flow04-backend-completion.md#acceptance-evidence) ? [Historical P0 report](../integration/flow04-p0-zammad-verification.md).
 
 ## Sources and counting
 
@@ -28,60 +28,72 @@ Existing backend `test:e2e` suites are not Web/Mobile E2E. R and E remain depend
 
 ## Unique inventory
 
-All rows are **planned / not executed as implementation acceptance cases**. PR and staging entries below are intended CI placement, not completed automation.
+The final column records current backend evidence and incomplete scenarios. PR and staging entries remain intended CI placements. Backend verification does not waive client and staging requirements.
 
-| ID (TC-WF04-) | Group / requirement | Acceptance focus | Layers | Planned CI |
-| --- | --- | --- | --- | --- |
-| 01 | F4-01 / REQ-01,08 | Authorized manual creation without Incident; same canonical ID on Web/Mobile | U,H,F,R,E | PR |
-| 02 | F4-01 / REQ-02 | Reviewed confirmed Incident draft; explicit authorized creation only | U,H,F,R,E; blocked Incident contract | Pending |
-| 03 | F4-01 / REQ-01 | Unauthorized creation has no external/local business side effects | U,H | PR |
-| 04 | F4-02 / REQ-04 | Assign/reassign while preserving distinct Business Owner accountability | U,H,F,R,E | PR |
-| 05 | F4-02 / REQ-04,08 | Assigned Technician progress/Article from Mobile visible on Web; trace original actor | H,F,R,E | PR |
-| 06 | F4-02 / REQ-04 | Unauthorized reassignment/management rejected | U,H | PR |
-| 07 | F4-03 / REQ-05 | Non-Owner closure rejected even with close permission; Zammad unchanged (DS-04b) | U,H,R,E | PR |
-| 08 | F4-03 / REQ-06 | Unauthorized reopening rejected | U,H,R | Pending |
-| 09 | F4-03 / REQ-03,06,10 | History retained; Ticket changes do not mutate other domain lifecycles | U,H,R; full composition needs other modules | Pending |
-| 10 | F4-04 / REQ-07,08 | Zero/one primary Incident, multiple Assets/Maintenance links, shared client context | U,H,Mongo,E; approved public contracts required | Pending |
-| 11 | F4-04 / REQ-09 | Accepted create, lost response: reconcile same submission without false success or duplicate | H,F,R,Mongo | PR |
-| 12 | F4-04 / REQ-09 | External success then local context/audit failure: recover same external ID | H,F,R,Mongo | Pending |
-| 13 | F4-03 / REQ-03 | NEW → OPEN | U,H,R | PR |
-| 14 | F4-03 / REQ-03 | OPEN → PENDING | U,H,R | PR |
-| 15 | F4-03 / REQ-03 | PENDING → OPEN | U,H,R | PR |
-| 16 | F4-03 / REQ-05 | OPEN → CLOSED by authorized current Owner | U,H,R | PR |
-| 17 | F4-03 / REQ-06 | CLOSED → OPEN by authorized actor | U,H,R | PR |
-| 18 | F4-01..04 / DS-04a | Web create → assign → Mobile view/progress/Article → Owner close via Core | E | Staging |
-| 19 | Supplemental F4-03 | Unsupported transition rejected without mutation | U,H,F | PR |
-| 20 | Supplemental F4-01,02 | Missing/ambiguous/inactive/wrong-group identity fails closed | U,H,R | PR |
-| 21 | Supplemental F4-03 | Concurrent ownership change cannot authorize stale Owner closure under approved writer model | F,R,H | PR |
-| 22 | Supplemental F4-02,04 | Article accepted then response lost: no blind duplicate append or false success | F,R,H | PR |
+| ID (TC-WF04-) | Group / requirement | Acceptance focus | Layers | Planned CI | Current disposition |
+| --- | --- | --- | --- | --- | --- |
+| 01 | F4-01 / REQ-01,08 | Authorized manual creation without Incident; same canonical ID on Web/Mobile | U,H,F,R,E | PR | Partial |
+| 02 | F4-01 / REQ-02 | Reviewed confirmed Incident draft; explicit authorized creation only | U,H,F,R,E; blocked Incident contract | Pending | Blocked |
+| 03 | F4-01 / REQ-01 | Unauthorized creation has no external/local business side effects | U,H | PR | Backend verified |
+| 04 | F4-02 / REQ-04 | Assign/reassign while preserving distinct Business Owner accountability | U,H,F,R,E | PR | Partial |
+| 05 | F4-02 / REQ-04,08 | Assigned Technician progress/Article from Mobile visible on Web; trace original actor | H,F,R,E | PR | Partial |
+| 06 | F4-02 / REQ-04 | Unauthorized reassignment/management rejected | U,H | PR | Backend verified |
+| 07 | F4-03 / REQ-05 | Non-Owner closure rejected even with close permission; Zammad unchanged (DS-04b) | U,H,R,E | PR | Partial |
+| 08 | F4-03 / REQ-06 | Unauthorized reopening rejected | U,H,R | Pending | Backend verified |
+| 09 | F4-03 / REQ-03,06,10 | History retained; Ticket changes do not mutate other domain lifecycles | U,H,R; full composition needs other modules | Pending | Blocked |
+| 10 | F4-04 / REQ-07,08 | Zero/one primary Incident, multiple Assets/Maintenance links, shared client context | U,H,Mongo,E; approved public contracts required | Pending | Blocked |
+| 11 | F4-04 / REQ-09 | Accepted create, lost response: reconcile same submission without false success or duplicate | H,F,R,Mongo | PR | Backend verified |
+| 12 | F4-04 / REQ-09 | External success then local context/audit failure: recover same external ID | H,F,R,Mongo | Pending | Backend verified |
+| 13 | F4-03 / REQ-03 | NEW → OPEN | U,H,R | PR | Backend verified |
+| 14 | F4-03 / REQ-03 | OPEN → PENDING | U,H,R | PR | Backend verified |
+| 15 | F4-03 / REQ-03 | PENDING → OPEN | U,H,R | PR | Backend verified |
+| 16 | F4-03 / REQ-05 | OPEN → CLOSED by authorized current Owner | U,H,R | PR | Backend verified |
+| 17 | F4-03 / REQ-06 | CLOSED → OPEN by authorized actor | U,H,R | PR | Backend verified |
+| 18 | F4-01..04 / DS-04a | Web create → assign → Mobile view/progress/Article → Owner close via Core | E | Staging | Blocked |
+| 19 | Supplemental F4-03 | Unsupported transition rejected without mutation | U,H,F | PR | Backend verified |
+| 20 | Supplemental F4-01,02 | Missing/ambiguous/inactive/wrong-group identity fails closed | U,H,R | PR | Partial |
+| 21 | Supplemental F4-03 | Concurrent ownership change cannot authorize stale Owner closure under approved writer model | F,R,H | PR | Backend verified |
+| 22 | Supplemental F4-02,04 | Article accepted then response lost: no blind duplicate append or false success | F,R,H | PR | Backend verified |
 
 DS-04b references 07, 11 and 22; test both unauthorized closure and ambiguous external outcomes. Feature-group cases must include client evidence, not simply label backend calls “Mobile.” Define main/exception classification before execution; report numerator, denominator, blocked/not-run IDs and defects. Archive commit, test command, environment/version, seed identifiers, sanitized result, CI run link and artifact for each execution.
 
-## Existing repository commands (PowerShell)
+## CI coverage by original case
 
-These are instructions for later execution, not results of this documentation task. Use pinned Node 22.22.3 and pnpm 11.9.0. `pnpm.cmd` avoids the local PowerShell shim restriction.
+The PR jobs schedule deterministic coverage for **21 of the 22 IDs**, of which **3 cases are fully automated at their required layers** (03, 06, 19, including two Feature cases). The other 18 are partial in PR; TC-WF04-18 is staging-only. The committed minimum of 11 complete cases and 7 Feature cases is therefore **not met**. Required real-Zammad, physical-client and owning-module environments cannot be waived. The original planned 16 PR and one staging placements remain unchanged. Actual GitHub job results: **NOT RUN**. The latest secured-PoC evidence (fixtures 16 and 17) remains separate from fresh local PR-equivalent results.
 
-```powershell
-Set-Location 'C:\Users\Admin\AR-IMMS backend\core-backend'
-pnpm.cmd install --frozen-lockfile
-pnpm.cmd test --runInBand
-pnpm.cmd test:cov --runInBand
-pnpm.cmd typecheck
-pnpm.cmd check:all
-pnpm.cmd format:check
-pnpm.cmd exec eslint "{src,apps,libs,test}/**/*.ts"
-pnpm.cmd build
-```
+In the table, **Contracts** means `wf04-contracts` and the repository-wide coverage job, and **Mongo** means `wf04-mongo`. File shortcuts refer to these executable paths:
 
-Existing Mongo-backed integration runs require a disposable database (these suites may drop it):
+- **Workflow**: [ticket-workflow.spec.ts](../../../src/modules/ticket/application/ticket-workflow.spec.ts); **HTTP**: [ticket-http.integration.spec.ts](../../../src/modules/ticket/presentation/ticket-http.integration.spec.ts).
+- **Zammad**: [workflow adapter HTTP](../../../src/modules/ticket/infrastructure/zammad-ticket-workflow.http-contract.spec.ts), [read adapter HTTP](../../../src/modules/ticket/infrastructure/zammad-ticket-read.http-contract.spec.ts), [eligibility HTTP](../../../src/modules/ticket/infrastructure/zammad-user-access.http-contract.spec.ts).
+- **Auth**: [get-authorized-ticket.spec.ts](../../../src/modules/ticket/application/get-authorized-ticket.spec.ts) and existing IAM guard/permission suites.
+- **Receipt**: [ticket-journal.spec.ts](../../../src/modules/ticket/application/ticket-journal.spec.ts); **Mongo mapping/journal**: [mapping](../../../test/ticket-identity-mapping.integration.ts) and [journal](../../../test/ticket-journal.integration.ts).
+- **Live**: [three-role HTTP](../../../test/ticket-api.real.cjs) and [port-fault plus live HTTP recovery](../../../test/ticket-recovery.real.ts). These are opt-in and excluded from PR. [Execution and fixture runbook](flow04-ci-runbook.md)
 
-```powershell
-docker compose up -d --wait mongodb
-$env:MONGODB_TEST_URI = 'mongodb://localhost:27017/ar_imms_core_test?replicaSet=rs0'
-pnpm.cmd test:e2e --runInBand
-pnpm.cmd asset-topology:integration
-pnpm.cmd asset-topology:assets:integration
-pnpm.cmd asset-topology:placements:integration
-```
+| Case (TC-WF04-) | Required layers | Executable coverage | CI job and local result | Remaining gap / environment |
+| --- | --- | --- | --- | --- |
+| 01 | U,H,F,R,E | Workflow, HTTP, Zammad create payload; Live full backend create/read | Contracts PASS, partial | Actual Web/Mobile shared ID on seeded client environment |
+| 02 | U,H,F,R,E | Workflow tests draft freshness and missing provider; Live 503 | Contracts PASS, partial | Incident owner, real Zammad and clients with reviewed Incident |
+| 03 | U,H | Workflow and HTTP `TC-WF04-03`; no workflow dispatch/journal; Live negative | Contracts PASS, complete | No extra real or client test required by this row |
+| 04 | U,H,F,R,E | Workflow responsibility invariants, HTTP guard/shape, Zammad scope; Live assignment | Contracts PASS, partial | Cross-client view and reassignment |
+| 05 | H,F,R,E | HTTP work policy, fake Article response faults, Workflow scope; Live Technician and Audit | Contracts PASS, partial | Actual Mobile submission visible on Web |
+| 06 | U,H | Workflow and HTTP `TC-WF04-06` guard/denial; Live negative | Contracts PASS, complete | No extra real or client test required by this row |
+| 07 | U,H,R,E | Workflow Owner check and HTTP close permission; Live non-Owner unchanged | Contracts PASS, partial | Actual client/demo DS-04b |
+| 08 | U,H,R | Workflow and HTTP `TC-WF04-08` deny unauthorized reopen; Live 403 unchanged | Contracts PASS, partial | Real Zammad verification is opt-in |
+| 09 | U,H,R | Workflow and HTTP lifecycle boundaries; Live Ticket history preserved | Contracts PASS, partial | Real Incident/Maintenance providers and both lifecycle readbacks |
+| 10 | U,H,Mongo,E | Workflow multiple Assets and owning-port doubles; Mongo journal persists multiple links; Live empty context | Contracts/Mongo PASS, partial | Real authorized Asset fixtures, both owning providers and Web/Mobile |
+| 11 | H,F,R,Mongo | HTTP unresolved 409, fake transport failures, Receipt recovery and Mongo; Live same-key create recovery | Contracts/Mongo PASS, partial | Real lost-create verification is opt-in |
+| 12 | H,F,R,Mongo | HTTP unresolved 409, Receipt verified checkpoint, real Mongo rollback/recovery; Live injected local failure | Contracts/Mongo PASS, partial | Real Zammad/local-failure composition is opt-in |
+| 13 | U,H,R | Workflow NEW→OPEN and HTTP progress guard/DTO; Live Technician | Contracts PASS, partial | Automate real PoC/staging as a separately approved run |
+| 14 | U,H,R | Workflow OPEN→PENDING and HTTP progress guard/DTO; Live Technician | Contracts PASS, partial | Real Zammad pending-time outcome is opt-in |
+| 15 | U,H,R | Workflow PENDING→OPEN and HTTP progress guard/DTO; Live Technician | Contracts PASS, partial | Real Zammad progress/readback is opt-in |
+| 16 | U,H,R | Workflow exact Owner close, HTTP close guard; Live OPEN→CLOSED | Contracts PASS, partial | Real Zammad close is opt-in |
+| 17 | U,H,R | Workflow authorized reopen, HTTP reopen guard; Live CLOSED→OPEN | Contracts PASS, partial | Real Zammad reopen/history is opt-in |
+| 18 | E | Live backend sequence only; no physical-client harness | Staging NOT RUN | Seeded Web/Mobile/MR, providers and device evidence |
+| 19 | U,H,F | Workflow repeated OPEN, HTTP rejects CLOSED DTO, fake HTTP state catalog with no mutation | Contracts PASS, complete | No extra real or client test required by this row |
+| 20 | U,H,R | Auth, Workflow mapping denies, HTTP concealment, Zammad eligibility and Mongo; Live configured scopes | Contracts/Mongo PASS, partial | Dedicated missing/ambiguous/inactive/wrong-group live mapping fixtures; preserve current mappings |
+| 21 | F,R,H | Receipt contention and Mongo lock; Live held-lock actual HTTP and former Owner deny | Contracts/Mongo PASS, partial | Real Zammad owner race stays in opt-in pipeline |
+| 22 | F,R,H | Fake Article timeout/connection loss and wrong Ticket payload, Receipt and HTTP unresolved; Live same-key single Article | Contracts PASS, partial | Actual Zammad append/recovery is opt-in |
 
-Sources: [package.json](../../../package.json), [Jest config](../../../jest.config.ts), [backend E2E config](../../../test/jest-e2e.json), [Mongo guard](../../../test/mongodb-test-config.ts), [current CI](../../../.github/workflows/ci.yml). There is no existing Ticket real-contract or Web/Mobile E2E command. Add and document exact paths/commands with their future PRs; do not present nonexistent runners as runnable. Ordinary Jest matches `*.spec.ts`, including HTTP specs; explicit real-service suites must be isolated from normal PR runs.
+## Reproduce the configured checks
+
+Use the pinned install and deterministic commands in the [CI and real integration runbook](flow04-ci-runbook.md). The isolated Mongo script constructs its own database URI and does not use the existing local Mongo or secured PoC network. Flows requiring real Zammad or physical clients do not run on PR. For the latest actual release-gate evidence, see the [completion report](../integration/flow04-backend-completion.md).

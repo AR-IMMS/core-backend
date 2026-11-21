@@ -1,14 +1,50 @@
 # Flow 04 — Thiết kế Backend Ticket Management tích hợp Zammad
 
-**Dự án:** AR-IMMS Mini Data Center PoC · **Rà soát:** 2026-11-13, Asia/Bangkok.
+**Dự án:** AR-IMMS Mini Data Center PoC · **Rà soát:** 2026-11-19, Asia/Bangkok.
 
 **Phạm vi:** tài liệu kiến trúc; không phê duyệt thêm business rule, API hoặc schema.
 
 **Baseline:** [Flow 04 tại revision được chấp nhận](https://github.com/AR-IMMS/shared-docs/blob/294001cd9f1359bc03ced3925328454cabb3c0ea/business/04-ticket-management.md).
 
-**Repository:** `core-backend`, branch `feat/ticket-management`, base `175799d`.
+**Repository:** `core-backend`, branch `feat/ticket-management`, HEAD tài liệu `69ddcffa` (base trước đó `175799d`).
 
 > Bản tài liệu được đưa lên GitHub trước code. **Implemented** dưới đây có nghĩa là đã đối chiếu code trong **working tree**, bao gồm P1-A chưa nằm trong commit tài liệu. Các đường dẫn code P1-A được ghi bằng inline code để tránh liên kết GitHub chưa tồn tại. Không có public Ticket API; `TicketModule` chưa được import vào `CoreModule`.
+
+**Cập nhật P1-B:** người dùng đã chấp nhận hoàn thành phạm vi P1-A, còn final code review. [Đề xuất identity mapping và resource authorization](../integration/flow04-p1b-identity-authorization-design.md) chỉ là thiết kế để duyệt: mapping collection thuộc Ticket, immutable Core ID, kiểm tra live identity/group, read policy trong Core và một detail endpoint. Chưa phê duyệt hoặc triển khai P1-B; Owner/Assignee, restricted Technician visibility, provisioning và public API vẫn là approval gates. Không sửa IAM permissions hoặc cài custom field.
+
+**P1-B.1 status update (2026-11-19):** Internal identity foundation implemented: Ticket-owned Mongo mapping collection, both unique indexes including revoked bindings, scoped read port/store, configured instance key and separate internal module. Mapping/visibility design is accepted; provisioning authority, runtime external-access semantics and Business Owner representation remain gated. No public API, CoreModule registration or actual human mappings. P1-B.2/.3 remain unauthorized. See [implementation evidence and Owner verification procedure](../integration/flow04-p1b1-identity-foundation.md). Earlier pending-policy wording below is historical where superseded by this update.
+
+**WF-04 role correction (2026-11-19):** Human Ticket business actors are exclusively OPERATOR and TECHNICIAN. Core must reject IT_ADMIN before any Ticket business action, even with inherited Ticket permissions or an accidentally provisioned mapping. Owner and Assignee are responsibilities held by eligible business actors, not an administrator bypass. Owner-only closure and current Owner-or-authorized-Operator reopening remain unchanged. Admin1 only administers IAM or performs explicitly authorized local integration provisioning; Zammad Integration is a technical executor, never a human actor. The two approved human pairs remain uninserted. See [scope correction, negative tests and shared change request](../integration/flow04-ticket-role-scope-correction.md). Shared baseline conflicts are proposed for approval, not silently edited.
+
+**P1-B.1b implementation update (2026-11-19):** The internal external-user REST adapter verifies configured service identity and exact active human ID/direct-full group eligibility, with configured non-human exclusions. It reuses P1-A GET transport and exposes no client endpoint. Restricted create-only mapping provisioning validates public IAM, explicit authority and external eligibility, then atomically inserts the binding and Audit outbox fact. No operational authority provider is enabled; approved human pairs remain uninserted. Mongo commit/rollback tests and real read-only Zammad adapter probes passed. No canonical Ticket mirror, IAM catalog change or CoreModule registration was added.
+
+**Remaining gates:** `arimms_business_owner_id` installation and mutation matrix, enforceable Core-only writer restrictions, operational provisioning authority and real mapping/Audit readback remain pending. Native `owner_id` is Assignee, never an inferred Business Owner. P1-B.2 is **not implemented**; P1-B.3 is **NO-GO**. Full local Jest: 620 tests/109 suites; Mongo: 12/12; type/lint/build/scoped formatting passed. These technical tests do not complete the 22 business acceptance cases or Web/Mobile E2E. See [exact files, commands, results and approval gates](../integration/flow04-p1b-gate-resolution.md#7-p1-b1b-implementation-and-execution-evidence--2026-11-19).
+
+
+**Operational update (2026-11-20):** Both approved human mappings are ACTIVE in `arimms-p0-generation-1` / group 2, created through the restricted use case and verified through the public Audit API. The new local authority provider requires explicit configuration and authenticated designated administrator identity; it is disabled by default and grants no Ticket business access. Only OPERATOR and TECHNICIAN are human Ticket actors.
+
+**Verified Owner contract and security gate:** Zammad rejects custom `_id` suffixes. The user-approved replacement `arimms_business_owner` (nullable integer, attribute 60) passed independent Owner/Assignee and history probes on dedicated Tickets 9/10. It accepts invalid human IDs and permits direct Technician self-grants. Native self-assignment also succeeded; a default-bridge client reached the published Zammad port. Fixture values were restored and the experimental field disabled non-destructively. **Core-only writer enforcement is not established; P1-B.2 remains unimplemented and P1-B.3 is NO-GO.** No public API/CoreModule registration or competing canonical Owner store was added. See [activation, Audit IDs, exact probes, rollback and tests](../integration/flow04-p1b-gate-resolution.md#8-approved-local-activation-and-bounded-experiments--2026-11-20). This update supersedes older pending-pair and `_id` field proposals below.
+
+
+**Latest secure deployment / P1-B.2 update (2026-11-20):** Core is containerized on 8082 with isolated Zammad and Mongo backend networks and preserved volumes/rs0. Zammad has no host port. A separate client-certificate-authenticated maintenance gateway is closed by default. Representative client tests deny direct UI/REST/GraphQL/websocket and Technician self-grant attempts while Core reads the same approved instance. Attribute 60 (`arimms_business_owner`) is active; approved mappings and Audit evidence are preserved. Synthetic activity/direct-group revocation checks passed; maintenance pauses are required for administrative authorization changes.
+
+The internal `GetAuthorizedTicket` query now enforces public IAM identity/role/permission, exact active mapping, current external eligibility, canonical group, valid mapped/eligible Business Owner and Owner-or-Assignee Technician visibility. Missing/invalid Owner denies Technician even if assigned; permitted Operator may inspect for repair. IT_ADMIN has no bypass. No public Ticket API or CoreModule registration was added. Fresh checks: 696 full Jest / 208 Ticket / 14 Mongo; real internal smoke, type/lint/build/format pass. Actual Web/Mobile checks remain NOT RUN. [Verification and P1-B.3/release recommendation](../integration/flow04-p1b-gate-resolution.md#9-private-deployment-and-internal-p1-b2--verified-2026-11-20). This update supersedes all historical disabled-field and P1-B.2-blocked statements in this document.
+
+**Docker DNS recovery (2026-11-20):** the base Compose file now keeps MongoDB on the secured data network with the `mongodb` alias and no host port. Host-run development uses a separate Compose project and volume. The secured startup script verifies both private upstreams and waits for Core readiness. [Recovery evidence and regression checks](../integration/flow04-p1b-gate-resolution.md#10-docker-dns-recovery--verified-2026-11-20) · [Startup, maintenance and rollback](../../../deploy/flow04/README.md).
+
+**Master Task implementation (2026-11-20):** secure PoC enables public detail,
+list and workflow APIs. Core persists only links, identity mappings and integration
+receipts. A verified checkpoint commits context and the Audit outbox atomically.
+A unique per-Ticket receipt lock coordinates Core writers and immediately
+preceding canonical reads detect known changes before dispatch. Zammad retains
+canonical Ticket, Business Owner, Assignee, state and Articles. The runtime
+resolves lifecycle state IDs from the actual catalog and only accepts the five
+baseline transitions. IT_ADMIN denial is verified across the live public API.
+The reviewed Incident and Maintenance owning contracts and Technician write
+permission remain gates. Earlier pre-Master-Task statements on public API
+activation are historical. [Completion and acceptance status](../integration/flow04-backend-completion.md)
+· [Web/Mobile API guide](../integration/flow04-ticket-api-guide.md).
+
 
 ## Mục lục
 
@@ -37,7 +73,7 @@
 | **P — Proposed**            | Kiến trúc dự kiến, chưa có implementation tương ứng.                                              |
 | **A — Pending approval**    | Cần business/IAM/technical owner quyết định hoặc xác minh thêm trước phase phụ thuộc.             |
 
-Business baseline đã chấp nhận là nguồn yêu cầu; nhãn **V** không thay thế approval nghiệp vụ. P0 được chấp nhận là các quan sát tích hợp; P1-A chỉ được phép triển khai adapter đọc. Các sequence diagram tại F đều là **P/A**, không phải evidence execution.
+Business baseline đã chấp nhận là nguồn yêu cầu; nhãn **V** không thay thế approval nghiệp vụ. P0 được chấp nhận là các quan sát tích hợp; P1-A đã hoàn thành adapter đọc và được chấp nhận về phạm vi, còn final code review. Các sequence diagram tại F đều là **P/A**, không phải evidence execution.
 
 | Thuật ngữ                          | Cách dùng                                                                                     |
 | ---------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -63,7 +99,7 @@ Flow 04 phối hợp tạo, phân công, theo dõi, cập nhật, đóng và m�
 | Operator     | Tạo/manage/assign theo permission; có thể reopen theo BR-06.                                      |
 | Technician   | Xem và cập nhật assigned work theo policy được duyệt; không tự có quyền manage hoặc close.        |
 | Ticket Owner | Chịu trách nhiệm kết quả, là người duy nhất được close theo BR-05; vẫn qua IAM và preconditions.  |
-| IT Admin     | Quản trị cấu hình/quyền, thực hiện nghiệp vụ khi được cấp phép; không có implicit Owner override. |
+| IT Admin | IAM administration and explicitly authorized integration provisioning only; excluded from all Ticket business operations, regardless of inherited permissions. |
 
 | Thành phần                     | Trách nhiệm                                                                                           | Trạng thái                                                              |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
@@ -277,7 +313,7 @@ BR-02/08/10; TC-WF04-01/03/11/12/20. Không cần Incident. Client không nhận
 
 ```mermaid
 sequenceDiagram
-    actor U as Operator or Admin
+    actor U as Operator
     participant C as Core API
     participant I as IAM
     participant T as Create Ticket Use Case
@@ -324,7 +360,7 @@ BR-04; TC-WF04-04/06/20. Đổi Assignee không được ngầm chuyển account
 
 ```mermaid
 sequenceDiagram
-    actor U as Operator or permitted manager
+    actor U as Operator with required permission
     participant C as Core API
     participant I as IAM
     participant T as Assign Ticket Use Case
@@ -588,7 +624,7 @@ Mongo transaction có thể atomic cho receipt/context/outbox local khi implemen
 
 | Phase / trạng thái | Method và route                | Actor / IAM gate                                                  | Backend dự kiến                                                     | Zammad operation                        | Dependency / blocker                                                    |
 | ------------------ | ------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------- |
-| P1-D · P/A         | `POST /tickets`                | Operator/Admin + `ticket:create`                                  | Create use case, identity/policy, receipt/context, mutation adapter | `POST /tickets` với initial Article     | Initial Owner, attribution, recovery; read access cho creation response |
+| P1-D · P/A         | `POST /tickets`                | Operator + `ticket:create`                                  | Create use case, identity/policy, receipt/context, mutation adapter | `POST /tickets` với initial Article     | Initial Owner, attribution, recovery; read access cho creation response |
 | P1-B · P/A         | `GET /tickets/{id}`            | `ticket:read` + resource policy chưa duyệt                        | Read use case + P1-A read port                                      | `GET /tickets/{id}`                     | Identity và restricted Technician visibility                            |
 | P2 · P/A           | `GET /tickets`                 | `ticket:read` + scope/resource policy                             | List use case + query adapter                                       | Scoped list/search sau verification     | Pagination/count không leak; query contract chưa có                     |
 | P2 · P/A           | `PUT /tickets/{id}/assignment` | Manager + `ticket:manage`                                         | Assignment policy/use case, mutation adapter, Audit                 | `PUT /tickets/{id}` với approved fields | Distinct Owner/Assignee, eligible identity, concurrency                 |
@@ -612,7 +648,7 @@ HTTP conventions phải theo [baseline](../../../api/baseline.yaml), [response e
 | Mối quan tâm                | Yêu cầu / behavior                                                                                                     | Trạng thái                                                                          |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Core IAM vs service account | IAM xác thực actor và capabilities; Ticket kiểm tra resource. Zammad service privilege không chuyển thành quyền client | Yêu cầu baseline; P1-A chưa có Core-user policy                                     |
-| Read visibility             | Technician chỉ xem Ticket đang own/assigned; authorized manager xem group theo policy explicit                         | A trước public retrieval/list; không coi role `ticket:read` là quyền xem mọi Ticket |
+| Read visibility             | Technician chỉ xem Ticket đang own/assigned; authorized OPERATOR xem group theo policy explicit                         | A trước public retrieval/list; không coi role `ticket:read` là quyền xem mọi Ticket |
 | Assigned work               | Kiểm tra current assignment và field allowlist; không cấp manage thay cho work permission                              | A; `ticket:work` chưa tồn tại                                                       |
 | Close                       | Permission và current authoritative Owner; unknown identity/ownership phải fail closed                                 | BR-05; representation/concurrency A                                                 |
 | Group isolation             | Một configured instance/group; không trả dữ liệu ngoài scope                                                           | I cho adapter GET; client resource authorization vẫn thiếu                          |
@@ -666,8 +702,8 @@ Nét đứt là phase chưa được phép triển khai. Trình tự là các PR
 | Phase | Trạng thái tại ngày rà soát                    | Deliverable / gate                                                           |
 | ----- | ---------------------------------------------- | ---------------------------------------------------------------------------- |
 | P0    | V, findings đã được người dùng chấp nhận       | Report và test contract observations; các policy vẫn A                       |
-| P1-A  | I trong working tree, đã có execution evidence | Scoped read adapter, unit/fake tests, real read; chưa public compose         |
-| P1-B  | P/A, chưa được authorize                       | Read use case/controller, identity và resource visibility                    |
+| P1-A  | I, scope completion accepted; final review pending | Scoped read adapter trong working tree, có evidence; chưa public compose |
+| P1-B  | P/A, chỉ được phép investigation/design         | Đã có đề xuất identity/resource authorization; chưa được implement            |
 | P1-C  | P/A                                            | Minimum receipt/context, approved Owner allocation và recovery               |
 | P1-D  | P/A                                            | Manual create/retrieve vertical slice, initial attribution, no false success |
 | P2    | P/A                                            | Assignment/list, identity và phân biệt trách nhiệm                           |
@@ -685,7 +721,9 @@ Nét đứt là phase chưa được phép triển khai. Trình tự là các PR
 | Real-Zammad contract/read verification | Behavior thực của selected version/account/group                          | P0 probes; P1-A một GET qua Nest provider, không mutation                |
 | Web/Mobile E2E                         | Client thật → Core → Zammad → cùng Ticket trên hai client                 | Chưa chạy; phụ thuộc client harness, approved policies và seeded staging |
 
-[P1-A report](../integration/flow04-p1a-zammad-read.md) ghi exact commands và kết quả 2026-11-12: unit 47 PASS, fake HTTP 21 PASS, real GET Ticket 3 PASS, TypeScript/lint/build PASS, full repository 551 tests/104 suites PASS. Changed TypeScript formatting PASS; repository-wide formatting FAIL trên 335 file không thay đổi. Đây là evidence lịch sử đã ghi, **không phải lần chạy mới ngày 2026-11-13** và không phải CI execution.
+[P1-A report](../integration/flow04-p1a-zammad-read.md) ghi exact commands và kết quả 2026-11-12: unit 47 PASS, fake HTTP 21 PASS, real GET Ticket 3 PASS, TypeScript/lint/build PASS, full repository 551 tests/104 suites PASS. Changed TypeScript formatting PASS; repository-wide formatting FAIL trên 335 file không thay đổi. Đây là evidence lịch sử, không phải CI execution.
+
+Rà soát 2026-11-19: unit/configuration **47 PASS**, fake HTTP **21 PASS** được chạy lại. Real GET hiện **FAIL: UPSTREAM_UNAVAILABLE**, TCP `127.0.0.1:8081` trả `ECONNREFUSED`; không coi historical PASS là xác minh môi trường hiện tại. Kiểm tra toàn bộ 344 file TypeScript xác nhận cả **335** formatting failures đều là CRLF checkout: normalize LF trong bộ nhớ thì tất cả PASS và trùng HEAD. Không sửa các file đó. Chi tiết commands, giới hạn và approval gates nằm trong [P1-B design](../integration/flow04-p1b-identity-authorization-design.md).
 
 Không nhân số business cases theo test layer, client hoặc rerun. [22-case matrix](../testing/flow04-test-matrix.md) giữ TC-WF04-01..22 và mapping F4-01..04; 63 technical P1-A cases không cộng thành 63 business commitments. BM04 có tối thiểu 12 feature, 5 transitions, 1 main E2E, tổng 18 unique; với inventory 22 thì CI floor ≥11 (≥50%), dự kiến 17, **chưa có completed Flow 04 CI evidence**. Main paths phải pass, WF-04 exceptions/overall ≥90%, zero open Critical/High, seeded staging E2E. Formal BM04 approval/version vẫn pending.
 
