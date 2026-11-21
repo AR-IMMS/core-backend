@@ -181,7 +181,6 @@ paths:
 
   /api/v1/auth/browser/refresh:
     post:
-      security: []
       operationId: refreshBrowserSession
       summary: Rotate the browser refresh cookie
       description: |
@@ -1278,6 +1277,7 @@ components:
         - ticket:read
         - ticket:create
         - ticket:manage
+        - ticket:work
         - ticket:close
         - maintenance:read
         - maintenance:manage

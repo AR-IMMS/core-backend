@@ -1,5 +1,7 @@
 import { TracingModule } from '@/platform/observability/tracing';
 import { Module } from '@nestjs/common';
+import { ConditionalModule } from '@nestjs/config';
+import { TicketModule } from '@modules/ticket/ticket.module';
 
 import { AuditEventConsumer } from '@modules/audit/application/audit-event.consumer';
 import { AuditModule } from '@modules/audit/audit.module';
@@ -19,6 +21,11 @@ import { OutboxRelayScheduler } from './outbox-relay.scheduler';
 @Module({
   imports: [
     PlatformConfigModule,
+    ConditionalModule.registerWhen(
+      TicketModule,
+      (env) => env.TICKET_API_ENABLED === 'true',
+      { debug: false },
+    ),
     IamModule,
     AssetTopologyModule,
     HttpModule,

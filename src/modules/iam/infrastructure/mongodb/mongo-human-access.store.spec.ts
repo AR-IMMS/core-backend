@@ -29,6 +29,7 @@ describe('MongoHumanAccessStore', () => {
         'asset:read',
         'monitoring:read',
         'ticket:read',
+        'ticket:work',
         'maintenance:read',
         'maintenance:execute',
       ],

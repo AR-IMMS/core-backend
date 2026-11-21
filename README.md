@@ -117,12 +117,14 @@ The Room Map debug command reads the same Room-map query used by the API and pri
 
 ### Local MongoDB and Readiness
 
-Docker Compose provides a MongoDB replica set for local development, readiness
-checks, and transaction-backed tests:
+The default Compose MongoDB uses the secured Flow 04 data network and has no
+host port. Start the secured environment with the [Flow 04 startup script](deploy/flow04/README.md).
+For a host-run Core or host-run transaction tests, opt into the separate
+development project and volume:
 
 ```bash
-docker compose up -d --wait mongodb
-docker compose ps
+docker compose -f compose.yaml -f compose.host-dev.yaml up -d --wait mongodb
+docker compose -f compose.yaml -f compose.host-dev.yaml ps
 ```
 
 The health check initiates and waits for replica set `rs0`; a standalone MongoDB
@@ -140,7 +142,8 @@ MONGODB_TEST_URI=mongodb://localhost:27017/ar_imms_core_test?replicaSet=rs0
 
 The e2e setup maps `MONGODB_TEST_URI` into the application's Mongo settings and
 rejects URIs without a replica set or a database name ending in `_test`. Run
-`pnpm test:e2e` after starting Compose. Stop MongoDB with `docker compose down`;
+`pnpm test:e2e` after starting Compose. Stop the development instance with
+`docker compose -f compose.yaml -f compose.host-dev.yaml stop mongodb`;
 its data remains in the named `mongodb-data` volume. Use
 `docker compose down -v` only when you also intend to remove that data.
 
@@ -189,9 +192,10 @@ Pull requests should target `dev`, including a brief description of changes and 
 
 ## Development Principles
 
-The isolated Flow 04 P1-A read-only Zammad adapter is documented in
-[`src/modules/ticket/README.md`](src/modules/ticket/README.md), with configuration,
-test commands and execution evidence. It is not yet composed into the public API.
+The secured Flow 04 PoC composes the Ticket APIs with explicit activation.
+See the [Ticket module guide](src/modules/ticket/README.md), the
+[client API guide](docs/local/integration/flow04-ticket-api-guide.md) and the
+[completion report](docs/local/integration/flow04-backend-completion.md).
 
 The [Flow 04 architecture design](docs/local/architecture/flow04-ticket-zammad-backend-design.md)
 documents the current implementation, verified P0 behavior, proposed workflows

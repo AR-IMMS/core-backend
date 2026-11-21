@@ -1,0 +1,1624 @@
+openapi: 3.1.2
+info:
+  title: AR-IMMS Core Ticket API
+  version: 1.0.0
+  description: WF-04 Core Ticket API for Web, Mobile and MR clients. See
+    docs/local/integration/flow04-ticket-api-guide.md.
+paths:
+  /api/v1/tickets/{ticket_id}:
+    get:
+      operationId: TicketController_detail
+      parameters:
+        - name: ticket_id
+          required: true
+          in: path
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: string
+            pattern: ^[1-9][0-9]{0,15}$
+        - name: root
+          required: true
+          in: query
+          x-nestjs_zod-unwrap-root: true
+          x-nestjs_zod-self-required: false
+          schema:
+            properties: {}
+            additionalProperties: false
+            type: object
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - ticket_id
+                      - number
+                      - title
+                      - state_id
+                      - priority_id
+                      - created_at
+                      - updated_at
+                    properties:
+                      ticket_id:
+                        type: integer
+                      number:
+                        type: string
+                      title:
+                        type: string
+                      state_id:
+                        type: integer
+                      priority_id:
+                        type: integer
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+                  meta:
+                    type: object
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+        "400":
+          description: Invalid Ticket identifier or unsupported query.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Required IAM capability unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "404":
+          description: Ticket not found or inaccessible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:read
+    patch:
+      operationId: TicketWorkflowController_information
+      parameters:
+        - name: ticket_id
+          required: true
+          in: path
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: string
+            pattern: ^[1-9][0-9]{0,15}$
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: ^[A-Za-z0-9_-]{16,128}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                priority_id:
+                  type: integer
+                  exclusiveMinimum: 0
+                  maximum: 9007199254740991
+              additionalProperties: false
+              minProperties: 1
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - ticket_id
+                      - number
+                      - title
+                      - state_id
+                      - priority_id
+                      - created_at
+                      - updated_at
+                    properties:
+                      ticket_id:
+                        type: integer
+                      number:
+                        type: string
+                      title:
+                        type: string
+                      state_id:
+                        type: integer
+                      priority_id:
+                        type: integer
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+                  meta:
+                    type: object
+                    required:
+                      - request_id
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+        "400":
+          description: Invalid request or reference.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Actor or permission denied.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "404":
+          description: Ticket not found or inaccessible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "409":
+          description: Conflict or unresolved outcome. Reuse the same operation key for recovery.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      summary: Update title or priority
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:manage
+  /api/v1/tickets:
+    get:
+      operationId: TicketWorkflowController_list
+      parameters:
+        - name: cursor
+          required: false
+          in: query
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: string
+        - name: page_size
+          required: false
+          in: query
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 25
+        - name: state
+          required: false
+          in: query
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            enum:
+              - NEW
+              - OPEN
+              - PENDING
+              - CLOSED
+            type: string
+        - name: priority_id
+          required: false
+          in: query
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            pattern: ^[1-9][0-9]{0,15}$
+            type: number
+        - name: business_owner_user_id
+          required: false
+          in: query
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+        - name: assignee_user_id
+          required: false
+          in: query
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+        - name: search
+          required: false
+          in: query
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            minLength: 1
+            maxLength: 80
+            pattern: ^[\p{L}\p{N} ]+$
+            type: string
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - ticket_id
+                        - number
+                        - title
+                        - state_id
+                        - priority_id
+                        - created_at
+                        - updated_at
+                      properties:
+                        ticket_id:
+                          type: integer
+                        number:
+                          type: string
+                        title:
+                          type: string
+                        state_id:
+                          type: integer
+                        priority_id:
+                          type: integer
+                        created_at:
+                          type: string
+                          format: date-time
+                        updated_at:
+                          type: string
+                          format: date-time
+                  meta:
+                    type: object
+                    required:
+                      - request_id
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+                  pagination:
+                    type: object
+                    required:
+                      - type
+                      - next_cursor
+                    properties:
+                      type:
+                        type: string
+                        enum:
+                          - cursor
+                      next_cursor:
+                        type:
+                          - string
+                          - "null"
+        "400":
+          description: Invalid request or reference.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Actor or permission denied.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      summary: List currently visible Tickets
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:read
+    post:
+      operationId: TicketWorkflowController_create
+      parameters:
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: ^[A-Za-z0-9_-]{16,128}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                description:
+                  type: string
+                  minLength: 1
+                  maxLength: 4000
+                priority_id:
+                  type: integer
+                  exclusiveMinimum: 0
+                  maximum: 9007199254740991
+                business_owner_user_id:
+                  type: string
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                assignee_user_id:
+                  type: string
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                incident_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  pattern: ^[A-Za-z0-9_.:-]+$
+                asset_ids:
+                  maxItems: 20
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                reconcile_ticket_id:
+                  type: integer
+                  exclusiveMinimum: 0
+                  maximum: 9007199254740991
+              required:
+                - title
+                - description
+                - priority_id
+                - business_owner_user_id
+                - assignee_user_id
+              additionalProperties: false
+      responses:
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - ticket_id
+                      - number
+                      - title
+                      - state_id
+                      - priority_id
+                      - created_at
+                      - updated_at
+                    properties:
+                      ticket_id:
+                        type: integer
+                      number:
+                        type: string
+                      title:
+                        type: string
+                      state_id:
+                        type: integer
+                      priority_id:
+                        type: integer
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+                  meta:
+                    type: object
+                    required:
+                      - request_id
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+        "400":
+          description: Invalid request or reference.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Actor or permission denied.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "409":
+          description: Conflict or unresolved outcome. Reuse the same operation key for recovery.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      summary: Create a manual Ticket
+      description: >-
+        Manual creation and validated Asset links are supported. A non-null Incident ID requires the
+        owning Incident contract and returns 503 when the provider is unavailable.
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:create
+  /api/v1/tickets/from-reviewed-draft:
+    post:
+      operationId: TicketWorkflowController_fromDraft
+      parameters:
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: ^[A-Za-z0-9_-]{16,128}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                draft_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  pattern: ^[A-Za-z0-9_.:-]+$
+                revision:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  pattern: ^[A-Za-z0-9_.:-]+$
+                priority_id:
+                  type: integer
+                  exclusiveMinimum: 0
+                  maximum: 9007199254740991
+                business_owner_user_id:
+                  type: string
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                assignee_user_id:
+                  type: string
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+              required:
+                - draft_id
+                - revision
+                - priority_id
+                - business_owner_user_id
+                - assignee_user_id
+              additionalProperties: false
+      responses:
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - ticket_id
+                      - number
+                      - title
+                      - state_id
+                      - priority_id
+                      - created_at
+                      - updated_at
+                    properties:
+                      ticket_id:
+                        type: integer
+                      number:
+                        type: string
+                      title:
+                        type: string
+                      state_id:
+                        type: integer
+                      priority_id:
+                        type: integer
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+                  meta:
+                    type: object
+                    required:
+                      - request_id
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+        "400":
+          description: Invalid request or reference.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Actor or permission denied.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "409":
+          description: Conflict or unresolved outcome. Reuse the same operation key for recovery.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      summary: Confirm reviewed Incident draft (requires owning module)
+      description: >-
+        Requires an approved Incident provider for reviewed draft freshness, authorization and duplicate
+        confirmation. Returns 503 when the provider is unavailable.
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:create
+  /api/v1/tickets/{ticket_id}/responsibilities:
+    patch:
+      operationId: TicketWorkflowController_responsibilities
+      parameters:
+        - name: ticket_id
+          required: true
+          in: path
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: string
+            pattern: ^[1-9][0-9]{0,15}$
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: ^[A-Za-z0-9_-]{16,128}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                business_owner_user_id:
+                  type: string
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                assignee_user_id:
+                  type: string
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+              additionalProperties: false
+              minProperties: 1
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - ticket_id
+                      - number
+                      - title
+                      - state_id
+                      - priority_id
+                      - created_at
+                      - updated_at
+                    properties:
+                      ticket_id:
+                        type: integer
+                      number:
+                        type: string
+                      title:
+                        type: string
+                      state_id:
+                        type: integer
+                      priority_id:
+                        type: integer
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+                  meta:
+                    type: object
+                    required:
+                      - request_id
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+        "400":
+          description: Invalid request or reference.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Actor or permission denied.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "404":
+          description: Ticket not found or inaccessible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "409":
+          description: Conflict or unresolved outcome. Reuse the same operation key for recovery.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      summary: Change Business Owner or Assignee independently
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:manage
+  /api/v1/tickets/{ticket_id}/status:
+    post:
+      operationId: TicketWorkflowController_status
+      parameters:
+        - name: ticket_id
+          required: true
+          in: path
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: string
+            pattern: ^[1-9][0-9]{0,15}$
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: ^[A-Za-z0-9_-]{16,128}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                state:
+                  type: string
+                  enum:
+                    - OPEN
+                    - PENDING
+                pending_until:
+                  type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+              required:
+                - state
+              additionalProperties: false
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - ticket_id
+                      - number
+                      - title
+                      - state_id
+                      - priority_id
+                      - created_at
+                      - updated_at
+                    properties:
+                      ticket_id:
+                        type: integer
+                      number:
+                        type: string
+                      title:
+                        type: string
+                      state_id:
+                        type: integer
+                      priority_id:
+                        type: integer
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+                  meta:
+                    type: object
+                    required:
+                      - request_id
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+        "400":
+          description: Invalid request or reference.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Actor or permission denied.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "404":
+          description: Ticket not found or inaccessible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "409":
+          description: Conflict or unresolved outcome. Reuse the same operation key for recovery.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      summary: Perform a non-terminal progress transition
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:work
+  /api/v1/tickets/{ticket_id}/articles:
+    get:
+      operationId: TicketWorkflowController_articles
+      parameters:
+        - name: ticket_id
+          required: true
+          in: path
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: string
+            pattern: ^[1-9][0-9]{0,15}$
+        - name: cursor
+          required: false
+          in: query
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: string
+        - name: page_size
+          required: false
+          in: query
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 25
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - article_id
+                        - type
+                        - internal
+                        - body_text
+                        - created_at
+                      properties:
+                        article_id:
+                          type: integer
+                          minimum: 1
+                        type:
+                          type: string
+                        internal:
+                          type: boolean
+                        body_text:
+                          type:
+                            - string
+                            - "null"
+                        created_at:
+                          type: string
+                          format: date-time
+                  meta:
+                    type: object
+                    required:
+                      - request_id
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+                  pagination:
+                    type: object
+                    required:
+                      - type
+                      - next_cursor
+                    properties:
+                      type:
+                        type: string
+                        enum:
+                          - cursor
+                      next_cursor:
+                        type:
+                          - string
+                          - "null"
+        "400":
+          description: Invalid request or reference.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Actor or permission denied.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "404":
+          description: Ticket not found or inaccessible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      summary: Page through authorized Ticket Articles
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:read
+    post:
+      operationId: TicketWorkflowController_appendArticle
+      parameters:
+        - name: ticket_id
+          required: true
+          in: path
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: string
+            pattern: ^[1-9][0-9]{0,15}$
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: ^[A-Za-z0-9_-]{16,128}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body:
+                  type: string
+                  minLength: 1
+                  maxLength: 4000
+              required:
+                - body
+              additionalProperties: false
+      responses:
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - ticket_id
+                      - article_id
+                    properties:
+                      ticket_id:
+                        type: integer
+                        minimum: 1
+                      article_id:
+                        type: integer
+                        minimum: 1
+                  meta:
+                    type: object
+                    required:
+                      - request_id
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+        "400":
+          description: Invalid request or reference.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Actor or permission denied.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "404":
+          description: Ticket not found or inaccessible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "409":
+          description: Conflict or unresolved outcome. Reuse the same operation key for recovery.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      summary: Append an internal plain text note
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:work
+  /api/v1/tickets/{ticket_id}/close:
+    post:
+      operationId: TicketWorkflowController_close
+      parameters:
+        - name: ticket_id
+          required: true
+          in: path
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: string
+            pattern: ^[1-9][0-9]{0,15}$
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: ^[A-Za-z0-9_-]{16,128}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                outcome:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+              required:
+                - outcome
+              additionalProperties: false
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - ticket_id
+                      - number
+                      - title
+                      - state_id
+                      - priority_id
+                      - created_at
+                      - updated_at
+                    properties:
+                      ticket_id:
+                        type: integer
+                      number:
+                        type: string
+                      title:
+                        type: string
+                      state_id:
+                        type: integer
+                      priority_id:
+                        type: integer
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+                  meta:
+                    type: object
+                    required:
+                      - request_id
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+        "400":
+          description: Invalid request or reference.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Actor or permission denied.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "404":
+          description: Ticket not found or inaccessible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "409":
+          description: Conflict or unresolved outcome. Reuse the same operation key for recovery.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      summary: Close a Ticket as its current Business Owner
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:close
+  /api/v1/tickets/{ticket_id}/reopen:
+    post:
+      operationId: TicketWorkflowController_reopen
+      parameters:
+        - name: ticket_id
+          required: true
+          in: path
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: string
+            pattern: ^[1-9][0-9]{0,15}$
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: ^[A-Za-z0-9_-]{16,128}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+              required:
+                - reason
+              additionalProperties: false
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - ticket_id
+                      - number
+                      - title
+                      - state_id
+                      - priority_id
+                      - created_at
+                      - updated_at
+                    properties:
+                      ticket_id:
+                        type: integer
+                      number:
+                        type: string
+                      title:
+                        type: string
+                      state_id:
+                        type: integer
+                      priority_id:
+                        type: integer
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+                  meta:
+                    type: object
+                    required:
+                      - request_id
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+        "400":
+          description: Invalid request or reference.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Actor or permission denied.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "404":
+          description: Ticket not found or inaccessible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "409":
+          description: Conflict or unresolved outcome. Reuse the same operation key for recovery.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      summary: Reopen the existing closed Ticket
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:manage
+  /api/v1/tickets/{ticket_id}/links:
+    get:
+      operationId: TicketWorkflowController_links
+      parameters:
+        - name: ticket_id
+          required: true
+          in: path
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: string
+            pattern: ^[1-9][0-9]{0,15}$
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - incident_id
+                      - asset_ids
+                      - maintenance_activity_ids
+                    properties:
+                      incident_id:
+                        type:
+                          - string
+                          - "null"
+                      asset_ids:
+                        type: array
+                        items:
+                          type: string
+                      maintenance_activity_ids:
+                        type: array
+                        items:
+                          type: string
+                  meta:
+                    type: object
+                    required:
+                      - request_id
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+        "400":
+          description: Invalid request or reference.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Actor or permission denied.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "404":
+          description: Ticket not found or inaccessible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      summary: Read visible Ticket business links
+      description: >-
+        Returns visible links, with Incident and Maintenance references included only when the owning
+        provider validates them for the current actor.
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:read
+    patch:
+      operationId: TicketWorkflowController_setLinks
+      parameters:
+        - name: ticket_id
+          required: true
+          in: path
+          x-nestjs_zod-parent-additional-properties: false
+          schema:
+            type: string
+            pattern: ^[1-9][0-9]{0,15}$
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: ^[A-Za-z0-9_-]{16,128}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                incident_id:
+                  type:
+                    - string
+                    - "null"
+                  minLength: 1
+                  maxLength: 128
+                  pattern: ^[A-Za-z0-9_.:-]+$
+                asset_ids:
+                  maxItems: 20
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+              additionalProperties: false
+              minProperties: 1
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - incident_id
+                      - asset_ids
+                      - maintenance_activity_ids
+                    properties:
+                      incident_id:
+                        type:
+                          - string
+                          - "null"
+                      asset_ids:
+                        type: array
+                        items:
+                          type: string
+                      maintenance_activity_ids:
+                        type: array
+                        items:
+                          type: string
+                  meta:
+                    type: object
+                    required:
+                      - request_id
+                    properties:
+                      request_id:
+                        type: string
+                      trace_id:
+                        type: string
+        "400":
+          description: Invalid request or reference.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "401":
+          description: Human session required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "403":
+          description: Actor or permission denied.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "404":
+          description: Ticket not found or inaccessible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "409":
+          description: Conflict or unresolved outcome. Reuse the same operation key for recovery.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+        "503":
+          description: Ticket dependency unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: ../baseline.yaml#/components/schemas/ErrorResponse
+      security:
+        - HumanAccessToken: []
+      summary: Change validated Ticket business links
+      description: >-
+        Asset updates and clearing the primary Incident link are supported. A non-null Incident ID
+        requires the owning Incident contract and returns 503 when the provider is unavailable.
+        Maintenance attachment is not part of this endpoint.
+      tags:
+        - Tickets
+      x-required-permissions:
+        - ticket:manage
+components:
+  securitySchemes:
+    HumanAccessToken:
+      scheme: bearer
+      bearerFormat: JWT
+      type: http

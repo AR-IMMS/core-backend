@@ -511,6 +511,7 @@ export class UserAdministrationService {
       'ticket:read': 'View tickets and processing history',
       'ticket:create': 'Create a ticket',
       'ticket:manage': 'Classify, update, and assign tickets',
+      'ticket:work': 'Record scoped Ticket progress and internal Articles',
       'ticket:close': 'Conclude and close tickets subject to owner policy',
       'maintenance:read': 'View maintenance activities and checklists',
       'maintenance:manage': 'Plan, create, and assign activities',

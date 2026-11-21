@@ -1,0 +1,16 @@
+**
+!package.json
+!pnpm-lock.yaml
+!tsconfig*.json
+!nest-cli.json
+!src
+!src/**
+!deploy
+!deploy/flow04
+!deploy/flow04/Dockerfile
+
+.tmp
+.tmp/**
+.env*
+.git
+node_modules

@@ -21,6 +21,7 @@ describe('IAM role permissions', () => {
       'ticket:read',
       'ticket:create',
       'ticket:manage',
+      'ticket:work',
       'ticket:close',
       'maintenance:read',
       'maintenance:manage',
@@ -43,6 +44,7 @@ describe('IAM role permissions', () => {
       'ticket:read',
       'ticket:create',
       'ticket:manage',
+      'ticket:work',
       'ticket:close',
       'maintenance:read',
       'maintenance:manage',
@@ -57,6 +59,7 @@ describe('IAM role permissions', () => {
       'asset:read',
       'monitoring:read',
       'ticket:read',
+      'ticket:work',
       'maintenance:read',
       'maintenance:execute',
     ]);

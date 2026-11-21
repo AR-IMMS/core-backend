@@ -24,6 +24,7 @@ describe('IAM user access', () => {
       'asset:read',
       'monitoring:read',
       'ticket:read',
+      'ticket:work',
       'maintenance:read',
       'maintenance:execute',
     ]);

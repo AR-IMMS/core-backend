@@ -13,6 +13,7 @@ export const IAM_PERMISSION_CODES = [
   'ticket:read',
   'ticket:create',
   'ticket:manage',
+  'ticket:work',
   'ticket:close',
   'maintenance:read',
   'maintenance:manage',

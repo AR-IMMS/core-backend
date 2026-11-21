@@ -1,0 +1,8 @@
+# Optional Mongo replica set for a host-run Core, with its own project and data.
+name: core-backend-dev
+services:
+  mongodb:
+    networks: !override [default]
+    ports: ['127.0.0.1:27017:27017']
+networks:
+  core-data: !reset null

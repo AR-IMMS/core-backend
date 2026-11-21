@@ -1,0 +1,25 @@
+name: arimms-p0-maintenance
+services:
+  admin-gateway:
+    image: ghcr.io/zammad/zammad:7.2.2-0048
+    profiles: [maintenance]
+    entrypoint: [/usr/sbin/nginx]
+    command: ['-c', '/etc/nginx/flow04.conf', '-g', 'daemon off;']
+    user: '1000:1000'
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports: ['127.0.0.1:8444:8444']
+    networks: [maintenance-edge, zammad-private]
+    volumes:
+      - ${FLOW04_REPO_ROOT:?Set absolute repository path}/deploy/flow04/admin-gateway.conf:/etc/nginx/flow04.conf:ro
+      - ${FLOW04_REPO_ROOT}/.tmp/flow04-admin-tls/server.crt:/tls/server.crt:ro
+      - ${FLOW04_REPO_ROOT}/.tmp/flow04-admin-tls/server.key:/tls/server.key:ro
+      - ${FLOW04_REPO_ROOT}/.tmp/flow04-admin-tls/ca.crt:/tls/ca.crt:ro
+networks:
+  maintenance-edge:
+    name: arimms-p0-maintenance-edge-v1
+  zammad-private:
+    external: true
+    name: arimms-p0-zammad-private-v1

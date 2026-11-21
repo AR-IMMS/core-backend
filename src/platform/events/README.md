@@ -101,5 +101,5 @@ Application code depends on event contracts and ports, while MongoDB adapters im
 - Consumers have independent progress, and delivery for each resource is ordered by `resource.type`, `resource.id`, and `resource.sequence`. Producers must supply a monotonically increasing sequence for each resource.
 - A consumer module must both appear in `PlatformEventsModule.register({ imports })` and export the provider token listed in `consumers`. Wildcard event subscriptions are rejected.
 - The event module injects the default Mongoose connection through `@InjectModel(OUTBOX_ENTRY_MODEL)` and `@InjectConnection()`. Import the app's `DatabaseModule`; do not configure another default connection just for events.
-- MongoDB transactions need a replica set. For local development, run `docker compose up -d --wait mongodb` and use the replica-set URI documented in the root README.
+- MongoDB transactions need a replica set. For host-run development, use the separate MongoDB Compose project and replica-set URI documented in the root README.
 - `AuditFact` permits only the shared business-neutral actor/action/change contract. Change fields are explicit scalar values; payload validation rejects unknown properties and sensitive field names.

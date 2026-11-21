@@ -1,0 +1,8 @@
+# Overlay ONLY on the existing zammad-docker-compose project. Preserve its volumes.
+services:
+  zammad-nginx:
+    ports: !reset []
+networks:
+  default:
+    name: arimms-p0-zammad-private-v1
+    internal: true

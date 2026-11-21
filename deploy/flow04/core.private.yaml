@@ -1,0 +1,40 @@
+# Overlay on core-backend/compose.yaml with project name core-backend.
+services:
+  core:
+    image: arimms-core-flow04:local
+    init: true
+    restart: unless-stopped
+    env_file:
+      - ${FLOW04_REPO_ROOT:?Set absolute repository path}/.env.local
+    environment:
+      APP_PORT: '8082'
+      MONGODB_URI: mongodb://mongodb:27017/ar_imms_core?replicaSet=rs0&directConnection=true
+      MONGODB_DB_NAME: ar_imms_core
+      TICKET_API_ENABLED: '${FLOW04_TICKET_API_ENABLED:-true}'
+      ZAMMAD_BASE_URL: http://zammad-nginx:8080
+      ZAMMAD_PRIVATE_HTTP_ORIGIN: http://zammad-nginx:8080
+      ZAMMAD_INSTANCE_KEY: arimms-p0-generation-1
+      ZAMMAD_EXPECTED_GROUP_ID: '2'
+      ZAMMAD_SERVICE_USER_ID: '6'
+      ZAMMAD_TICKET_CUSTOMER_ID: '7'
+      ZAMMAD_NON_HUMAN_USER_IDS: '[1,6,7]'
+    ports: ['8082:8082']
+    networks: [core-edge, core-data, zammad-private]
+    depends_on:
+      mongodb:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:8082/health/ready', { signal: AbortSignal.timeout(3000) }).then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 18
+      start_period: 15s
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+networks:
+  core-edge:
+    name: arimms-p0-core-edge-v1
+  zammad-private:
+    external: true
+    name: arimms-p0-zammad-private-v1

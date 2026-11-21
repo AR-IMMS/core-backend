@@ -12,6 +12,19 @@ export const envSchema = z
 
     APP_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
 
+    // Optional until the Ticket integration module is composed. Its provider
+    // validates the complete configuration without exposing credential values.
+    TICKET_API_ENABLED: z.enum(['true', 'false']).optional(),
+    ZAMMAD_TICKET_CUSTOMER_ID: z.string().optional(),
+    ZAMMAD_SERVICE_USER_ID: z.string().optional(),
+    ZAMMAD_NON_HUMAN_USER_IDS: z.string().optional(),
+    ZAMMAD_INSTANCE_KEY: z.string().optional(),
+    ZAMMAD_PRIVATE_HTTP_ORIGIN: z.string().optional(),
+    ZAMMAD_BASE_URL: z.string().optional(),
+    ZAMMAD_API_TOKEN: z.string().optional(),
+    ZAMMAD_EXPECTED_GROUP_ID: z.string().optional(),
+    ZAMMAD_READ_TIMEOUT_MS: z.string().optional(),
+
     IAM_PRESENCE_HEARTBEAT_INTERVAL_SECONDS: z.coerce
       .number()
       .int()
