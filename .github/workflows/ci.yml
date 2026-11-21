@@ -17,22 +17,24 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.9.0
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22.22.3
-          cache: pnpm
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Lint
         run: pnpm exec eslint "{src,apps,libs,test}/**/*.ts"
+
+      - name: Check application and test types
+        run: pnpm exec tsc --noEmit -p tsconfig.spec.json
 
       - name: Unit tests
         run: pnpm test:cov --runInBand
@@ -42,6 +44,80 @@ jobs:
 
       - name: Audit dependencies
         run: pnpm audit --ignore-unfixable --audit-level moderate
+
+      - name: Retain coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-coverage
+          path: coverage/lcov.info
+          if-no-files-found: ignore
+          retention-days: 14
+
+  wf04-contracts:
+    name: WF-04 deterministic Ticket and IAM contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - run: pnpm install --frozen-lockfile
+      - name: Ticket and IAM unit, controller HTTP and fake Zammad
+        run: pnpm exec jest --ci --runInBand --testPathPatterns=src/modules/ticket/ --testPathPatterns=src/modules/iam/ --json --outputFile=wf04-jest.json
+      - name: Validate Ticket and IAM OpenAPI
+        run: pnpm exec redocly lint --extends spec api/v1/ticket.yaml api/v1/iam.yaml
+      - name: Check WF-04 formatting
+        run: >-
+          pnpm exec prettier --check 'src/modules/ticket/**/*.ts'
+          'test/ticket-*.ts' test/ticket-api.real.cjs test/wf04-ci-mongo.cjs
+      - name: Create sanitized test report
+        if: always()
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          if (!fs.existsSync('wf04-jest.json')) process.exit(0);
+          const report = JSON.parse(fs.readFileSync('wf04-jest.json', 'utf8'));
+          const suites = report.testResults.map(suite => ({
+            file: path.relative(process.cwd(), suite.name),
+            status: suite.status,
+            tests: suite.assertionResults.map(({ fullName, status }) => ({ fullName, status })),
+          }));
+          fs.writeFileSync('wf04-test-summary.json', JSON.stringify({
+            success: report.success, passed: report.numPassedTests, failed: report.numFailedTests, suites,
+          }, null, 2));
+          NODE
+      - name: Upload WF-04 test summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wf04-test-summary
+          path: wf04-test-summary.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  wf04-mongo:
+    name: WF-04 isolated Mongo mapping and journal
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+      - name: Fetch Mongo image
+        run: docker pull mongo:8.0
+      - name: Build locked validation image and test private replica set
+        run: node test/wf04-ci-mongo.cjs --build
 
   secret-scan:
     name: Scan pull request changes for secrets
