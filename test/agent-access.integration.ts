@@ -24,14 +24,26 @@ import {
 } from '@platform/events/infrastructure/mongodb/outbox.schema';
 import { resolveMongoTestConfig } from './mongodb-test-config';
 
+interface MongoTestDatabase {
+  collection(name: string): {
+    countDocuments(filter?: Record<string, unknown>): Promise<number>;
+    insertOne(document: Record<string, unknown>): Promise<unknown>;
+    findOne(
+      filter: Record<string, unknown>,
+    ): Promise<Record<string, unknown> | null>;
+    indexExists(name: string): Promise<boolean>;
+  };
+}
+
 async function main(): Promise<void> {
   const { uri, dbName } = resolveMongoTestConfig();
   const connection = await createConnection(uri, {
     dbName,
     serverSelectionTimeoutMS: 5_000,
   }).asPromise();
-  const database = connection.db;
-  if (!database) throw new Error('MongoDB connection has no selected database');
+  if (!connection.db)
+    throw new Error('MongoDB connection has no selected database');
+  const database = connection.db as unknown as MongoTestDatabase;
 
   try {
     await connection.dropDatabase();
@@ -41,7 +53,7 @@ async function main(): Promise<void> {
     await AGENT_ACCESS_INDEXES_MIGRATION.up(connection);
     await AGENT_REGISTRY_QUERY_INDEXES_MIGRATION.up(connection);
     assert.equal(
-      await connection
+      await database
         .collection('agent_management_bindings')
         .indexExists('ix_agent_bindings_installation_history'),
       true,
@@ -90,39 +102,19 @@ async function main(): Promise<void> {
     const input = enrollmentInput(bootstrapToken, attemptId, installationId);
     const created = await createEnrollmentUseCase().execute(input);
     const credentialHash = hash(created.accessToken);
-    const originalInstallation = await connection
+    const originalInstallation = await database
       .collection('agent_management_installations')
       .findOne({ installationId });
     const originalCreatedAt: unknown = originalInstallation?.['createdAt'];
     assert(originalCreatedAt instanceof Date);
 
-    assert.deepEqual(
-      await accessStore.findActivePrincipalByCredentialHash(credentialHash),
-      {
-        installationId,
+    assert.equal(
+      await database.collection('agent_management_credentials').countDocuments({
+        credentialHash,
         bindingId: created.binding.id,
-        nodeId: 'node-agent-access',
-      },
-    );
-    assert.equal(
-      await accessStore.findActivePrincipalByCredentialHash(hash('unknown')),
-      null,
-    );
-    assert.equal(
-      await accessStore.findActivePrincipalByCredentialHash(
-        hash(bootstrapToken),
-      ),
-      null,
-    );
-    await connection
-      .collection('agent_management_bindings')
-      .updateOne(
-        { bindingId: created.binding.id },
-        { $set: { installationId: 'inconsistent-installation' } },
-      );
-    assert.equal(
-      await accessStore.findActivePrincipalByCredentialHash(credentialHash),
-      null,
+        status: 'active',
+      }),
+      1,
     );
     const installationAfterRevocation =
       await registryStore.findInstallation(installationId);
@@ -134,12 +126,6 @@ async function main(): Promise<void> {
       nodeId: 'node-agent-access',
     });
     assert.equal(nodeFilterAfterRevocation.items.length, 0);
-    await connection
-      .collection('agent_management_bindings')
-      .updateOne(
-        { bindingId: created.binding.id },
-        { $set: { installationId } },
-      );
     const recovered = await createEnrollmentUseCase().execute(input);
     assert.equal(recovered.accessToken, created.accessToken);
 
@@ -159,19 +145,17 @@ async function main(): Promise<void> {
       AgentBindingRevocationUnavailableError,
     );
     assert.equal(
-      await connection.collection('agent_management_bindings').countDocuments({
+      await database.collection('agent_management_bindings').countDocuments({
         bindingId: rollbackEnrollment.binding.id,
         status: 'active',
       }),
       1,
     );
     assert.equal(
-      await connection
-        .collection('agent_management_credentials')
-        .countDocuments({
-          bindingId: rollbackEnrollment.binding.id,
-          status: 'active',
-        }),
+      await database.collection('agent_management_credentials').countDocuments({
+        bindingId: rollbackEnrollment.binding.id,
+        status: 'active',
+      }),
       1,
     );
 
@@ -212,33 +196,37 @@ async function main(): Promise<void> {
     }
 
     assert.equal(
-      await connection
+      await database
         .collection('agent_management_bindings')
         .countDocuments({ bindingId: created.binding.id, status: 'revoked' }),
       1,
     );
     assert.equal(
-      await connection
+      await database
         .collection('agent_management_credentials')
         .countDocuments({ bindingId: created.binding.id, status: 'revoked' }),
       1,
     );
     assert.equal(
-      await accessStore.findActivePrincipalByCredentialHash(credentialHash),
-      null,
+      await database.collection('agent_management_credentials').countDocuments({
+        credentialHash,
+        bindingId: created.binding.id,
+        status: 'revoked',
+      }),
+      1,
     );
     await assert.rejects(
       createEnrollmentUseCase().execute(input),
       EnrollmentRecoveryRevokedError,
     );
     assert.equal(
-      await connection.collection('platform_event_outbox').countDocuments({
+      await database.collection('platform_event_outbox').countDocuments({
         'fact.payload.action': 'agent_management.agent_binding.revoked',
         'fact.resource.id': created.binding.id,
       }),
       1,
     );
-    const revocationAudit = await connection
+    const revocationAudit = await database
       .collection('platform_event_outbox')
       .findOne({
         'fact.payload.action': 'agent_management.agent_binding.revoked',
@@ -372,19 +360,19 @@ async function main(): Promise<void> {
         .countDocuments({ installationId, status: 'active' }),
       1,
     );
-    assert.deepEqual(
-      await accessStore.findActivePrincipalByCredentialHash(
-        hash(reEnrolled.accessToken),
-      ),
-      {
-        installationId,
-        bindingId: reEnrolled.binding.id,
-        nodeId: 'node-agent-access',
-      },
+    assert.equal(
+      await connection
+        .collection('agent_management_credentials')
+        .countDocuments({
+          credentialHash: hash(reEnrolled.accessToken),
+          bindingId: reEnrolled.binding.id,
+          status: 'active',
+        }),
+      1,
     );
 
     await assert.rejects(
-      connection.collection('agent_management_bindings').insertOne({
+      database.collection('agent_management_bindings').insertOne({
         bindingId: created.binding.id,
         installationId,
         nodeId: 'another-node',
@@ -393,7 +381,7 @@ async function main(): Promise<void> {
       isDuplicateKeyError,
     );
     await assert.rejects(
-      connection.collection('agent_management_bindings').insertOne({
+      database.collection('agent_management_bindings').insertOne({
         bindingId: 'duplicate-active-binding',
         installationId,
         nodeId: 'another-node',
@@ -402,7 +390,7 @@ async function main(): Promise<void> {
       isDuplicateKeyError,
     );
     await assert.rejects(
-      connection.collection('agent_management_bindings').insertOne({
+      database.collection('agent_management_bindings').insertOne({
         bindingId: 'duplicate-active-node',
         installationId: 'another-installation',
         nodeId: 'node-agent-access',

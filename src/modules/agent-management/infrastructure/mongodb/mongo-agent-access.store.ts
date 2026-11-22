@@ -2,49 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { ClientSession, Connection } from 'mongoose';
 import type { UnitOfWorkContext } from '@platform/events';
-import type {
-  AgentCredentialAuthorizationPort,
-  AgentPrincipal,
-} from '../../application/access-lifecycle/ports/agent-credential-authorization.port';
 import type { BindingRevocationPort } from '../../application/access-lifecycle/ports/binding-revocation.port';
 
 @Injectable()
-export class MongoAgentAccessStore
-  implements AgentCredentialAuthorizationPort, BindingRevocationPort
-{
+export class MongoAgentAccessStore implements BindingRevocationPort {
   constructor(@InjectConnection() private readonly connection: Connection) {}
-
-  async findActivePrincipalByCredentialHash(
-    credentialHash: string,
-  ): Promise<AgentPrincipal | null> {
-    const credential = await this.connection
-      .collection('agent_management_credentials')
-      .findOne({ credentialHash, status: 'active' });
-    if (typeof credential?.['bindingId'] !== 'string') return null;
-
-    const binding = await this.connection
-      .collection('agent_management_bindings')
-      .findOne({ bindingId: credential['bindingId'], status: 'active' });
-    if (
-      !binding ||
-      typeof binding['bindingId'] !== 'string' ||
-      typeof binding['installationId'] !== 'string' ||
-      typeof binding['nodeId'] !== 'string'
-    ) {
-      return null;
-    }
-
-    const installation = await this.connection
-      .collection('agent_management_installations')
-      .findOne({ installationId: binding['installationId'] });
-    if (!installation) return null;
-
-    return {
-      installationId: binding['installationId'],
-      bindingId: binding['bindingId'],
-      nodeId: binding['nodeId'],
-    };
-  }
 
   async revokeBinding(
     bindingId: string,
