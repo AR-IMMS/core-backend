@@ -34,6 +34,12 @@ jobs:
       - name: Lint
         run: pnpm exec eslint "{src,apps,libs,test}/**/*.ts"
 
+      - name: Fleet Core contract fake integration
+        run: pnpm exec jest src/modules/agent-management/application/fleet/__tests__/fleet-core.integration.spec.ts --runInBand
+
+      - name: M1 enrollment and retirement regressions
+        run: pnpm exec jest src/modules/agent-management/application/registration/use-cases/__tests__/enroll-agent.use-case.spec.ts src/modules/agent-management/application/registration/use-cases/__tests__/issue-bootstrap-token.use-case.spec.ts src/modules/agent-management/presentation/registration/__tests__/bootstrap-token.controller.spec.ts src/modules/agent-management/presentation/registration/__tests__/enrollment.controller.spec.ts src/modules/asset-topology/application/assets/__tests__/retire-asset.use-case.spec.ts --runInBand
+
       - name: Unit tests
         run: pnpm test:cov --runInBand
 

@@ -131,8 +131,8 @@ class AssetLifecycleUseCase {
   <<existing; Fleet lifecycle hook proposed>>
   +unassignOrRetire(nodeId, actor)
 }
-class CreateAgentInvitationController {
-  <<proposed>>
+class FleetInvitationController {
+  <<implemented Core>>
   +create(nodeId, principal, requestId, operationId)
 }
 class FleetRegistryController {
@@ -140,15 +140,15 @@ class FleetRegistryController {
   +list/get(query)
 }
 class FleetEnrollmentSyncController {
-  <<proposed>>
+  <<implemented Core>>
   +synchronize(invitationId, operationId)
 }
-class CreateAgentInvitationUseCase {
-  <<proposed>>
+class RequestFleetInvitationUseCase {
+  <<implemented Core>>
   +execute(nodeId, actor, requestId, operationId)
 }
 class SynchronizeFleetEnrollmentUseCase {
-  <<proposed>>
+  <<implemented Core>>
   +execute(invitationId, operationId, actor)
 }
 class ListFleetInstallationsUseCase {
@@ -173,51 +173,68 @@ class CloseNodeEnrollmentUseCase {
   +prepare(nodeId, operationId)
 }
 class FleetInvitationPort {
-  <<proposed application port>>
+  <<implemented Core; wire provisional>>
   +create(command)
-  +getStatus(invitationId)
-  +getStatusByOperationId(operationId)
-  +closeNodeEnrollment(nodeId, operationId)
-  +completeNodeLifecycle(nodeId, operationId, gateVersion, state)
-  +cancel(invitationId, operationId)
+  +getByOperation(operationId, actor)
+  +cancel(invitationId, operationId, actor)
 }
-class CoreAgentBindingStorePort {
-  <<proposed Core-owned persistence port>>
-  +upsertFleetBinding(verifiedBinding)
-  +markSyncPending(operationId, safeError)
+class FleetBindingProjectionPort {
+  <<implemented Core-owned binding projection>>
+  +hasActiveForNode(nodeId)
+  +upsert(invitation, installation, node)
 }
-class FleetOperationStorePort {
-  <<proposed Core-owned retry journal port>>
-  +recordAuthorizedInvite(operationId, actorId, nodeId, fingerprint)
-  +recordFleetInvitation(operationId, invitationId, state)
-  +getAuthorizedInvite(invitationId)
-  +startNodeLifecycle(nodeId, operationId, target)
-  +saveGateLease(operationId, gateVersion, priorState)
-  +recordRevoke(bindingId, operationId, state)
-  +markSyncPending/complete(operationId, state)
+class FleetEnrollmentOperationPort {
+  <<implemented Core>>
+  +begin(operationId, keyHash, actorNodeFingerprint)
+  +findByIdempotencyHash(keyHash)
+  +findByInvitationId(invitationId)
+  +recordInvitation(nonsecretState)
+  +markBound(installationId)
 }
 class FleetInstallationPort {
-  <<proposed application port>>
-  +list/get(query)
-  +hasActiveForNode(nodeId)
+  <<implemented Core; wire provisional>>
+  +findById(installationId, actor)
+  +findActiveByNode(nodeId, actor)
+  +closeEnrollmentGate(nodeId, operationId, actor)
+  +completeEnrollmentGate(gate, state, actor)
   +revoke(installationId, operationId)
 }
 class FleetInvitationHttpAdapter {
-  <<proposed infrastructure adapter>>
-  +create/close/open/cancel(command)
+  <<implemented Core; wire provisional>>
+  +create/getByOperation/cancel(command)
 }
 class FleetInstallationHttpAdapter {
-  <<proposed infrastructure adapter>>
-  +list/get/hasActive/revoke(command)
+  <<implemented Core; wire provisional>>
+  +findById/findActiveByNode/gate/revoke(command)
 }
 class FleetHttpClient {
-  <<proposed>>
+  <<implemented Core; wire provisional>>
   +send(request, timeout)
 }
 class FleetServiceAuthenticator {
-  <<proposed>>
-  +provideManagedCertificate()
-  +delegateActor(verifiedActor, requestContext)
+  <<proposed abstraction; no separate Core class>>
+  +managedCertificateAndVerifiedActorContext()
+}
+class FleetHttpsAgentFactory {
+  <<implemented helper>>
+  +createFleetHttpsAgent(mTLSConfig)
+}
+class MongoFleetEnrollmentOperationStore {
+  <<implemented Mongo adapter>>
+  +implements FleetEnrollmentOperationPort
+}
+class MongoFleetBindingProjectionStore {
+  <<implemented Mongo adapter>>
+  +implements FleetBindingProjectionPort
+}
+class AgentBindingQueries {
+  <<existing public Core contract; extended for Fleet>>
+  +hasActiveBindingForNode(nodeId)
+  +hasActiveFleetBindingForNode(nodeId, actor, requestId)
+}
+class RetireAssetUseCase {
+  <<existing; Fleet live guard implemented>>
+  +execute(assetId, actor)
 }
 class NodeEligibilityPort {
   <<existing port; proposed use for invitation>>
@@ -240,28 +257,26 @@ class RequestContext {
   +requestId
   +traceId
 }
-class FleetManagementModule {
-  <<proposed composition>>
-  +bind ports and auth providers
-}
 class AgentManagementModule {
-  <<existing composition; proposed provider updates>>
+  <<existing composition; Fleet providers implemented>>
   +compose controllers and use cases
 }
 
-HumanPermissionGuard ..> CreateAgentInvitationController : guards permission
-CreateAgentInvitationController ..> CreateAgentInvitationUseCase : invokes
+HumanPermissionGuard ..> FleetInvitationController : guards permission
+FleetInvitationController ..> RequestFleetInvitationUseCase : invokes
 FleetRegistryController ..> ListFleetInstallationsUseCase : invokes
 FleetEnrollmentSyncController ..> SynchronizeFleetEnrollmentUseCase : invokes
 ListFleetInstallationsUseCase ..> FleetInstallationPort : reads Fleet projection
-CreateAgentInvitationUseCase ..> NodeEligibilityPort : checks Node
-CreateAgentInvitationUseCase ..> FleetInvitationPort : creates invitation
-CreateAgentInvitationUseCase ..> FleetOperationStorePort : persists authorization mapping and retry state
-CreateAgentInvitationUseCase ..> AuditOutboxPorts : records Core decision
-CreateAgentInvitationUseCase ..> RequestContext : correlates request
+RequestFleetInvitationUseCase ..> NodeEligibilityPort : checks Node
+RequestFleetInvitationUseCase ..> FleetInstallationPort : checks live Node binding
+RequestFleetInvitationUseCase ..> FleetInvitationPort : creates or replays invitation
+RequestFleetInvitationUseCase ..> FleetEnrollmentOperationPort : persists authorization and retry state
+RequestFleetInvitationUseCase ..> AuditOutboxPorts : records secret-free Core decision
+RequestFleetInvitationUseCase ..> RequestContext : correlates request
 SynchronizeFleetEnrollmentUseCase ..> FleetInvitationPort : queries authoritative invitation status
-SynchronizeFleetEnrollmentUseCase ..> CoreAgentBindingStorePort : creates/updates Core Node binding
-SynchronizeFleetEnrollmentUseCase ..> FleetOperationStorePort : records retryable sync state
+SynchronizeFleetEnrollmentUseCase ..> FleetBindingProjectionPort : creates/updates Core Node binding
+SynchronizeFleetEnrollmentUseCase ..> FleetEnrollmentOperationPort : records retryable sync state
+SynchronizeFleetEnrollmentUseCase ..> FleetInstallationPort : verifies active installation
 SynchronizeFleetEnrollmentUseCase ..> AuditOutboxPorts : audits confirmed binding
 AgentBindingRevocationController ..> RevokeAgentBindingUseCase : invokes after cutover
 RevokeAgentBindingUseCase ..> FleetInstallationPort : revokes Fleet credential first
@@ -271,29 +286,33 @@ AssetLifecycleUseCase ..> AgentManagementNodeLifecycleContract : calls Core publ
 AgentManagementNodeLifecycleContract <|.. CloseNodeEnrollmentUseCase : implemented by
 CloseNodeEnrollmentUseCase ..> FleetInvitationPort : closes invite/exchange gate
 CloseNodeEnrollmentUseCase ..> FleetInstallationPort : checks active Fleet binding
+FleetEnrollmentOperationPort <|.. MongoFleetEnrollmentOperationStore : implements
+FleetBindingProjectionPort <|.. MongoFleetBindingProjectionStore : implements
+AgentManagementModule ..> MongoFleetEnrollmentOperationStore : composes
+AgentManagementModule ..> MongoFleetBindingProjectionStore : composes
 FleetInvitationPort <|.. FleetInvitationHttpAdapter : implements
 FleetInstallationPort <|.. FleetInstallationHttpAdapter : implements
 FleetInvitationHttpAdapter ..> FleetHttpClient : uses
 FleetInstallationHttpAdapter ..> FleetHttpClient : uses
-FleetHttpClient ..> FleetServiceAuthenticator : obtains mTLS identity and actor context
+FleetHttpClient ..> FleetHttpsAgentFactory : creates TLS client with Core certificate
 FleetHttpClient ..> RequestContext : forwards correlation IDs
-FleetManagementModule ..> FleetInvitationHttpAdapter : composes
-FleetManagementModule ..> FleetInstallationHttpAdapter : composes
-FleetManagementModule ..> CreateAgentInvitationUseCase : composes
-FleetManagementModule ..> SynchronizeFleetEnrollmentUseCase : composes
-FleetManagementModule ..> ListFleetInstallationsUseCase : composes
-FleetManagementModule ..> RevokeAgentBindingUseCase : composes
-FleetManagementModule ..> CloseNodeEnrollmentUseCase : composes
-AgentManagementModule ..> CreateAgentInvitationController : composes proposed controller
-AgentManagementModule ..> FleetEnrollmentSyncController : composes proposed sync controller
+AgentManagementModule ..> FleetInvitationHttpAdapter : composes
+AgentManagementModule ..> FleetInstallationHttpAdapter : composes
+AgentManagementModule ..> RequestFleetInvitationUseCase : composes
+AgentManagementModule ..> SynchronizeFleetEnrollmentUseCase : composes
+AgentManagementModule ..> FleetInvitationController : composes invitation controller
+AgentManagementModule ..> FleetEnrollmentSyncController : composes sync controller
 AgentManagementModule ..> AgentBindingRevocationController : existing controller
 AgentManagementModule ..> AgentRegistryController : existing controller
 NodeEligibilityPort <|.. NodeEligibilityAdapter : implemented by current module factory
 NodeEligibilityAdapter ..> AssetTopologyQueries : calls public module contract
+RetireAssetUseCase ..> AgentBindingQueries : checks local and Fleet binding
 BootstrapTokenController ..> HumanPermissionGuard : existing route policy
 ```
 
-**Dependency rule:** controllers → application use cases → application ports; infrastructure implements ports. The application can consume Asset & Topology's public contract and platform outbox ports; it must not import their Mongo adapters. `FleetInvitationPort` handles create/cancel/status; `FleetInstallationPort` handles registry/revoke and active-binding checks. The Core operation journal stores only operation ID, actor/target fingerprint, progress state, and last safe error; it stores no invitation secret or mirrored Fleet lifecycle. Core's AgentBinding record is the Core-owned Node ↔ installation business association. Fleet remains authoritative for whether invitation exchange and installation credentials are active.
+The `<<implemented Core>>` classes above are present in this repository. The lifecycle gate, Fleet-aware revoke orchestration, Fleet registry facade, and `CloseNodeEnrollmentUseCase` remain proposed; their edges are design targets and must not be read as implemented. Fleet HTTP schemas and endpoint paths remain provisional pending C01/C04 approval.
+
+**Dependency rule:** controllers → application use cases → application ports; infrastructure implements ports. The application can consume Asset & Topology's public contract and platform outbox ports; it must not import their Mongo adapters. `FleetInvitationPort` handles create/cancel/status; `FleetInstallationPort` handles installation reads, gate/revoke commands, and active-binding checks. The Core operation journal stores an operation ID, hashed client key, actor/target fingerprint, progress state, and nonsecret Fleet references; it stores no invitation secret or mirrored Fleet credentials/lifecycle. Core's Fleet binding projection is the Core-owned Node ↔ installation business association. Fleet remains authoritative for whether invitation exchange and installation credentials are active. With `FLEET_MANAGER_BASE_URL` absent, integration is legacy-only: invitation commands remain unavailable and Fleet active-binding lookup returns no Fleet binding, preserving current Core-only retirement. Once Fleet is configured, transport failure fails retirement closed.
 
 ## 5. Invitation request sequence
 
@@ -306,12 +325,12 @@ sequenceDiagram
     actor Admin
     participant API as Core Controller
     participant IAM as IAM guard and verified principal
-    participant UC as CreateInvitationUseCase
+    participant UC as RequestFleetInvitationUseCase
     participant Asset as Asset public contract
     participant Audit as Core Audit Fact outbox
     participant Ops as Core operation journal
     participant Auth as Service authenticator
-    participant Client as Fleet HTTP adapter
+    participant Client as Fleet HTTPS client + adapter
     participant Fleet as Fleet Manager
 
     Admin->>API: POST Node invitation with Idempotency-Key
@@ -325,8 +344,7 @@ sequenceDiagram
         UC-->>API: Core business error, no Fleet call
         API-->>Admin: Safe 404 or 409
     else Eligible
-        UC->>Ops: Persist actor, Node, fingerprint and PENDING_FLEET
-        UC->>Audit: Record authorized invitation request, no secret
+        UC->>Ops: Persist operation ID, actor/Node fingerprint and REQUEST_PENDING
         UC->>Auth: Get managed mTLS Core identity
         Auth-->>Client: Managed Core client certificate + actor context
         Client->>Fleet: HTTPS create with key, actor context, Node, and request ID
@@ -336,7 +354,7 @@ sequenceDiagram
             Fleet-->>Client: Invitation ID and same secret
             Client-->>UC: Validated result
             UC->>Ops: Store invitation reference and INVITATION_ISSUED
-            UC->>Audit: Append created fact with same operation ID
+        UC->>Audit: Append verified-human, secret-free invitation fact in Core transaction
             UC-->>API: Secret result, no-store
             API-->>Admin: Instructions and secret
 
@@ -383,7 +401,7 @@ The Agent registers with Fleet; Core receives no callback in this baseline. The 
 
 Core stores the invitation authorization mapping and its own operation progress (`REQUEST_PENDING`, `INVITATION_ISSUED`, `SYNC_PENDING`, `BOUND`). It does not copy Fleet's invitation lifecycle, credentials, or registry. `SYNC_PENDING` means Fleet reports redeemed but Core has not committed the binding; it can be derived by comparing Fleet status with the Core association if persisting the marker also failed. Retries use a deterministic sync operation ID derived from the invitation ID. Once Core persists the business binding and Audit Fact, the state is `BOUND`. Fleet status remains authoritative; when Fleet is unavailable, Core returns last-known sync progress plus an unavailable indicator, never an invented active status.
 
-If Fleet created an invitation but Core failed to persist the invitation reference or success Audit Fact, Core returns `503` with the operation ID and keeps `REQUEST_PENDING`. Retrying the same create key queries/replays Fleet by operation ID: pending/unexpired returns the same secret, while redeemed/cancelled/expired returns status plus the nonsecret invitation reference. Core then repairs its authorization mapping and directs the user to synchronization; it never creates another invitation or requires the secret after a terminal state.
+If Fleet created an invitation but Core failed to persist the invitation reference or success Audit Fact, Core returns `503` with the operation ID and keeps `REQUEST_PENDING`. Retrying the same create key queries Fleet by operation ID: a found pending/unexpired record returns the same secret, while redeemed/cancelled/expired returns status plus the nonsecret invitation reference. If Fleet authoritatively reports no record, Core repeats create with the same Fleet operation/idempotency ID; Fleet's idempotency record prevents a duplicate if the original request raced query visibility. Core repairs its authorization mapping and directs the user to synchronization; it never creates a replacement operation or requires the secret after a terminal state.
 
 On `REDEEMED`, Core verifies the queried invitation ID matches its locally authorized invitation and Node, then upserts the Core-owned Node ↔ `agent_id` binding and appends a secret-free Audit Fact attributed to the installation/Agent identity returned over authenticated Fleet HTTPS. The local binding write and Audit Fact are one Core transaction. Duplicate synchronization is idempotent. A revoked/tombstoned Core binding is never reactivated by a stale `REDEEMED` observation. On Core transaction failure, mark/retain `SYNC_PENDING`; repeating the same sync queries Fleet again and completes the local write. Retirement checks query Fleet directly as described below, so a missing local binding during this window cannot permit retirement.
 
@@ -417,7 +435,7 @@ sequenceDiagram
         Fleet-->>Query: REDEEMED + agent_id + Node/invitation reference
         Query-->>UC: Authenticated Fleet status
         UC->>UC: Match invitation and Node to Core authorization record
-        UC->>Core: Upsert binding + append Agent-attributed audit fact
+        UC->>Core: Upsert binding + append verified-human audit fact
         alt Core transaction succeeds
             Core-->>UC: BOUND
             UC-->>API: BOUND
@@ -439,13 +457,13 @@ sequenceDiagram
 
 This is the proposed minimum behavior for an identical authenticated Core retry. A key reused with a different actor or payload always returns an idempotency conflict before exposing any secret.
 
-| Fleet invitation state | Same key + same actor/payload response | Core behavior |
-|---|---|---|
-| Pending and unexpired | Return same invitation reference and same protected secret | Return no-store secret result; never create a second invitation |
-| Redeemed | Return `REDEEMED` + stable invitation ID and nonsecret installation reference only | Return status; do not return secret; run/offer Core binding synchronization |
-| Cancelled | Return `CANCELLED` + stable invitation ID only | Return terminal status; no new invitation under old key |
-| Expired | Return `EXPIRED` + stable invitation ID only; escrow already purged | Return terminal status; user must explicitly create a new invitation with a new key |
-| Unknown key/outcome | Return a safe lookup/availability result; never infer that a new invitation is safe | Retry only with the same key or show unknown outcome |
+| Fleet invitation state | Same key + same actor/payload response                                              | Core behavior                                                                       |
+| ---------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Pending and unexpired  | Return same invitation reference and same protected secret                          | Return no-store secret result; never create a second invitation                     |
+| Redeemed               | Return `REDEEMED` + stable invitation ID and nonsecret installation reference only  | Return status; do not return secret; run/offer Core binding synchronization         |
+| Cancelled              | Return `CANCELLED` + stable invitation ID only                                      | Return terminal status; no new invitation under old key                             |
+| Expired                | Return `EXPIRED` + stable invitation ID only; escrow already purged                 | Return terminal status; user must explicitly create a new invitation with a new key |
+| Unknown key/outcome    | Return a safe lookup/availability result; never infer that a new invitation is safe | Retry only with the same key or show unknown outcome                                |
 
 Suggested nonsecret terminal error codes are `INVITATION_REDEEMED`, `INVITATION_CANCELLED`, and `INVITATION_EXPIRED`; exact HTTP statuses/codes remain a Fleet contract decision. Fleet must retain the idempotency fingerprint/status beyond secret purge for an agreed finite retention period, so expiry does not turn a retry into a second invitation.
 
@@ -558,7 +576,7 @@ sequenceDiagram
 
 ### Cross-system audit atomicity
 
-Baseline: Core writes a secret-free `agent_management.invitation.requested` fact before the Fleet call, with verified human actor, Node ID, and `operation_id`. On confirmed Fleet success, Core appends `agent_management.invitation.created` using the same correlation ID. Fleet's invitation record remains authoritative for creation/expiry. If Core fails after Fleet commits but before the second fact, the operation journal remains pending; retrying the same key replays the Fleet result and Core appends the missing outcome fact. Do not store the secret in the Core operation/audit record.
+Implemented baseline: Core persists a secret-free operation record before the Fleet call. After confirmed Fleet success, Core atomically writes the invitation reference and `agent_management.invitation.created` Audit Fact, attributed to the verified human, in one Core transaction. If Core fails after Fleet commits, the operation remains pending; retrying the same key replays Fleet and repairs the mapping/audit. The requested-attempt Audit Fact is a future policy choice, not emitted by this implementation. If no caller retries after a crash, the success fact can remain missing; pending-operation visibility and an operator retry runbook are required before production. Do not store the secret in the Core operation/audit record.
 
 No background reconciler is proposed for the initial slice. Core exposes pending operation IDs/status, and the same invitation-sync or revoke endpoint is the retry mechanism; operations staff can use that retry path from a pending-operation view/runbook. The limitation is that audit outcome or local link state can remain pending until a retry happens. Before production, require a way to enumerate pending operations, alert on age, and a runbook/SLO for retrying them. Do not claim all Core/Fleet state is reconciled automatically.
 
@@ -587,50 +605,123 @@ This ordering is not atomic across systems. Fleet must guarantee idempotent revo
 - Core registry projections must distinguish legacy Core enrollment records from Fleet-owned records during transition. Any retained historical Core records are history, not a live duplicate Fleet registry.
 - Update shared Flow 02, Core OpenAPI, Fleet C01, and rollout/cutover docs only after review and owner approval. This design intentionally changes none of them.
 
-## 8. Implementation plan and test cases
+## 8. Core implementation status and boundaries
+
+The following Core baseline is implemented; it does not change C01/C04 or shared documentation:
+
+- `FleetInvitationController` → `RequestFleetInvitationUseCase` → invitation/installation application ports. The controller uses `CurrentHumanPrincipal` and `agent:manage`; the request body cannot choose the actor. Core records a hashed idempotency key, actor/Node fingerprint, operation ID and nonsecret invitation mapping, never the invitation secret.
+- Same-key/same-actor/same-payload replay uses the stable Fleet operation ID. Pending and unexpired may return Fleet's protected replay secret; redeemed/cancelled/expired is status-only. Changed actor or payload conflicts. Unknown create results retain an operation that the same request can retry.
+- When a `REQUEST_PENDING` operation lookup confirms Fleet has no record, Core repeats create with the same stable Fleet operation/idempotency ID. This recovers a Core crash before send and is safe for a lost-response race only if Fleet enforces idempotency atomically. Core never generates a replacement Fleet operation. With Fleet unconfigured, invitation requests return unavailable while legacy retirement remains available.
+- Enrollment synchronization is explicitly user-triggered at `POST /api/v1/agent-fleet-invitations/{invitationId}/synchronize`. Core queries Fleet, verifies its invitation/Node authorization mapping and active installation, then commits the local Node ↔ installation projection, `BOUND` operation state and secret-free audit fact in one Core transaction. Persistence failure reports an operation ID and `SYNC_PENDING`; repeating the sync is the recovery trigger.
+- Asset retirement now queries Fleet for an active binding even if Core's projection has not synchronized. It fails closed if Fleet status is unavailable. This protects the ordinary stale-projection case, but does not serialize a concurrent Agent exchange against retirement.
+- Core uses HTTPS with managed client certificate/key options (mTLS), bounded retries, valid `Retry-After` handling, safe upstream errors and verified actor/request/operation context over the authenticated connection. Fleet endpoint/header/payload details remain provisional until owner agreement.
+- Legacy Core bootstrap-token enrollment, Core credential authentication, registry, and Core-only revoke remain available and unchanged in meaning. No legacy installations are migrated automatically.
+- CI runs a contract-shaped fake Fleet application-flow test and explicit M1 enrollment/retirement regression tests. These verify Core behavior only; they do not prove Fleet server or official Supervisor interoperability.
+
+**Not implemented and required before production cutover:**
+
+1. A Fleet per-Node enrollment gate owned by operation ID and monotonic version, with compare-and-finalize around unassign/retire and invitation exchange. The live retirement query is a point-in-time check; an in-flight exchange can still race it. Core lifecycle journal/recovery is also absent. If a future implementation crashes after gate close, Fleet must keep the gate closed until the same owner/version is retried or an operator recovers it; Core must never blindly reopen a gate.
+2. Fleet-aware revoke followed by Core unlink/audit with visible `REVOKE_PENDING_FLEET` and `REVOKE_PENDING_CORE` states and stable retry. Existing revoke remains Core-only for legacy. Do not route Fleet installations through it until Fleet idempotency and pending-state behavior are agreed and implemented.
+3. Pending-operation visibility, alerting, and an operator retry runbook for create, binding sync, audit gaps, and future gate/revoke flows. Today user retry is the recovery mechanism; a crash after remote success may leave Core audit/projection stale indefinitely if nobody retries. No background reconciler is included.
+
+### Implemented request and synchronization sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Human
+    participant Controller as FleetInvitationController
+    participant IAM as IAM guard + verified principal
+    participant Request as RequestFleetInvitationUseCase
+    participant Node as NodeEligibilityPort
+    participant Operation as Core operation journal
+    participant Fleet as Fleet ports + HTTPS adapter
+    participant Audit as Core Audit outbox
+    participant Sync as FleetEnrollmentSyncController + sync use case
+    participant Binding as Core binding projection
+    Human->>Controller: POST Node invitation + Idempotency-Key
+    Controller->>IAM: Require agent:manage; resolve verified actor
+    IAM-->>Controller: Verified principal + request ID
+    Controller->>Request: Node, key, verified actor
+    Request->>Node: Check exists, active, placed
+    Request->>Fleet: Check current active Fleet binding
+    Request->>Operation: Begin stable operation + actor/payload fingerprint
+    Request->>Fleet: Create with same operation ID over mTLS
+    alt Fleet creates or replays pending invitation
+        Fleet-->>Request: Pending + protected secret
+        Request->>Operation: Persist nonsecret invitation reference
+        Request->>Audit: Append secret-free invitation fact
+        Request-->>Controller: Secret, Cache-Control: no-store
+    else Remote result unknown
+        Request-->>Controller: Safe 503 + operation ID
+        Human->>Controller: Retry identical key and payload
+        Controller->>Request: Same verified actor and key
+        Request->>Fleet: Read/replay same operation
+    end
+    Fleet-->>Sync: Agent exchange; no Fleet callback in this baseline
+    Human->>Sync: Explicitly synchronize invitation ID
+    Sync->>Fleet: Query invitation and installation status
+    alt Pending or terminal invitation
+        Fleet-->>Sync: Status only
+        Sync-->>Human: Nonbinding status; no secret
+    else Redeemed and active; Core Node remains eligible
+        Fleet-->>Sync: Redeemed invitation + matching active installation
+        Sync->>Operation: Mark SYNC_PENDING
+        Sync->>Binding: Transactionally upsert Node ↔ installation
+        Sync->>Operation: Mark BOUND in same Core transaction
+        Sync->>Audit: Append secret-free verified-human fact in same transaction
+        Sync-->>Human: BOUND
+    else Core persistence failure
+        Binding--xSync: Transaction rolls back
+        Sync-->>Human: Retryable operation ID + SYNC_PENDING
+        Human->>Sync: Retry synchronization
+    end
+```
+
+## 9. Implementation plan and test cases
 
 The labels **FM-02** and **FM-03** follow the requested work breakdown, not a new shared roadmap numbering. FM-02 is the Core integration boundary slice; FM-03 adds the human-facing invitation/enrollment flow. C01/C04 remain drafts, so production calls stay gated on owner-approved wire behavior.
 
-### FM-02 — Core integration boundary
+### FM-02 — Core integration boundary (Core baseline implemented; wire approval pending)
 
 1. Before coding, agree with Fleet/Agent on the minimum C01/C04 wire surface: mTLS service identity and actor audit context; create/status/cancel/redeem-state query; idempotency-key fingerprint and replay by invitation state; stable errors and `Retry-After`; operation-owned Node gate/version/finalize; installation status/revoke; and query consistency. Keep the API minimal; do not implement a general Fleet SDK.
 2. Add narrow application ports (`FleetInvitationPort`, `FleetInstallationPort`), typed safe errors, a shared HTTPS transport, service authenticator, and separate invitation/installation adapters. Configure HTTPS-only base URL, audience, credentials, redirect rejection, a 3-second configurable total timeout, response-size limits, and secret redaction.
 3. Implement same-key retry handling: bounded attempts honoring `Retry-After` for 429, bounded retries for selected 5xx/connection failures, no retry for other 4xx, and unknown-outcome mapping after budget exhaustion. Preserve request/operation IDs across every attempt. Add Fleet state-specific invitation replay decoding; terminal replay never returns the secret.
-4. Add a Jest HTTP integration test using a local fake Fleet server (no Docker or live credentials). Cover successful JSON, problem details, 429 with and without `Retry-After`, timeout after request receipt, 5xx, malformed/oversized response, redirects rejected, service-auth headers/audience, same-key retries, and secret redaction. Add it to the existing CI Jest/coverage run; CI verifies Core adapter behavior only, not production interoperability.
-5. Run the focused test, then the repository CI checks applicable to the change: `pnpm test:cov --runInBand`, `pnpm exec eslint "{src,apps,libs,test}/**/*.ts"`, `pnpm build`, and `pnpm format:check` if the files are formatted by that script. Do not call the integration verified against production Fleet; a separately configured staging smoke test is a release gate.
+4. Core fake-flow integration covers invitation → redeemed → binding/audit; adapter tests cover HTTP errors/retry behavior, auth options and secret safety. CI runs the fake flow and M1 regression step. This does not start a real Fleet server or prove production interoperability.
+5. Run focused FM tests, M1 regressions and repository CI gates. An authenticated staging smoke test remains a separate release gate.
 
-### FM-03 — invitation, binding sync, and lifecycle orchestration (after FM-02)
+### FM-03 — invitation and binding sync (Core baseline implemented); lifecycle orchestration remains open
 
-1. Add controller → use case → application port paths. The controller gets a verified `CurrentHumanPrincipal`, requires `agent:manage`, and passes actor/request/idempotency context. The use case checks Node eligibility through the Asset public contract; only then does it call `FleetInvitationPort`.
-2. Persist the Core invitation authorization mapping and operation fingerprint without the secret. Require caller `Idempotency-Key`; same actor/key/body replays the same secret only while Fleet status is pending and unexpired. Redeemed/cancelled/expired replay returns status only. Return secrets with `Cache-Control: no-store`.
-3. Add explicit `SynchronizeFleetEnrollmentUseCase` and Core endpoint by invitation ID. UI invokes it after installation or on refresh; it queries Fleet, shows pending until redeemed, verifies Fleet response against Core's authorized invitation, then upserts the Core Node ↔ installation association and Audit Fact in one transaction. On Core write failure, return/persist `SYNC_PENDING`; same sync operation retries Fleet query and Core upsert. No NATS/background worker in the PoC.
-4. Add the Agent Management public lifecycle contract and Core operation journal; serialize one lifecycle change per Node. Use Fleet gate owner/version and compare-and-finalize before/after Core unassign/retire. Retry/recover the same pending operation after crash; Fleet active-binding query remains the retirement guard when Core binding sync is behind.
-5. After cutover approval, route current binding revoke through Fleet idempotent revoke followed by local binding/credential revoke and audit. Persist/report `REVOKE_PENDING_FLEET` or `REVOKE_PENDING_CORE`; replay the same revoke operation by binding ID. Keep current Core-only behavior unchanged for legacy installations until cohort migration and rollback are designed.
+1. Implemented: verified principal, `agent:manage`, actor/request/idempotency context, Node eligibility, and controller → use case → application ports.
+2. Implemented: operation fingerprint/mapping without secret, same-key changed actor/payload conflict, terminal status-only replay, and no-store secret response.
+3. Implemented: explicit user-triggered sync, Fleet state/identity checks, transactional binding + audit and retryable `SYNC_PENDING`. No NATS/background worker.
+4. Not implemented: Fleet operation-owned Node gate and Core lifecycle recovery journal. Agree C01 semantics and add these before production; the live retirement check cannot make exchange/retirement atomic.
+5. Not implemented: Fleet revoke + Core unlink. Preserve current Core-only legacy behavior until cutover is approved and the retryable Fleet flow is implemented.
 
 ### Core tests
 
 - **FM-02 adapter/transport:** HTTPS config validation; mTLS identity; actor context derives from authenticated principal; unauthenticated caller cannot use the service; request and operation IDs forwarded; 429 honors `Retry-After` then stops at budget; same key/body on every retry; no retry for permanent 4xx; timeout-after-send returns unknown; 5xx retry is bounded; invalid response and redirects fail safely; logs/traces/errors contain no secret; Fleet outage differs from Core persistence failure.
 - **FM-03 use case/API:** unauthenticated/inactive human and missing `agent:manage` are rejected before Fleet; absent/inactive/unplaced Node makes no Fleet call; same key/body replays secret only while pending; changed actor/body conflicts; redeemed/cancelled/expired replay returns no secret; Fleet redeemed status is checked against Core invitation mapping; explicit sync returns pending then creates one binding/audit; Core DB failure exposes `SYNC_PENDING` and same-ID retry completes; revoked/tombstoned binding is not reactivated by stale status; Fleet unavailable makes retirement fail closed; retire checks remote active binding even when local sync is pending; unassign preserves an existing binding; two lifecycle requests cannot overwrite gate owner/version; stale open is rejected; crash retry resumes gate from actual Core Node state; revoke outage leaves Core link active; remote revoke + local DB failure shows `REVOKE_PENDING_CORE` and retry completes; repeated completed revoke remains 204.
-- **CI integration:** run a local fake-Fleet HTTP integration spec through the Core controller/use-case/port/HTTP adapter in the normal Jest coverage job on every PR. The fake supports pending→redeemed, cancelled/expired terminal states, same-key replay, gate owner/version, revoke, 429 and lost replies. Verify the Core binding/audit is created once, pending state survives a simulated Core-store failure, retirement queries Fleet when Core has not synchronized, and stale gate owners cannot reopen. Use no external Fleet, credentials, or database. Keep a separately credentialed staging/Core↔Fleet smoke test outside ordinary CI; it gates rollout and is the only test that can establish actual interoperability.
+- **CI integration:** run the in-memory contract-shaped fake Fleet flow and explicit M1 enrollment/retirement regressions on every PR. The fake covers invitation → redeemed → one binding/audit. Focused adapter and retirement tests cover transport/retirement failure behavior. Gate-owner races, Fleet revoke and HTTP lost-reply interoperability remain future work. A separately credentialed staging/Core↔Fleet smoke test gates rollout and is the only test that can establish actual interoperability.
 - **Later migration gate:** preserve legacy Core token behavior before cutover; preserve installation UUID; do not reuse credentials across audiences; verify Fleet revocation and rollback leave one authority; label historic Core registry records; test Windows/Linux Agent migration separately in the owning Agent/Fleet repos.
 
 ## 9. Decisions for review
 
-| Open decision                                               | Practical baseline proposed here                                                                                                                                        | Trade-off / failure behavior                                                                                                                                                               | Agreement needed                               |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
-| Fleet API paths, fields, errors                             | Minimal create/status/cancel/gate/read/revoke REST operations with stable problem codes, request IDs and atomic Node uniqueness                                         | Keeps adapter small; unsupported Fleet response fails closed as invalid upstream response. One-active-installation rule needs business confirmation                                    | Core + Fleet + Agent; C01/C04 wire approval    |
-| Workload authentication                                     | Managed mTLS Core workload certificate; actor is carried as delegated audit context over that authenticated service connection                                        | Simpler PoC operations; Fleet trusts Core's authentication/authorization and cannot independently prove the named human. Pause if workload mTLS cannot be provisioned                     | Core operations + Fleet                        |
-| Actor delegation                                            | Core passes the IAM-verified actor ID and action/target; signed assertion is deferred unless independent verification is required                                       | Requires Fleet to trust actor context only from authenticated Core mTLS identity; never accept an unauthenticated caller field                                                             | Core IAM/security + Fleet                      |
-| Idempotency-key scope                                        | Unique key per authenticated Core service; request fingerprint includes actor, action, target and normalized payload                                                  | Reusing key with another actor/payload conflicts; key retention must outlive secret escrow and terminal status replay                                                                     | Core + Fleet; C01 E02                          |
-| Invitation secret loss/retry                                | Fleet encrypted replay only while pending/unexpired; terminal replay is status-only; propose 10-minute TTL and 24-hour nonsecret key tombstone                           | Secret temporarily recoverable within TTL; if escrow unavailable, return unknown and require explicit cancellation/new invitation; TTL/retention need approval                          | Core + Fleet + Agent; C01 E02                  |
-| Invitation-to-Core binding sync                             | User/UI explicitly calls Core sync by invitation ID; Core queries Fleet status and upserts its own Node ↔ `agent_id` binding                                           | No NATS or background worker; UI may show pending until refresh/retry. Retirement checks Fleet live even before local sync                                                                 | Core + Fleet + Agent; query status contract    |
-| `429` behavior                                              | Honor `Retry-After`; if absent use capped backoff; retry identical key/payload only within configured budget                                                            | Longer response latency; budget exhaustion returns unknown/unavailable, never changes key                                                                                                  | Core + Fleet; response headers/codes           |
-| Node create/exchange vs unassign/retire                     | Single active per-Node lifecycle operation; Fleet gate owner + monotonic version, compare-and-complete; Core journal resumes same operation after crash                  | Competing target gets in-progress; crash leaves gate closed until same operation is retried/recovered. Safe availability loss; no stale owner can reopen a newer gate                     | Core Asset + Agent Management + Fleet; C01 E03 |
-| Revoke vs unlink                                            | Persist pending status; idempotently revoke Fleet first, then Core unlink/audit. Same revoke route retries same operation                                               | Fleet may be revoked while Core link remains active; show `REVOKE_PENDING_CORE` and retry. No unlink on unknown Fleet result; legacy Core-only path remains until cutover                  | Core + Fleet; C01 revocation contract          |
-| Audit after remote success                                  | Audit authorized request before call; append success fact after confirmed Fleet result; retries use operation journal. No background reconciler in initial slice        | Success fact/local link can remain pending until user or ops retries. Before production require pending-operation list, age alert, and retry runbook                                      | Core Audit + Fleet                             |
-| Public routes and registry                                  | Preserve existing routes and local data for legacy installations; add/translate only after semantics and migration are approved                                         | Temporary split by enrollment cohort; avoid showing stale Core data as live Fleet state                                                                                                    | Core API/product + Fleet                       |
-| Existing installation migration                             | Preserve UUID; do not copy/reuse Core credentials; migrate explicitly per cohort with tested rollback                                                                   | Requires Agent changes and dual-authority avoidance; no automatic migration during FM-02                                                                                                   | Core + Fleet + Agent; C01 E06                  |
-| C04 credential scope/expiry/rotation and session revocation | Fleet uses separate minimum audiences for Agent HTTPS and Supervisor OpAMP WSS; Core proxies authorized Fleet commands only                                            | More than one scoped credential to rotate; Core cannot promise session timing beyond Fleet's confirmed result                                                                             | Fleet + Agent; C04 approval                    |
+| Open decision                                               | Practical baseline proposed here                                                                                                                                                         | Trade-off / failure behavior                                                                                                                                                       | Agreement needed                               |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Fleet API paths, fields, errors                             | Minimal create/status/cancel/gate/read/revoke REST operations with stable problem codes, request IDs and atomic Node uniqueness                                                          | Keeps adapter small; unsupported Fleet response fails closed as invalid upstream response. One-active-installation rule needs business confirmation                                | Core + Fleet + Agent; C01/C04 wire approval    |
+| Workload authentication                                     | Managed mTLS Core workload certificate; actor is carried as delegated audit context over that authenticated service connection                                                           | Simpler PoC operations; Fleet trusts Core's authentication/authorization and cannot independently prove the named human. Pause if workload mTLS cannot be provisioned              | Core operations + Fleet                        |
+| Actor delegation                                            | Core passes the IAM-verified actor ID and action/target; signed assertion is deferred unless independent verification is required                                                        | Requires Fleet to trust actor context only from authenticated Core mTLS identity; never accept an unauthenticated caller field                                                     | Core IAM/security + Fleet                      |
+| Idempotency-key scope                                       | Unique key per authenticated Core service; request fingerprint includes actor, action, target and normalized payload                                                                     | Reusing key with another actor/payload conflicts; key retention must outlive secret escrow and terminal status replay                                                              | Core + Fleet; C01 E02                          |
+| Invitation secret loss/retry                                | Fleet encrypted replay only while pending/unexpired; terminal replay is status-only; propose 10-minute TTL and 24-hour nonsecret key tombstone                                           | Secret temporarily recoverable within TTL; if escrow unavailable, return unknown and require explicit cancellation/new invitation; TTL/retention need approval                     | Core + Fleet + Agent; C01 E02                  |
+| Invitation-to-Core binding sync                             | User/UI explicitly calls Core sync by invitation ID; Core queries Fleet status and upserts its own Node ↔ `agent_id` binding                                                             | No NATS or background worker; UI may show pending until refresh/retry. Retirement checks Fleet live even before local sync                                                         | Core + Fleet + Agent; query status contract    |
+| `429` behavior                                              | Honor `Retry-After`; if absent use capped backoff; retry identical key/payload only within configured budget                                                                             | Longer response latency; budget exhaustion returns unknown/unavailable, never changes key                                                                                          | Core + Fleet; response headers/codes           |
+| Node create/exchange vs unassign/retire                     | Single active per-Node lifecycle operation; Fleet gate owner + monotonic version, compare-and-complete; Core journal resumes same operation after crash                                  | Competing target gets in-progress; crash leaves gate closed until same operation is retried/recovered. Safe availability loss; no stale owner can reopen a newer gate              | Core Asset + Agent Management + Fleet; C01 E03 |
+| Revoke vs unlink                                            | Persist pending status; idempotently revoke Fleet first, then Core unlink/audit. Same revoke route retries same operation                                                                | Fleet may be revoked while Core link remains active; show `REVOKE_PENDING_CORE` and retry. No unlink on unknown Fleet result; legacy Core-only path remains until cutover          | Core + Fleet; C01 revocation contract          |
+| Audit after remote success                                  | Core persists the operation before Fleet; after confirmed success it writes the mapping and verified-human success fact transactionally. Request-attempt audit remains a policy proposal | Retry of the stable key repairs local mapping/audit. A crash can leave the success audit missing until retry; before production require pending-operation list, alert, and runbook | Core Audit + Fleet                             |
+| Public routes and registry                                  | Preserve existing routes and local data for legacy installations; add/translate only after semantics and migration are approved                                                          | Temporary split by enrollment cohort; avoid showing stale Core data as live Fleet state                                                                                            | Core API/product + Fleet                       |
+| Existing installation migration                             | Preserve UUID; do not copy/reuse Core credentials; migrate explicitly per cohort with tested rollback                                                                                    | Requires Agent changes and dual-authority avoidance; no automatic migration during FM-02                                                                                           | Core + Fleet + Agent; C01 E06                  |
+| C04 credential scope/expiry/rotation and session revocation | Fleet uses separate minimum audiences for Agent HTTPS and Supervisor OpAMP WSS; Core proxies authorized Fleet commands only                                                              | More than one scoped credential to rotate; Core cannot promise session timing beyond Fleet's confirmed result                                                                      | Fleet + Agent; C04 approval                    |
 
 ### Accepted contract rules versus this proposal
 
