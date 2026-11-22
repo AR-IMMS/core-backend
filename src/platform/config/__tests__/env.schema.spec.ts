@@ -38,6 +38,35 @@ describe('validated IAM runtime configuration', () => {
     expect(envSchema.safeParse(validAgentConfiguration).success).toBe(true);
   });
 
+  test('requires Fleet HTTPS and a paired client certificate when Fleet is enabled', () => {
+    expect(
+      envSchema.safeParse({
+        ...validAgentConfiguration,
+        FLEET_MANAGER_BASE_URL: 'http://fleet.example.test',
+        FLEET_CLIENT_CERTIFICATE: 'cert',
+        FLEET_CLIENT_KEY: 'key',
+      }).success,
+    ).toBe(false);
+    expect(
+      envSchema.safeParse({
+        ...validAgentConfiguration,
+        FLEET_MANAGER_BASE_URL: 'https://fleet.example.test',
+      }).success,
+    ).toBe(false);
+    expect(
+      envSchema.safeParse({
+        ...validAgentConfiguration,
+        FLEET_MANAGER_BASE_URL: 'https://fleet.example.test',
+        FLEET_CLIENT_CERTIFICATE: 'cert',
+        FLEET_CLIENT_KEY: 'key',
+      }).success,
+    ).toBe(true);
+  });
+
+  test('leaves the optional Fleet integration disabled without Fleet settings', () => {
+    expect(envSchema.safeParse(validAgentConfiguration).success).toBe(true);
+  });
+
   /** It rejects lease settings that can expire before the next heartbeat. */
   test('requires presence lease lifetime to exceed heartbeat interval', () => {
     const result = envSchema.safeParse({

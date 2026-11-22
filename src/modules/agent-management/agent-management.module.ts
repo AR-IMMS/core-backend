@@ -46,6 +46,15 @@ import { ListAgentInstallationsUseCase } from './application/agent-registry/use-
 import { GetAgentInstallationUseCase } from './application/agent-registry/use-cases/get-agent-installation.use-case';
 import { ListInstallationBindingsUseCase } from './application/agent-registry/use-cases/list-installation-bindings.use-case';
 import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-agent-registry-query.store';
+import { FLEET_INVITATION_PORT } from './application/fleet/ports/fleet-invitation.port';
+import { FLEET_INSTALLATION_PORT } from './application/fleet/ports/fleet-installation.port';
+import { FleetHttpClient } from './infrastructure/fleet/fleet-http-client';
+import { FleetInvitationHttpAdapter } from './infrastructure/fleet/fleet-invitation.http-adapter';
+import { FleetInstallationHttpAdapter } from './infrastructure/fleet/fleet-installation.http-adapter';
+import {
+  DisabledFleetInstallationPort,
+  DisabledFleetInvitationPort,
+} from './infrastructure/fleet/disabled-fleet-ports';
 
 @Module({
   imports: [forwardRef(() => AssetTopologyModule)],
@@ -56,6 +65,52 @@ import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-age
     AgentRegistryController,
   ],
   providers: [
+    {
+      provide: FLEET_INVITATION_PORT,
+      useFactory: (config: ConfigService) => {
+        const baseUrl = config.get<string>('FLEET_MANAGER_BASE_URL');
+        if (!baseUrl) return new DisabledFleetInvitationPort();
+        const client = new FleetHttpClient({
+          baseUrl,
+          clientCertificate: config.getOrThrow<string>(
+            'FLEET_CLIENT_CERTIFICATE',
+          ),
+          clientKey: config.getOrThrow<string>('FLEET_CLIENT_KEY'),
+          caCertificate: config.get<string>('FLEET_CA_CERTIFICATE'),
+          timeoutMs: config.getOrThrow<number>('FLEET_REQUEST_TIMEOUT_MS'),
+          maxRetries: config.getOrThrow<number>('FLEET_MAX_RETRIES'),
+          maxRetryDelayMs: config.getOrThrow<number>(
+            'FLEET_MAX_RETRY_DELAY_MS',
+          ),
+          maxResponseBytes: 64 * 1024,
+        });
+        return new FleetInvitationHttpAdapter(client);
+      },
+      inject: [ConfigService],
+    },
+    {
+      provide: FLEET_INSTALLATION_PORT,
+      useFactory: (config: ConfigService) => {
+        const baseUrl = config.get<string>('FLEET_MANAGER_BASE_URL');
+        if (!baseUrl) return new DisabledFleetInstallationPort();
+        const client = new FleetHttpClient({
+          baseUrl,
+          clientCertificate: config.getOrThrow<string>(
+            'FLEET_CLIENT_CERTIFICATE',
+          ),
+          clientKey: config.getOrThrow<string>('FLEET_CLIENT_KEY'),
+          caCertificate: config.get<string>('FLEET_CA_CERTIFICATE'),
+          timeoutMs: config.getOrThrow<number>('FLEET_REQUEST_TIMEOUT_MS'),
+          maxRetries: config.getOrThrow<number>('FLEET_MAX_RETRIES'),
+          maxRetryDelayMs: config.getOrThrow<number>(
+            'FLEET_MAX_RETRY_DELAY_MS',
+          ),
+          maxResponseBytes: 64 * 1024,
+        });
+        return new FleetInstallationHttpAdapter(client);
+      },
+      inject: [ConfigService],
+    },
     MongoBootstrapTokenStore,
     {
       provide: ENROLLMENT_RECOVERY_CIPHER,

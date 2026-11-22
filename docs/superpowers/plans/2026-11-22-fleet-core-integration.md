@@ -37,11 +37,11 @@
 
 **Interfaces:** Invitation port creates, reads, and cancels invitations by stable operation ID and carries verified actor audit context. Installation port queries installation/Node status, controls the owner/version enrollment gate, and revokes by stable operation ID. Both return typed, secret-bearing values only to the application call; terminal invitations are status-only.
 
-- [ ] Write adapter/config unit tests for HTTPS-only endpoint, required client certificate, safe status/error mapping, redirects, timeout, secret redaction, idempotency headers, and operation/request IDs.
-- [ ] Run focused tests and observe expected failure.
-- [ ] Implement minimal typed adapters and DI wiring, without changing public routes.
-- [ ] Run focused tests, lint, and typecheck.
-- [ ] Commit `feat(agent-management): add Fleet client boundary`.
+- [x] Write adapter/config unit tests for HTTPS-only endpoint, required client certificate, safe status/error mapping, redirects, timeout, secret redaction, idempotency headers, and operation/request IDs.
+- [x] Run focused tests and observe expected failure.
+- [x] Implement minimal typed adapters and DI wiring, without changing public routes.
+- [x] Run focused tests and lint. Typecheck has pre-existing Mongo driver API errors; it reports none in the new Fleet files.
+- [x] Commit `feat(agent-management): add Fleet client boundary`.
 
 ### Task 2: Invitation request orchestration
 
