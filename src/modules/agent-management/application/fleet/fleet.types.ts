@@ -27,4 +27,8 @@ export interface FleetEnrollmentGate {
   readonly operationId: string;
   readonly version: number;
   readonly previousState: 'OPEN' | 'CLOSED';
+  readonly activeBinding: {
+    readonly installationId: string;
+    readonly bindingId: string;
+  } | null;
 }

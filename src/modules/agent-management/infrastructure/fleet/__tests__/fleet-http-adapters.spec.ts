@@ -8,7 +8,7 @@ import type {
 } from '../fleet-http-client';
 import { FleetHttpClient } from '../fleet-http-client';
 import { FleetInvitationHttpAdapter } from '../fleet-invitation.http-adapter';
-import { FleetInstallationHttpAdapter } from '../fleet-installation.http-adapter';
+import { FleetNodeEnrollmentGateHttpAdapter } from '../fleet-node-enrollment-gate.http-adapter';
 
 const config: FleetHttpConfig = {
   baseUrl: 'https://fleet.example.test/internal/v1/',
@@ -118,7 +118,7 @@ describe('Fleet invitation HTTP adapter', () => {
   });
 });
 
-describe('Fleet installation HTTP adapter', () => {
+describe('Fleet Node enrollment gate HTTP adapter', () => {
   test('uses the gate operation owner and version for compare-and-complete', async () => {
     const calls: FleetHttpRequest[] = [];
     const execute: FleetHttpExecutor = (_url, request) => {
@@ -128,12 +128,12 @@ describe('Fleet installation HTTP adapter', () => {
         headers: {},
         body: JSON.stringify(
           request.path.endsWith('/close')
-            ? { version: 9, previous_state: 'OPEN' }
+            ? { version: 9, previous_state: 'OPEN', active_binding: null }
             : {},
         ),
       });
     };
-    const adapter = new FleetInstallationHttpAdapter(
+    const adapter = new FleetNodeEnrollmentGateHttpAdapter(
       new FleetHttpClient(config, execute, () => Promise.resolve()),
     );
     const gate = await adapter.closeEnrollmentGate({
@@ -148,27 +148,6 @@ describe('Fleet installation HTTP adapter', () => {
       operation_id: 'node-op-1',
       version: 9,
       state: 'OPEN',
-    });
-  });
-
-  test('sends revoke retries under the same operation ID', async () => {
-    const calls: FleetHttpRequest[] = [];
-    const execute: FleetHttpExecutor = (_url, request) => {
-      calls.push(request);
-      return Promise.resolve({ status: 204, headers: {}, body: '' });
-    };
-    const adapter = new FleetInstallationHttpAdapter(
-      new FleetHttpClient(config, execute, () => Promise.resolve()),
-    );
-    await adapter.revoke({
-      installationId: 'install-1',
-      operationId: 'revoke-op-1',
-      actor,
-    });
-    expect(calls[0]).toMatchObject({
-      operationId: 'revoke-op-1',
-      path: 'installations/install-1/revoke',
-      actor,
     });
   });
 });

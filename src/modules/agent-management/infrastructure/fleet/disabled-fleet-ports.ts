@@ -1,6 +1,8 @@
 import { FleetUnavailableError } from '../../application/fleet/errors/fleet-errors';
 import type { FleetInvitationPort } from '../../application/fleet/ports/fleet-invitation.port';
 import type { FleetInstallationPort } from '../../application/fleet/ports/fleet-installation.port';
+import type { FleetNodeEnrollmentGatePort } from '../../application/fleet/ports/fleet-node-enrollment-gate.port';
+import type { FleetEnrollmentGate } from '../../application/fleet/fleet.types';
 
 export class DisabledFleetInvitationPort implements FleetInvitationPort {
   create(): Promise<never> {
@@ -23,13 +25,23 @@ export class DisabledFleetInstallationPort implements FleetInstallationPort {
     // mode; configured-but-unavailable Fleet still fails closed in the client.
     return Promise.resolve(null);
   }
-  closeEnrollmentGate(): Promise<never> {
-    return Promise.reject(new FleetUnavailableError(false));
+}
+
+/** Explicit legacy-only mode: no Fleet cohort exists, so gate calls are no-ops. */
+export class DisabledFleetNodeEnrollmentGatePort implements FleetNodeEnrollmentGatePort {
+  closeEnrollmentGate(input: {
+    readonly nodeId: string;
+    readonly operationId: string;
+  }): Promise<FleetEnrollmentGate> {
+    return Promise.resolve({
+      nodeId: input.nodeId,
+      operationId: input.operationId,
+      version: 0,
+      previousState: 'OPEN',
+      activeBinding: null,
+    });
   }
-  completeEnrollmentGate(): Promise<never> {
-    return Promise.reject(new FleetUnavailableError(false));
-  }
-  revoke(): Promise<never> {
-    return Promise.reject(new FleetUnavailableError(false));
+  completeEnrollmentGate(): Promise<void> {
+    return Promise.resolve();
   }
 }

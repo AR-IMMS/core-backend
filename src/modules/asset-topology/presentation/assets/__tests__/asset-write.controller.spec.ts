@@ -125,9 +125,13 @@ describe('AssetWriteController', () => {
         { asset_id: assetId },
       ),
     ).resolves.toBeUndefined();
-    expect(retire.execute).toHaveBeenCalledWith(assetId, {
-      type: 'user',
-      id: 'admin-1',
-    });
+    expect(retire.execute).toHaveBeenCalledWith(
+      assetId,
+      {
+        type: 'user',
+        id: 'admin-1',
+      },
+      { idempotencyKey: undefined },
+    );
   });
 });

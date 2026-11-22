@@ -12,10 +12,7 @@ import type {
   AssetTopologyAssetQueries,
   AssetId,
 } from '@modules/asset-topology/contracts';
-import {
-  AGENT_BINDING_QUERIES_PORT,
-  AgentFleetBindingStatusUnavailableError,
-} from './contracts';
+import { AGENT_BINDING_QUERIES_PORT } from './contracts';
 import {
   BOOTSTRAP_TOKEN_STORE,
   NODE_ELIGIBILITY_PORT,
@@ -30,13 +27,11 @@ import { ENROLLMENT_PERSISTENCE_PORT } from './application/registration/ports/en
 import type { EnrollmentPersistencePort } from './application/registration/ports/enrollment.port';
 import { ENROLLMENT_RECOVERY_CIPHER } from './application/registration/ports/enrollment-recovery.port';
 import type { EnrollmentRecoveryCipherPort } from './application/registration/ports/enrollment-recovery.port';
-import { AGENT_CREDENTIAL_AUTHORIZATION_PORT } from './application/access-lifecycle/ports/agent-credential-authorization.port';
 import { BINDING_REVOCATION_PORT } from './application/access-lifecycle/ports/binding-revocation.port';
 import type { BindingRevocationPort } from './application/access-lifecycle/ports/binding-revocation.port';
 import { MongoEnrollmentStore } from './infrastructure/mongodb/mongo-enrollment.store';
 import { MongoAgentAccessStore } from './infrastructure/mongodb/mongo-agent-access.store';
 import { RevokeAgentBindingUseCase } from './application/access-lifecycle/use-cases/revoke-agent-binding.use-case';
-import { AgentAuthenticationGuard } from './presentation/access-lifecycle/agent-authentication.guard';
 import { AgentBindingRevocationController } from './presentation/access-lifecycle/agent-binding-revocation.controller';
 import { EnrollmentRecoveryCipher } from './infrastructure/security/enrollment-recovery-cipher';
 import { EnrollmentController } from './presentation/registration/enrollment.controller';
@@ -51,14 +46,7 @@ import { ListInstallationBindingsUseCase } from './application/agent-registry/us
 import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-agent-registry-query.store';
 import { FLEET_INVITATION_PORT } from './application/fleet/ports/fleet-invitation.port';
 import { FLEET_INSTALLATION_PORT } from './application/fleet/ports/fleet-installation.port';
-import { FleetHttpClient } from './infrastructure/fleet/fleet-http-client';
-import { FleetUnavailableError } from './application/fleet/errors/fleet-errors';
-import { FleetInvitationHttpAdapter } from './infrastructure/fleet/fleet-invitation.http-adapter';
-import { FleetInstallationHttpAdapter } from './infrastructure/fleet/fleet-installation.http-adapter';
-import {
-  DisabledFleetInstallationPort,
-  DisabledFleetInvitationPort,
-} from './infrastructure/fleet/disabled-fleet-ports';
+import { FleetManagerAdapterModule } from './infrastructure/fleet/fleet-manager-adapter.module';
 import { FleetInvitationController } from './presentation/fleet-enrollment/fleet-invitation.controller';
 import { MongoFleetEnrollmentOperationStore } from './infrastructure/mongodb/mongo-fleet-enrollment-operation.store';
 import { FLEET_ENROLLMENT_OPERATION_PORT } from './application/fleet/ports/fleet-enrollment-operation.port';
@@ -75,7 +63,7 @@ import { CoordinateNodeLifecycleUseCase } from './application/fleet/use-cases/co
 import { AGENT_NODE_LIFECYCLE_COORDINATION_PORT } from './contracts';
 
 @Module({
-  imports: [forwardRef(() => AssetTopologyModule)],
+  imports: [forwardRef(() => AssetTopologyModule), FleetManagerAdapterModule],
   controllers: [
     BootstrapTokenController,
     EnrollmentController,
@@ -85,52 +73,6 @@ import { AGENT_NODE_LIFECYCLE_COORDINATION_PORT } from './contracts';
     FleetEnrollmentSyncController,
   ],
   providers: [
-    {
-      provide: FLEET_INVITATION_PORT,
-      useFactory: (config: ConfigService) => {
-        const baseUrl = config.get<string>('FLEET_MANAGER_BASE_URL');
-        if (!baseUrl) return new DisabledFleetInvitationPort();
-        const client = new FleetHttpClient({
-          baseUrl,
-          clientCertificate: config.getOrThrow<string>(
-            'FLEET_CLIENT_CERTIFICATE',
-          ),
-          clientKey: config.getOrThrow<string>('FLEET_CLIENT_KEY'),
-          caCertificate: config.get<string>('FLEET_CA_CERTIFICATE'),
-          timeoutMs: config.getOrThrow<number>('FLEET_REQUEST_TIMEOUT_MS'),
-          maxRetries: config.getOrThrow<number>('FLEET_MAX_RETRIES'),
-          maxRetryDelayMs: config.getOrThrow<number>(
-            'FLEET_MAX_RETRY_DELAY_MS',
-          ),
-          maxResponseBytes: 64 * 1024,
-        });
-        return new FleetInvitationHttpAdapter(client);
-      },
-      inject: [ConfigService],
-    },
-    {
-      provide: FLEET_INSTALLATION_PORT,
-      useFactory: (config: ConfigService) => {
-        const baseUrl = config.get<string>('FLEET_MANAGER_BASE_URL');
-        if (!baseUrl) return new DisabledFleetInstallationPort();
-        const client = new FleetHttpClient({
-          baseUrl,
-          clientCertificate: config.getOrThrow<string>(
-            'FLEET_CLIENT_CERTIFICATE',
-          ),
-          clientKey: config.getOrThrow<string>('FLEET_CLIENT_KEY'),
-          caCertificate: config.get<string>('FLEET_CA_CERTIFICATE'),
-          timeoutMs: config.getOrThrow<number>('FLEET_REQUEST_TIMEOUT_MS'),
-          maxRetries: config.getOrThrow<number>('FLEET_MAX_RETRIES'),
-          maxRetryDelayMs: config.getOrThrow<number>(
-            'FLEET_MAX_RETRY_DELAY_MS',
-          ),
-          maxResponseBytes: 64 * 1024,
-        });
-        return new FleetInstallationHttpAdapter(client);
-      },
-      inject: [ConfigService],
-    },
     CoordinateNodeLifecycleUseCase,
     {
       provide: AGENT_NODE_LIFECYCLE_COORDINATION_PORT,
@@ -180,11 +122,6 @@ import { AGENT_NODE_LIFECYCLE_COORDINATION_PORT } from './contracts';
         new ListInstallationBindingsUseCase(query),
       inject: [AGENT_REGISTRY_QUERY_PORT],
     },
-    AgentAuthenticationGuard,
-    {
-      provide: AGENT_CREDENTIAL_AUTHORIZATION_PORT,
-      useExisting: MongoAgentAccessStore,
-    },
     {
       provide: BINDING_REVOCATION_PORT,
       useExisting: MongoAgentAccessStore,
@@ -205,7 +142,6 @@ import { AGENT_NODE_LIFECYCLE_COORDINATION_PORT } from './contracts';
       useFactory: (
         persistence: EnrollmentPersistencePort,
         fleetBindings: FleetBindingProjectionPort,
-        fleetInstallations: FleetInstallationPort,
       ) => ({
         hasActiveBindingForNode: async (
           nodeId: string,
@@ -213,29 +149,8 @@ import { AGENT_NODE_LIFECYCLE_COORDINATION_PORT } from './contracts';
         ) =>
           (await persistence.hasActiveBinding(nodeId, context)) ||
           (await fleetBindings.hasActiveForNode(nodeId, context)),
-        hasActiveFleetBindingForNode: async (
-          nodeId: string,
-          actor: { readonly actorId: string; readonly requestId: string },
-        ) => {
-          try {
-            const installation = await fleetInstallations.findActiveByNode({
-              nodeId,
-              actor,
-            });
-            return installation?.status === 'ACTIVE';
-          } catch (error) {
-            if (error instanceof FleetUnavailableError) {
-              throw new AgentFleetBindingStatusUnavailableError();
-            }
-            throw error;
-          }
-        },
       }),
-      inject: [
-        ENROLLMENT_PERSISTENCE_PORT,
-        FLEET_BINDING_PROJECTION_PORT,
-        FLEET_INSTALLATION_PORT,
-      ],
+      inject: [ENROLLMENT_PERSISTENCE_PORT, FLEET_BINDING_PROJECTION_PORT],
     },
     {
       provide: NODE_ELIGIBILITY_PORT,
