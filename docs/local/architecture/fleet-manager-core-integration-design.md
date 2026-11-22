@@ -1,8 +1,8 @@
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          # Core Backend ↔ Fleet Manager Integration Design
+# Core Backend ↔ Fleet Manager Integration Design
 
-**Status:** Review proposal; no implementation or contract approval implied.  
+**Status:** Core implementation baseline approved for this slice; Fleet wire behavior remains unapproved.
 **Scope:** Core side of Fleet Manager integration for the B+ architecture.  
-**Contract baseline:** `docs/shared/contracts/fleet-management/` as currently pinned; C01 and C04 are review drafts, not wire contracts.
+**Contract baseline:** The preceding version references `docs/shared/contracts/fleet-management/`; that submodule is unavailable in this worktree, so the C01/C04 statements were not independently revalidated for this revision. Treat them as prior-document citations and review drafts, not wire contracts.
 
 ## 1. Current-state findings
 
@@ -43,7 +43,7 @@ After cutover, Core's local binding may lag Fleet, so it cannot be the only dupl
 
 1. Create an invitation for an eligible Node. Core checks `agent:manage` and Node eligibility. The request includes a caller-generated `Idempotency-Key`; the same verified human and identical command may replay the same Fleet invitation result. Return the secret with `Cache-Control: no-store`.
 2. Synchronize enrollment after Fleet exchange through an explicit Core operation. An authorized user or UI refresh invokes Core by invitation ID; Core queries Fleet and upserts the Node ↔ installation binding when Fleet reports `REDEEMED`. A failed Core write remains `SYNC_PENDING` and retries with the same operation ID.
-3. Cancel pending invitations for a Node before an unassign/retire lifecycle command, and cancel a specific invitation where useful. Fleet must make cancellation atomic against exchange and return whether exchange already won.
+3. Close Fleet's per-Node gate before unassign/retire. The gate atomically blocks invitation creation and exchange. Propose cancelling outstanding pending invitations in the same Fleet close operation; this is a Fleet/Agent contract decision and is not implemented or verified by the current Fleet service.
 4. Revoke a Fleet installation through the existing user-facing Agent binding revoke operation after cutover. Core treats remote revocation and local unlink as a retryable two-step workflow; it does not claim distributed atomicity.
 5. List/get Fleet installation and invitation projections through Fleet APIs, optionally enriched with Core-owned Node details. Do not persist a second authoritative Fleet registry in Core.
 
@@ -69,40 +69,46 @@ Add a Fleet integration adapter under Agent Management infrastructure, behind a 
 
 ## 3. Proposed Core file/module structure
 
-Keep the integration inside `src/modules/agent-management`; do not add generic Fleet logic to `platform` or shared primitives.
+Keep Core business orchestration and outbound port contracts with Agent Management. Extract the Fleet HTTP transport/adapters into a narrowly named `FleetManagerAdapterModule`; do not add Fleet business logic to `platform` or shared primitives. Keep `AgentManagementModule` named for the Core capability it composes; it owns human APIs, Node policy, business association, audit and legacy compatibility, so renaming the whole module as an adapter would misstate its responsibility.
 
 ```text
 src/modules/agent-management/
   application/
     fleet-enrollment/
-      ports/fleet-invitation.port.ts             # create/cancel and Node lifecycle commands
-      ports/fleet-installation.port.ts           # installation read/revoke operations
-      ports/fleet-management.port.tokens.ts      # Nest injection tokens
+      ports/fleet-invitation.port.ts             # create/cancel/status
+      ports/fleet-installation.port.ts           # installation reads
+      ports/fleet-node-enrollment-gate.port.ts   # close/complete lifecycle gate
       use-cases/create-agent-invitation.use-case.ts
       use-cases/synchronize-fleet-enrollment.use-case.ts
-      use-cases/cancel-node-invitations.use-case.ts
       use-cases/list-fleet-installations.use-case.ts
-      use-cases/revoke-agent-binding.use-case.ts # post-cutover orchestration
       ports/fleet-operation-store.port.ts        # Core retry/sync progress; no Fleet secret/state copy
       errors/fleet-management.errors.ts
+      use-cases/coordinate-fleet-node-gate.use-case.ts # implements public gate contract
   presentation/
     fleet-enrollment/fleet-invitation.controller.ts # proposed Core user API
     fleet-enrollment/fleet-enrollment-sync.controller.ts
     fleet-enrollment/fleet-invitation.schemas.ts
     fleet-registry/fleet-registry.controller.ts    # proposed facade/projection
   infrastructure/
-    fleet-management/fleet-management.module.ts    # proposed config/auth composition
-    fleet-management/fleet-management.http.client.ts
-    fleet-management/fleet-management.service-auth.ts
-    fleet-management/fleet-invitation.adapter.ts   # implements invitation port
-    fleet-management/fleet-installation.adapter.ts # implements installation port
-    mongodb/mongo-fleet-operation.store.ts          # proposed minimal operation journal
+    mongodb/mongo-fleet-operation.store.ts          # invitation and binding projection state
+    mongodb/mongo-node-lifecycle-operation.store.ts # proposed; Asset lifecycle owner
   contracts/
-    node-lifecycle.contract.ts                     # proposed Asset-facing Core boundary
-  agent-management.module.ts                       # compose proposed adapter/use cases
+    node-lifecycle.contract.ts                     # public Asset-facing Core boundary
+  agent-management.module.ts                       # Core APIs/use cases and port contracts
+
+src/modules/agent-management/infrastructure/fleet/
+  fleet-manager-adapter.module.ts                  # proposed outbound adapter Nest module
+  fleet-http-client.ts                              # existing HTTPS, mTLS, retry, safe errors
+  fleet-invitation.http-adapter.ts                  # existing Core invitation adapter
+  fleet-installation.http-adapter.ts                # existing; split reads from gate methods
+  fleet-node-gate.http-adapter.ts                   # proposed dedicated gate adapter
+
+src/modules/asset-topology/
+  application/assets/node-lifecycle-operation.port.ts # durable Asset lifecycle recovery state
+  infrastructure/mongodb/mongo-node-lifecycle-operation.store.ts
 ```
 
-Use `@RequirePermissions('agent:manage')`, `@CurrentHumanPrincipal()`, existing request context, HTTP problem-details, and Audit Fact v2 conventions. Each controller depends only on its use cases. Each use case depends on the narrow application port(s) it needs; invitation commands and installation query/revoke operations have separate ports. HTTP adapters implement these ports. No controller calls an HTTP adapter or application port directly. Node lookups continue through `AssetTopologyAssetQueries`; no transaction-bound Asset port is passed to Fleet.
+Use `@RequirePermissions('agent:manage')`, `@CurrentHumanPrincipal()`, existing request context, HTTP problem-details, and Audit Fact v2 conventions. Each controller depends only on its use cases. Each use case depends on narrow ports. The adapters depend inward on intentionally exported Agent Management port contracts; the HTTP adapter module contains no human authorization, Node policy, or business audit logic. No controller calls an HTTP adapter or application port directly. Node lookups continue through `AssetTopologyAssetQueries`; no transaction-bound Asset port is passed to Fleet.
 
 ## 4. Detailed class diagram
 
@@ -126,10 +132,6 @@ class AgentRegistryController {
 class AgentBindingRevocationController {
   <<existing legacy route; post-cutover flow uses this API>>
   +revoke(bindingId, principal)
-}
-class AssetLifecycleUseCase {
-  <<existing; Fleet lifecycle hook proposed>>
-  +unassignOrRetire(nodeId, actor)
 }
 class FleetInvitationController {
   <<implemented Core>>
@@ -163,14 +165,21 @@ class BindingRevocationPort {
   <<existing Core persistence port>>
   +revokeBinding(bindingId, actorId, revokedAt)
 }
-class AgentManagementNodeLifecycleContract {
+class AgentNodeLifecycleCoordinationContract {
   <<proposed public Core module contract>>
-  +prepareLifecycleChange(nodeId, operationId)
-  +completeLifecycleChange(nodeId, operationId, gateVersion, state)
+  +closeEnrollmentGate(nodeId, operationId, action, actor)
+  +completeEnrollmentGate(nodeId, operationId, version, outcome)
 }
-class CloseNodeEnrollmentUseCase {
+class CoordinateFleetNodeLifecycleUseCase {
   <<proposed>>
-  +prepare(nodeId, operationId)
+  +close(nodeId, operationId, action, actor)
+  +complete(gate, outcome, actor)
+}
+class CoreNodeLifecycleOperationPort {
+  <<proposed Asset Topology persistence port>>
+  +begin(key, actor, nodeId, action)
+  +advance(operationId, stage, gateVersion)
+  +find(operationId)
 }
 class FleetInvitationPort {
   <<implemented Core; wire provisional>>
@@ -192,12 +201,17 @@ class FleetEnrollmentOperationPort {
   +markBound(installationId)
 }
 class FleetInstallationPort {
-  <<implemented Core; wire provisional>>
+  <<implemented Core; wire provisional; mixed concerns>>
   +findById(installationId, actor)
   +findActiveByNode(nodeId, actor)
   +closeEnrollmentGate(nodeId, operationId, actor)
   +completeEnrollmentGate(gate, state, actor)
   +revoke(installationId, operationId)
+}
+class FleetNodeEnrollmentGatePort {
+  <<proposed split from FleetInstallationPort>>
+  +close(nodeId, operationId, action, actor)
+  +complete(gate, outcome, actor)
 }
 class FleetInvitationHttpAdapter {
   <<implemented Core; wire provisional>>
@@ -205,7 +219,15 @@ class FleetInvitationHttpAdapter {
 }
 class FleetInstallationHttpAdapter {
   <<implemented Core; wire provisional>>
-  +findById/findActiveByNode/gate/revoke(command)
+  +findById/findActiveByNode/revoke(command)
+}
+class FleetNodeEnrollmentGateHttpAdapter {
+  <<proposed thin HTTP adapter>>
+  +close/complete(command)
+}
+class FleetRevocationPort {
+  <<proposed only with concrete revoke use case>>
+  +revoke(installationId, operationId, actor)
 }
 class FleetHttpClient {
   <<implemented Core; wire provisional>>
@@ -258,8 +280,24 @@ class RequestContext {
   +traceId
 }
 class AgentManagementModule {
-  <<existing composition; Fleet providers implemented>>
+  <<existing Core business composition; keep name>>
   +compose controllers and use cases
+}
+class FleetManagerAdapterModule {
+  <<proposed NestJS outbound adapter module>>
+  +compose Fleet HTTP adapters and mTLS client
+}
+class AssetTopologyModule {
+  <<existing business module>>
+  +compose Node lifecycle use cases
+}
+class AssetPlacementManagementUseCases {
+  <<existing; Fleet lifecycle hook proposed>>
+  +unmap(assetId, actor)
+}
+class RetireAssetUseCase {
+  <<existing; Fleet lifecycle hook proposed>>
+  +execute(assetId, actor)
 }
 
 HumanPermissionGuard ..> FleetInvitationController : guards permission
@@ -279,25 +317,31 @@ SynchronizeFleetEnrollmentUseCase ..> FleetEnrollmentOperationPort : records ret
 SynchronizeFleetEnrollmentUseCase ..> FleetInstallationPort : verifies active installation
 SynchronizeFleetEnrollmentUseCase ..> AuditOutboxPorts : audits confirmed binding
 AgentBindingRevocationController ..> RevokeAgentBindingUseCase : invokes after cutover
-RevokeAgentBindingUseCase ..> FleetInstallationPort : revokes Fleet credential first
+RevokeAgentBindingUseCase ..> FleetRevocationPort : proposed Fleet credential revocation
 RevokeAgentBindingUseCase ..> BindingRevocationPort : unlinks Core association after Fleet success
 RevokeAgentBindingUseCase ..> AuditOutboxPorts : records Core unlink result
-AssetLifecycleUseCase ..> AgentManagementNodeLifecycleContract : calls Core public module contract before local transaction
-AgentManagementNodeLifecycleContract <|.. CloseNodeEnrollmentUseCase : implemented by
-CloseNodeEnrollmentUseCase ..> FleetInvitationPort : closes invite/exchange gate
-CloseNodeEnrollmentUseCase ..> FleetInstallationPort : checks active Fleet binding
+RetireAssetUseCase ..> CoreNodeLifecycleOperationPort : proposed durable lifecycle operation
+AssetPlacementManagementUseCases ..> CoreNodeLifecycleOperationPort : proposed durable lifecycle operation
+RetireAssetUseCase ..> AgentNodeLifecycleCoordinationContract : proposed gate around local transaction
+AssetPlacementManagementUseCases ..> AgentNodeLifecycleCoordinationContract : proposed gate around local transaction
+AgentNodeLifecycleCoordinationContract <|.. CoordinateFleetNodeLifecycleUseCase : implemented by
+CoordinateFleetNodeLifecycleUseCase ..> FleetNodeEnrollmentGatePort : closes/finalizes Fleet gate
+CoordinateFleetNodeLifecycleUseCase ..> FleetBindingProjectionPort : consumes returned binding when required
+FleetNodeEnrollmentGatePort <|.. FleetNodeEnrollmentGateHttpAdapter : implements
 FleetEnrollmentOperationPort <|.. MongoFleetEnrollmentOperationStore : implements
 FleetBindingProjectionPort <|.. MongoFleetBindingProjectionStore : implements
 AgentManagementModule ..> MongoFleetEnrollmentOperationStore : composes
 AgentManagementModule ..> MongoFleetBindingProjectionStore : composes
 FleetInvitationPort <|.. FleetInvitationHttpAdapter : implements
-FleetInstallationPort <|.. FleetInstallationHttpAdapter : implements
+FleetInstallationPort <|.. FleetInstallationHttpAdapter : implements current combined surface
+FleetManagerAdapterModule ..> FleetInvitationHttpAdapter : composes
+FleetManagerAdapterModule ..> FleetInstallationHttpAdapter : composes
+FleetManagerAdapterModule ..> FleetNodeEnrollmentGateHttpAdapter : composes
 FleetInvitationHttpAdapter ..> FleetHttpClient : uses
 FleetInstallationHttpAdapter ..> FleetHttpClient : uses
 FleetHttpClient ..> FleetHttpsAgentFactory : creates TLS client with Core certificate
 FleetHttpClient ..> RequestContext : forwards correlation IDs
-AgentManagementModule ..> FleetInvitationHttpAdapter : composes
-AgentManagementModule ..> FleetInstallationHttpAdapter : composes
+AgentManagementModule ..> FleetManagerAdapterModule : imports outbound adapters
 AgentManagementModule ..> RequestFleetInvitationUseCase : composes
 AgentManagementModule ..> SynchronizeFleetEnrollmentUseCase : composes
 AgentManagementModule ..> FleetInvitationController : composes invitation controller
@@ -306,13 +350,13 @@ AgentManagementModule ..> AgentBindingRevocationController : existing controller
 AgentManagementModule ..> AgentRegistryController : existing controller
 NodeEligibilityPort <|.. NodeEligibilityAdapter : implemented by current module factory
 NodeEligibilityAdapter ..> AssetTopologyQueries : calls public module contract
-RetireAssetUseCase ..> AgentBindingQueries : checks local and Fleet binding
+RetireAssetUseCase ..> AgentBindingQueries : existing point-in-time check until gate cutover
 BootstrapTokenController ..> HumanPermissionGuard : existing route policy
 ```
 
-The `<<implemented Core>>` classes above are present in this repository. The lifecycle gate, Fleet-aware revoke orchestration, Fleet registry facade, and `CloseNodeEnrollmentUseCase` remain proposed; their edges are design targets and must not be read as implemented. Fleet HTTP schemas and endpoint paths remain provisional pending C01/C04 approval.
+The `<<implemented Core>>` classes above are present in this repository. The HTTP adapter currently has close/complete gate methods, but no Asset lifecycle use case calls them. The lifecycle operation journal, public Agent Management lifecycle contract, split gate port/adapter, Fleet-aware revoke orchestration, and Fleet registry facade remain proposed; their edges are design targets and must not be read as implemented. Fleet HTTP schemas and endpoint paths remain provisional pending C01/C04 approval.
 
-**Dependency rule:** controllers → application use cases → application ports; infrastructure implements ports. The application can consume Asset & Topology's public contract and platform outbox ports; it must not import their Mongo adapters. `FleetInvitationPort` handles create/cancel/status; `FleetInstallationPort` handles installation reads, gate/revoke commands, and active-binding checks. The Core operation journal stores an operation ID, hashed client key, actor/target fingerprint, progress state, and nonsecret Fleet references; it stores no invitation secret or mirrored Fleet credentials/lifecycle. Core's Fleet binding projection is the Core-owned Node ↔ installation business association. Fleet remains authoritative for whether invitation exchange and installation credentials are active. With `FLEET_MANAGER_BASE_URL` absent, integration is legacy-only: invitation commands remain unavailable and Fleet active-binding lookup returns no Fleet binding, preserving current Core-only retirement. Once Fleet is configured, transport failure fails retirement closed.
+**Dependency rule:** controllers → application use cases → application ports; infrastructure implements ports. The application can consume Asset & Topology's public contract and platform outbox ports; it must not import their Mongo adapters. `FleetInvitationPort` handles invitation create/cancel/status; `FleetInstallationPort` handles installation reads; `FleetNodeEnrollmentGatePort` handles Node gate close/complete. Add a separate revoke port only with the concrete revoke use case. Invitation/binding operation state remains Agent Management-owned; the Node lifecycle recovery journal belongs to Asset & Topology. Neither stores invitation secrets or mirrored Fleet credentials/lifecycle. Core's Fleet binding projection is the Core-owned Node ↔ installation business association. Fleet remains authoritative for whether invitation exchange and installation credentials are active. With `FLEET_MANAGER_BASE_URL` absent, invitation commands remain unavailable and the existing legacy lifecycle path remains active; once Fleet is configured, Fleet transport failure must prevent an uncoordinated lifecycle change.
 
 ## 5. Invitation request sequence
 
@@ -469,62 +513,66 @@ Suggested nonsecret terminal error codes are `INVITATION_REDEEMED`, `INVITATION_
 
 For review, use a 10-minute invitation TTL (matching the current Core bootstrap-token window) and retain the nonsecret idempotency tombstone for 24 hours after terminal state. Both values are proposals, not accepted requirements; shorter TTL reduces the secret exposure window, while longer replay retention costs little and prevents accidental second creation after an ordinary client retry.
 
-Core operation progress is keyed by the stable operation ID and stores only `PENDING_FLEET`, `INVITATION_ISSUED`, `SYNC_PENDING`, `GATE_PENDING`, `PENDING_GATE_RECOVERY`, `REVOKE_PENDING_FLEET`, `REVOKE_PENDING_CORE`, or `COMPLETE`, plus safe error/target metadata. The user/UI retries the same operation endpoint and key; no generic retry API is required for the PoC. When Core cannot persist a stage transition, the next retry reconciles by querying Fleet and comparing the Core binding/Node state. The API returns the last known stage and operation ID; if Fleet cannot be queried, report `UNKNOWN`/unavailable rather than infer success. This journal is Core coordination state, not duplicated Fleet lifecycle state.
+The invitation journal is keyed by its stable operation ID and stores invitation progress (`REQUEST_PENDING`, `INVITATION_ISSUED`, `SYNC_PENDING`, terminal status) plus safe error/target metadata. The proposed Asset lifecycle journal is separate and stores `GATE_CLOSE_PENDING`, `CORE_CHANGE_PENDING`, `GATE_FINALIZE_PENDING`, `REOPEN_PENDING`, or `COMPLETE`. Fleet revoke state belongs in a future revoke operation flow, not in either journal until that use case exists. A retry uses the same operation ID; if Fleet cannot be queried, Core reports pending/unknown rather than inferring success. These records coordinate Core recovery and are not duplicated Fleet lifecycle state.
 
 ### Lifecycle and unlink coordination sequences
 
-The first sequence shows the close-gate baseline for races between Node lifecycle changes and invitation exchange. The second shows post-cutover revoke/unlink behavior. Existing legacy Core-only endpoints do not use these sequences.
+The first sequence is the proposed atomic gate protocol for Node unassignment/retirement. The second sequence is a separate post-cutover revoke/unlink proposal. Existing legacy Core-only endpoints do not use these sequences.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant Asset as Core Asset lifecycle use case
-    participant AM as Agent Management public contract
-    participant Gate as Node lifecycle use case
+    participant AM as Agent Management lifecycle contract
+    participant Gate as Fleet gate use case
     participant Fleet as Fleet Manager
     participant DB as Core Asset and Binding transaction
     participant Ops as Core operation journal
 
-    Asset->>Ops: Persist one pending Node/target operation
-    Ops-->>Asset: operation_id; conflicting target returns IN_PROGRESS
-    Asset->>AM: prepareLifecycleChange(node_id, operation_id)
-    AM->>Gate: closeNodeEnrollment(node_id, operation_id)
-    Gate->>Fleet: Close gate and cancel invitations (operation_id)
-    Note over Gate,Fleet: Another active owner gets IN_PROGRESS; owner/version cannot be overwritten
+    Asset->>Ops: Begin using stable Idempotency-Key + actor/Node/action fingerprint
+    Ops-->>Asset: operation_id; changed target conflicts; another active Node op is IN_PROGRESS
+    Asset->>AM: closeEnrollmentGate(node_id, operation_id, action)
+    AM->>Gate: close(node_id, operation_id, action)
+    Gate->>Fleet: Atomically close Node gate against invite create and exchange
+    Note over Gate,Fleet: Same operation retry returns same owner/version; other owner cannot replace an in-progress gate
 
-    alt Invitation exchange wins first
-        Fleet-->>Gate: EXCHANGED + installation reference + gate_version
-    else Gate closes first
-        Fleet-->>Gate: CLOSED + gate_version; later create/exchange rejected
+    alt Exchange committed before close
+        Fleet-->>Gate: CLOSED + owner/version + existing binding reference
+    else No exchange committed
+        Fleet-->>Gate: CLOSED + owner/version; later invite/exchange rejected
     end
+    Gate-->>AM: Gate token + optional existing binding
+    opt Existing Fleet binding returned
+        AM->>DB: Upsert Core binding projection + audit from stable Fleet IDs
+        DB-->>AM: Projection confirmed
+    end
+    AM-->>Asset: Gate token + binding result
 
-    Gate->>Fleet: Check active Fleet binding when retirement requested
-    Fleet-->>Gate: Active binding or none
-    Gate-->>AM: Gate version + prior state + active/exchanged status
-    AM-->>Asset: Lifecycle preparation result
-
-    alt Retirement and local or Fleet binding exists
+    alt Retirement and active binding exists
         Asset->>DB: Keep Node lifecycle unchanged
-        DB-->>Asset: Reject retirement
-        Asset->>AM: Restore prior gate state (operation_id + gate_version)
-        AM->>Gate: Complete/restore own gate operation
-        Gate->>Fleet: Compare owner + version; restore prior state
-        Fleet-->>Gate: Restored; stale owner/version is rejected
-
-    else Unassign or retirement can proceed
-        Asset->>DB: Commit local lifecycle change
+        Asset->>AM: complete(gate token, ABORT)
+        AM->>Gate: Reopen only with matching owner/version
+        Gate->>Fleet: Compare-and-set OPEN
+        Fleet-->>Gate: OPEN or stale-owner conflict
+        Asset-->>Ops: Complete or retain REOPEN_PENDING
+    else Unassignment with active binding, or unassignment/retirement without binding
+        Note over Asset,DB: Unassignment leaves any existing binding intact
+        Asset->>DB: Commit Core lifecycle change and audit
         DB-->>Asset: Committed
-        Asset->>AM: Finalize gate CLOSED (operation_id + gate_version)
-        AM->>Gate: Complete own gate operation
-        Gate->>Fleet: Compare owner + version; set CLOSED and release owner
-        Fleet-->>Gate: Finalized
-        Note over Fleet: Eligible reassignment later opens gate after Core placement commits
-    else Core mutation fails after gate closure
-        Asset->>Ops: Retain operation as PENDING_GATE_RECOVERY
-        Asset-->>Asset: Retry same stored operation; inspect actual Node state
-        Asset->>AM: Finalize desired/prior gate state with same owner + version
-        Note over Asset,Fleet: Crash leaves gate closed; competing operation cannot take ownership until recovery/abandonment is explicit
+        Asset->>AM: complete(gate token, COMMIT)
+        AM->>Gate: Keep CLOSED and release this operation's lease
+        Gate->>Fleet: Compare-and-set owner/version; state remains CLOSED
+        Fleet-->>Gate: Finalized or safe stale-owner conflict
+        Asset-->>Ops: COMPLETE
+    else Core change fails before commit
+        Asset->>AM: complete(gate token, ABORT)
+        AM->>Gate: Reopen only with matching owner/version
+        Gate->>Fleet: Compare-and-set OPEN
+        Fleet-->>Gate: OPEN or outcome unknown
+        Asset-->>Ops: COMPLETE or REOPEN_PENDING
     end
+
+    Note over Asset,Fleet: On timeout/crash keep gate closed; retry same operation ID and inspect Core lifecycle state before COMMIT/ABORT
 
 ```
 
@@ -582,16 +630,71 @@ No background reconciler is proposed for the initial slice. Core exposes pending
 
 ## 6. Node retirement, unassignment, and in-flight requests
 
-Current behavior serializes Core enrollment with Asset retirement in a Core transaction. Fleet enrollment cannot join that transaction. The practical baseline is a **per-Node, operation-owned Fleet gate** coordinated by a small public Agent Management application contract before Core unassignment/retirement:
+### Smallest practical gate boundary
 
-1. Core records one pending lifecycle operation per Node (operation ID, target change, prior gate state) in its operation journal. A unique/conditional write prevents a second different lifecycle operation from starting; it returns `NODE_LIFECYCLE_CHANGE_IN_PROGRESS`. A retry of the same target resumes the stored operation ID.
-2. Fleet closes the Node gate, cancels pending invitations, and returns a monotonic `gate_version`. If a registration exchange wins the close race, Fleet returns the resulting installation reference. A different operation cannot overwrite an active gate owner; repeating the same operation ID returns the same version.
-3. Core checks active local and Fleet bindings for retirement. If bound, it makes no lifecycle change and completes the Fleet gate back to the recorded prior state. Unassignment may preserve an active binding (shared BR-11), but the gate remains closed after unassignment.
-4. After the Core lifecycle transaction commits, Core completes the Fleet gate with the desired state (`CLOSED` for unassigned/retired, `OPEN` after eligible placement). Completion requires the owning operation ID and exact gate version. Only that owner/version may restore or finalize the gate; a stale operation cannot reopen a gate acquired by a newer operation.
+The checked-in `FleetInstallationPort` and HTTP adapter already expose close/complete methods, but no Core lifecycle use case calls them. The Core retirement use case currently does a point-in-time Fleet binding query before its local transaction; `AssetPlacementManagementUseCases.unmap()` does not coordinate with Fleet. Those checks do not prevent an invitation or exchange from winning immediately after the query.
 
-The Core journal makes crash recovery explicit. If Core crashes after closing Fleet's gate, the gate stays closed and the operation is `PENDING_GATE_RECOVERY`. A retry for the same Node/target resumes the same operation, reads the actual Core Node state, and either completes the intended gate state or restores the prior state if the Core mutation did not commit. If Core crashes after local commit but before gate completion, the retry sees the committed target and finalizes it. Until retry/operator recovery, invitation creation remains blocked (safe availability failure). No background worker is required for the PoC; production operations must expose pending gate operations and a retry/recovery action.
+Three approaches were considered. A live binding query alone is already implemented for retirement but leaves the race window open and does not protect unassignment. A time-based gate lease is smaller on paper, but an expired lease could reopen enrollment while Core is still in a lifecycle transaction or has crashed before recording its result. The recommended baseline is an operation-owned close/complete API with a monotonic version plus a small durable Core lifecycle journal: it requires a little recovery state, but retries and stale completions are deterministic and safe.
 
-This avoids holding a Core transaction across HTTP and makes exchange/create/lifecycle races deterministic, at the cost of a small Core operation journal and Fleet per-Node gate/version. Fleet rejects new invitations while closed. This is a proposed C01 cross-system decision; C01 E03 currently leaves it open.
+Propose one public Core lifecycle contract and one narrow Fleet port, with only two commands:
+
+```ts
+type LifecycleAction = 'UNASSIGN' | 'RETIRE';
+type GateOutcome = 'COMMIT' | 'ABORT';
+
+interface FleetNodeEnrollmentGatePort {
+  close(input: {
+    nodeId: string;
+    operationId: string;
+    action: LifecycleAction;
+    actor: FleetActorContext;
+  }): Promise<{
+    gate: {
+      nodeId: string;
+      operationId: string;
+      version: number;
+      previousState: 'OPEN' | 'CLOSED';
+    };
+    activeBinding?: {
+      bindingId: string;
+      invitationId: string;
+      installationId: string;
+      nodeId: string;
+    };
+  }>;
+  complete(input: {
+    gate: {
+      nodeId: string;
+      operationId: string;
+      version: number;
+      previousState: 'OPEN' | 'CLOSED';
+    };
+    outcome: GateOutcome;
+    actor: FleetActorContext;
+  }): Promise<void>;
+}
+```
+
+`close` is idempotent by `(nodeId, operationId)`. In Fleet, it atomically serializes with invitation creation and enrollment exchange for that Node, closes the gate, and returns any active binding that committed first. If exchange wins, the gate still closes and the binding is returned; Core applies its normal rule. Retirement fails while any local or returned Fleet binding is active. Unassignment may proceed and must leave the existing binding association intact. The proposed close operation also cancels outstanding pending invitations; this behavior requires Fleet agreement and the Core fake may test it, but the real Fleet is not known to support it.
+
+Proposed REST shape, pending Fleet approval: `POST /internal/v1/nodes/{node_id}/enrollment-gate/close` with `{ operation_id, action, cancel_pending_invitations: true }` returns `{ state: "CLOSED", version, previous_state, active_binding?, cancelled_invitation_ids? }`; `PUT /internal/v1/nodes/{node_id}/enrollment-gate/complete` with `{ operation_id, version, state }` finalizes to `CLOSED` on commit or restores `previous_state` on abort. A different unfinished owner gets `409 NODE_LIFECYCLE_CHANGE_IN_PROGRESS`. A completion with a stale version/owner gets a stable conflict and must not mutate gate state. Invitation cancellation, paths, and response codes are proposals, not additions to C01 and not evidence of live Fleet support.
+
+`complete(COMMIT)` leaves the gate closed and releases the in-progress lifecycle owner. `complete(ABORT)` restores the gate's `previous_state` returned by `close`; it never unconditionally opens the gate. Both require the exact operation ID and version returned by `close`. A repeated identical completion is successful; a different owner/version is a stale-operation conflict and cannot change gate state. A new operation may take a committed closed gate at a higher version; it may not take over an unresolved in-progress owner. This makes stale reopen attempts harmless while allowing later authorized lifecycle actions on an already-closed Node.
+
+### Core lifecycle wrapper and recovery
+
+Asset & Topology owns lifecycle mutations, so it owns the one-row-per-Node lifecycle journal and orchestration. Add a public `AgentNodeLifecycleCoordination` contract to Agent Management for the Fleet close/complete calls; the Asset module does not import Fleet adapters. Repository search found no first-party dashboard/client implementation in this repository, only the current route contracts and backend tests. Preserve compatibility by accepting an optional `Idempotency-Key` now: keyed retries bind actor, Node, action and normalized payload; requests without a key get a Core-generated operation ID and reuse a matching pending operation for that Node/action/actor. Do not make the header mandatory until downstream clients have been inventoried and moved to a documented contract version. Return pending operation ID and retry/status instructions on unresolved `503`; publish minimal admin-only pending-operation list and retry routes for clients that could not receive that response. Persist the operation ID and stage before calling Fleet; a different active operation on that Node returns `409 NODE_LIFECYCLE_CHANGE_IN_PROGRESS`.
+
+1. `RetireAssetUseCase` and placement `unmap()` begin/resume the same durable lifecycle operation and close the Fleet gate before the Core transaction. Existing Core enrollment continues to use its Mongo transaction/eligibility serialization until the explicit legacy cutover. Unmap must write the same Asset document revision used by legacy enrollment serialization, so either the unmap or enrollment transaction wins and the loser retries against current placement state; Fleet's gate does not protect a legacy request that bypasses Fleet.
+2. On `CLOSED` with a returned active binding, Agent Management first upserts/confirms its Core binding projection and emits the existing secret-free binding-sync audit using the stable IDs. If that local write fails, Asset does not change lifecycle and the operation aborts/retries safely. Once confirmed, retirement rejects and aborts the gate; unassignment may proceed and leaves the active association intact. If no binding exists, either action proceeds subject to its existing Core rules. The projection does not alter Fleet authority.
+3. If the Core transaction rejects the action, durably record `ABORT_PENDING_GATE_RESTORE`; send `ABORT` using the exact gate token and restore `previousState`. If Core commits, write the Node mutation, its Audit Fact, and `COMMIT_PENDING_GATE_FINALIZE` in the same Mongo transaction. A transaction that changes no Node state (idempotent retire) still records its outcome atomically in the operation row.
+4. Record `GATE_CLOSE_PENDING`, `GATE_CLOSED`, `CORE_CHANGE_PENDING`, `COMMIT_PENDING_GATE_FINALIZE`, `ABORT_PENDING_GATE_RESTORE`, or `COMPLETE` in the Asset lifecycle journal. Do not hold a Core transaction open during HTTP.
+5. On timeout or process crash, do not guess the remote result or generate a new operation ID. Recovery uses the durable operation stage: the Core transaction atomically writes a committed outcome with the Node change and audit, so only `COMMIT_PENDING_GATE_FINALIZE` means commit. A pending Core change without that outcome is aborted to the saved prior gate state. Retry `close` or `complete` with the same operation ID/version. Keep the Fleet gate closed while outcome/finalization is unknown; never infer success from current Node state alone.
+6. Provide `GET /api/v1/asset-topology/node-lifecycle-operations?status=pending` and `POST /api/v1/asset-topology/node-lifecycle-operations/{operation_id}/retry`, restricted to Asset Admins. A retrying operator is IAM-verified and recorded as recovery metadata; the original verified actor remains the actor for the already-authorized lifecycle operation and Fleet idempotency context. Do not add a background worker in this slice. The runbook lists pending operation ID, Node/action, stage, age and safe error code; the operator retries the same operation ID and escalates a stale Fleet owner/version rather than forcing the gate open.
+
+This first Core slice can be implemented and tested with a fake Fleet that enforces the operation/version rules, including the proposed pending-invitation cancellation result. It cannot prove Fleet's real atomicity or cancellation support. Fleet must serialize gate close against both create and exchange in its own transaction/lock, retain gate owner/version outcomes durably, restore the prior state on abort, and agree whether close cancels pending invitations. The exact endpoint, response, different-owner error, binding identifiers, and recovery policy need Fleet/Agent approval before shared-contract changes or production wiring. The shared-contract submodule is unavailable in this worktree, so the prior C01/C04 citations were not independently rechecked for this update.
+
+**Open lifecycle policy:** successful unassignment/retirement leaves the gate closed as requested. A later placement/reactivation that makes the Node eligible needs a separate explicit, authorized open-gate lifecycle operation. Do not reopen as a side effect of unassignment or by a background timeout. Pending invitations remain non-redeemable while closed; whether Fleet should cancel them when retirement becomes final is a Fleet/Agent contract decision.
 
 For user-facing unlink/revoke after cutover, one command means **disable Fleet credential and unlink the Core business association**. Preserve the current route shape; derive a stable Fleet operation ID from the Core binding ID plus the `revoke` action, so clients need no new body/header. Persist `REVOKE_PENDING_FLEET` before the call. The simple ordering is Fleet revoke first (idempotent), then Core transaction marks the local binding/credential revoked and appends the Audit Fact. If Fleet is unavailable or returns an unresolved result, Core leaves the association active and returns a safe `503` with the operation ID/status. If Fleet revokes but Core's local transaction fails, persist/report `REVOKE_PENDING_CORE`; the Core binding remains visibly active but unusable at Fleet. A retry of the same revoke route repeats the same Fleet operation and finishes the local unlink/audit. Surface this as a retryable coordination failure, not as successful unlink. Once locally revoked, repeated calls retain the existing idempotent `204` behavior. Never implement unlink as a Core-only record change after cutover.
 
@@ -701,7 +804,8 @@ The labels **FM-02** and **FM-03** follow the requested work breakdown, not a ne
 ### Core tests
 
 - **FM-02 adapter/transport:** HTTPS config validation; mTLS identity; actor context derives from authenticated principal; unauthenticated caller cannot use the service; request and operation IDs forwarded; 429 honors `Retry-After` then stops at budget; same key/body on every retry; no retry for permanent 4xx; timeout-after-send returns unknown; 5xx retry is bounded; invalid response and redirects fail safely; logs/traces/errors contain no secret; Fleet outage differs from Core persistence failure.
-- **FM-03 use case/API:** unauthenticated/inactive human and missing `agent:manage` are rejected before Fleet; absent/inactive/unplaced Node makes no Fleet call; same key/body replays secret only while pending; changed actor/body conflicts; redeemed/cancelled/expired replay returns no secret; Fleet redeemed status is checked against Core invitation mapping; explicit sync returns pending then creates one binding/audit; Core DB failure exposes `SYNC_PENDING` and same-ID retry completes; revoked/tombstoned binding is not reactivated by stale status; Fleet unavailable makes retirement fail closed; retire checks remote active binding even when local sync is pending; unassign preserves an existing binding; two lifecycle requests cannot overwrite gate owner/version; stale open is rejected; crash retry resumes gate from actual Core Node state; revoke outage leaves Core link active; remote revoke + local DB failure shows `REVOKE_PENDING_CORE` and retry completes; repeated completed revoke remains 204.
+- **FM-03 use case/API:** unauthenticated/inactive human and missing `agent:manage` are rejected before Fleet; absent/inactive/unplaced Node makes no Fleet call; same key/body replays secret only while pending; changed actor/body conflicts; redeemed/cancelled/expired replay returns no secret; Fleet redeemed status is checked against Core invitation mapping; explicit sync returns pending then creates one binding/audit; Core DB failure exposes `SYNC_PENDING` and same-ID retry completes; revoked/tombstoned binding is not reactivated by stale status; Fleet unavailable makes retirement fail closed; retire checks remote active binding even when local sync is pending; unassign preserves an existing binding.
+- **Node gate slice:** Fleet fake serializes gate close with invitation create and exchange; exchange-first returns the active binding and still closes the gate; close-first blocks both operations; same owner retry returns same version; another owner receives in-progress; stale version cannot reopen; Core writes `Idempotency-Key` before close; timeout/crash after close, Core commit, and gate finalization resumes by the same operation ID; failed Core action reopens only with matching owner/version; failed/unknown reopen remains closed and pending; retirement with a Fleet binding rejects, unassignment with a Fleet binding preserves the association and leaves gate closed; returned binding projection/audit is idempotent; legacy Core enrollment regression remains green. Update `api/v1/asset-topology.yaml` for the lifecycle idempotency header before implementing these public route changes.
 - **CI integration:** run the in-memory contract-shaped fake Fleet flow and explicit M1 enrollment/retirement regressions on every PR. The fake covers invitation → redeemed → one binding/audit. Focused adapter and retirement tests cover transport/retirement failure behavior. Gate-owner races, Fleet revoke and HTTP lost-reply interoperability remain future work. A separately credentialed staging/Core↔Fleet smoke test gates rollout and is the only test that can establish actual interoperability.
 - **Later migration gate:** preserve legacy Core token behavior before cutover; preserve installation UUID; do not reuse credentials across audiences; verify Fleet revocation and rollback leave one authority; label historic Core registry records; test Windows/Linux Agent migration separately in the owning Agent/Fleet repos.
 

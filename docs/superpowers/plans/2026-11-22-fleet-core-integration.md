@@ -18,6 +18,13 @@
 - Never persist or log Fleet invitation/installation secrets in Core.
 - Fail closed when Fleet state cannot be checked for a destructive or eligibility decision.
 - Do not add a dependency.
+- Keep `AgentManagementModule` as the Core feature module; introduce a separate Fleet adapter module only if it removes existing duplicated client wiring.
+- Keep public `Idempotency-Key` optional during transition. Existing clients were searched and no first-party caller was found; keyed requests bind actor + action + Node, while missing-key retries resume the matching pending lifecycle operation. Successful legacy responses remain unchanged.
+- Lifecycle operation stage/outcome, Node mutation, and Audit Fact are committed in one Core unit of work. Recovery reads the durable operation record only; an unknown outcome keeps the Fleet gate closed.
+- On abort, restore the Fleet gate's recorded previous state using the same operation ID and gate version. Never force OPEN. Fleet must enforce owner/version checks.
+- Legacy enrollment, retirement, and unassignment must serialize on the same Asset record throughout transition. Preserve all legacy routes, credentials, records, and migrations.
+- Pending invitation cancellation on gate close is a proposal requiring Fleet agreement. Do not treat it as implemented Fleet behavior.
+- Keep Fleet-aware revoke explicit as future work where outside this slice.
 - Cross-system REST schemas remain provisional until Core, Fleet, and Agent owners approve C01/C04.
 
 ## Review Focus
@@ -28,6 +35,8 @@
 - A redeemed Fleet invitation is not treated as a Core binding until an explicit successful synchronization.
 - Core/Fleet partial failure remains visible and can be retried by operation ID; audit contains no secret.
 - Existing M1 legacy enrollment and retirement behavior stays green.
+- Gate retry cannot complete or reopen another operation's gate; unassignment preserves existing Core binding; retirement fails closed on an active binding.
+- Minimal admin operation listing/retry reuses the stored operation ID and records safe error/stage information only.
 
 ---
 
@@ -79,3 +88,18 @@
 
 - Do not claim production Core–Fleet–Supervisor interoperability without an authenticated staging run against Fleet and the pinned official Supervisor v0.160.0. The Core repository does not own that binary/runtime.
 - Before production: approve C01/C04 wire/auth/idempotency/gate/revoke/sync semantics, add operational pending-operation visibility and retry runbook, and separately design legacy installation migration/cutover and rollback.
+
+### Task 5: Core lifecycle gate and Agent Management cleanup
+
+**Files:** Keep orchestration in `AgentManagementModule` behind a public Asset lifecycle coordination contract; persist lifecycle operation journal and transaction-bound Asset coordination in Asset & Topology; add Fleet gate methods to the existing narrow installation port/adapter; add optional idempotency header and pending-operation admin routes to the OpenAPI contract. Preserve all existing enrollment credentials and routes.
+
+**Behavior:** Before retire/unmap, persist an operation, close Fleet gate by operation ID, and apply Node change. In the Core transaction, atomically write operation outcome/stage with the Node mutation and Audit Fact. Then finalize Fleet gate: COMMIT stays CLOSED; ABORT restores exact previous state. Unknown outcomes stay closed and visible. Recovery and operator retry use the same operation ID and version. A common Asset-record revision write makes legacy enrollment serialize with both retire and unmap.
+
+- [ ] Add unit/adapter/fake-Fleet tests first: owner/version conflict, prior CLOSED restoration, unknown outcome, exchange-first binding, retry/replay, no key compatibility, retirement/unassignment policy, audit+journal atomicity, and secret-safe operator visibility.
+- [ ] Add Asset concurrency regressions proving legacy enrollment serializes with unmap and retirement.
+- [ ] Implement durable journal, orchestration port, transaction coordination, and minimal admin list/retry endpoints; no worker.
+- [ ] Review Agent Management consumers; remove only unused scaffolding proven independent, without deleting legacy routes, data, credentials, or migrations.
+- [ ] Update OpenAPI and CI gates; run focused and M1 tests, CI ESLint, typecheck, and build.
+- [ ] Commit docs/plan, lifecycle behavior, and focused cleanup/CI changes in separate Conventional Commits.
+
+**Unverified prerequisites:** Real Fleet atomic gate close/exchange exclusion, owner/version CAS, previous-state restore, and invitation cancellation are not available in this Core worktree. Wire agreement and authenticated Core–Fleet–Agent/Supervisor testing remain required; fake-Fleet tests prove Core logic only.
