@@ -12,7 +12,10 @@ import type {
   AssetTopologyAssetQueries,
   AssetId,
 } from '@modules/asset-topology/contracts';
-import { AGENT_BINDING_QUERIES_PORT } from './contracts';
+import {
+  AGENT_BINDING_QUERIES_PORT,
+  AgentFleetBindingStatusUnavailableError,
+} from './contracts';
 import {
   BOOTSTRAP_TOKEN_STORE,
   NODE_ELIGIBILITY_PORT,
@@ -49,12 +52,25 @@ import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-age
 import { FLEET_INVITATION_PORT } from './application/fleet/ports/fleet-invitation.port';
 import { FLEET_INSTALLATION_PORT } from './application/fleet/ports/fleet-installation.port';
 import { FleetHttpClient } from './infrastructure/fleet/fleet-http-client';
+import { FleetUnavailableError } from './application/fleet/errors/fleet-errors';
 import { FleetInvitationHttpAdapter } from './infrastructure/fleet/fleet-invitation.http-adapter';
 import { FleetInstallationHttpAdapter } from './infrastructure/fleet/fleet-installation.http-adapter';
 import {
   DisabledFleetInstallationPort,
   DisabledFleetInvitationPort,
 } from './infrastructure/fleet/disabled-fleet-ports';
+import { FleetInvitationController } from './presentation/fleet-enrollment/fleet-invitation.controller';
+import { MongoFleetEnrollmentOperationStore } from './infrastructure/mongodb/mongo-fleet-enrollment-operation.store';
+import { FLEET_ENROLLMENT_OPERATION_PORT } from './application/fleet/ports/fleet-enrollment-operation.port';
+import type { FleetEnrollmentOperationPort } from './application/fleet/ports/fleet-enrollment-operation.port';
+import type { FleetInvitationPort } from './application/fleet/ports/fleet-invitation.port';
+import type { FleetInstallationPort } from './application/fleet/ports/fleet-installation.port';
+import { RequestFleetInvitationUseCase } from './application/fleet/use-cases/request-fleet-invitation.use-case';
+import { FLEET_BINDING_PROJECTION_PORT } from './application/fleet/ports/fleet-binding-projection.port';
+import type { FleetBindingProjectionPort } from './application/fleet/ports/fleet-binding-projection.port';
+import { MongoFleetBindingProjectionStore } from './infrastructure/mongodb/mongo-fleet-binding-projection.store';
+import { FleetEnrollmentSyncController } from './presentation/fleet-enrollment/fleet-enrollment-sync.controller';
+import { SynchronizeFleetEnrollmentUseCase } from './application/fleet/use-cases/synchronize-fleet-enrollment.use-case';
 
 @Module({
   imports: [forwardRef(() => AssetTopologyModule)],
@@ -63,6 +79,8 @@ import {
     EnrollmentController,
     AgentBindingRevocationController,
     AgentRegistryController,
+    FleetInvitationController,
+    FleetEnrollmentSyncController,
   ],
   providers: [
     {
@@ -123,6 +141,16 @@ import {
     MongoEnrollmentStore,
     MongoAgentAccessStore,
     MongoAgentRegistryQueryStore,
+    MongoFleetEnrollmentOperationStore,
+    MongoFleetBindingProjectionStore,
+    {
+      provide: FLEET_BINDING_PROJECTION_PORT,
+      useExisting: MongoFleetBindingProjectionStore,
+    },
+    {
+      provide: FLEET_ENROLLMENT_OPERATION_PORT,
+      useExisting: MongoFleetEnrollmentOperationStore,
+    },
     {
       provide: AGENT_REGISTRY_QUERY_PORT,
       useExisting: MongoAgentRegistryQueryStore,
@@ -167,11 +195,40 @@ import {
     },
     {
       provide: AGENT_BINDING_QUERIES_PORT,
-      useFactory: (persistence: EnrollmentPersistencePort) => ({
-        hasActiveBindingForNode: (nodeId: string, context: UnitOfWorkContext) =>
-          persistence.hasActiveBinding(nodeId, context),
+      useFactory: (
+        persistence: EnrollmentPersistencePort,
+        fleetBindings: FleetBindingProjectionPort,
+        fleetInstallations: FleetInstallationPort,
+      ) => ({
+        hasActiveBindingForNode: async (
+          nodeId: string,
+          context: UnitOfWorkContext,
+        ) =>
+          (await persistence.hasActiveBinding(nodeId, context)) ||
+          (await fleetBindings.hasActiveForNode(nodeId, context)),
+        hasActiveFleetBindingForNode: async (
+          nodeId: string,
+          actor: { readonly actorId: string; readonly requestId: string },
+        ) => {
+          try {
+            const installation = await fleetInstallations.findActiveByNode({
+              nodeId,
+              actor,
+            });
+            return installation?.status === 'ACTIVE';
+          } catch (error) {
+            if (error instanceof FleetUnavailableError) {
+              throw new AgentFleetBindingStatusUnavailableError();
+            }
+            throw error;
+          }
+        },
       }),
-      inject: [ENROLLMENT_PERSISTENCE_PORT],
+      inject: [
+        ENROLLMENT_PERSISTENCE_PORT,
+        FLEET_BINDING_PROJECTION_PORT,
+        FLEET_INSTALLATION_PORT,
+      ],
     },
     {
       provide: NODE_ELIGIBILITY_PORT,
@@ -234,6 +291,66 @@ import {
         OUTBOX_WRITER_PORT,
         ConfigService,
         ENROLLMENT_RECOVERY_CIPHER,
+      ],
+    },
+    {
+      provide: RequestFleetInvitationUseCase,
+      useFactory: (
+        nodes: NodeEligibilityPort,
+        persistence: EnrollmentPersistencePort,
+        fleetInstallations: FleetInstallationPort,
+        fleetInvitations: FleetInvitationPort,
+        operations: FleetEnrollmentOperationPort,
+        unitOfWork: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[2],
+        outbox: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[3],
+      ) =>
+        new RequestFleetInvitationUseCase(
+          nodes,
+          persistence,
+          fleetInstallations,
+          fleetInvitations,
+          operations,
+          unitOfWork,
+          outbox,
+        ),
+      inject: [
+        NODE_ELIGIBILITY_PORT,
+        ENROLLMENT_PERSISTENCE_PORT,
+        FLEET_INSTALLATION_PORT,
+        FLEET_INVITATION_PORT,
+        FLEET_ENROLLMENT_OPERATION_PORT,
+        UNIT_OF_WORK_PORT,
+        OUTBOX_WRITER_PORT,
+      ],
+    },
+    {
+      provide: SynchronizeFleetEnrollmentUseCase,
+      useFactory: (
+        operations: FleetEnrollmentOperationPort,
+        invitations: FleetInvitationPort,
+        installations: FleetInstallationPort,
+        nodes: NodeEligibilityPort,
+        bindings: FleetBindingProjectionPort,
+        unitOfWork: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[2],
+        outbox: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[3],
+      ) =>
+        new SynchronizeFleetEnrollmentUseCase(
+          operations,
+          invitations,
+          installations,
+          nodes,
+          bindings,
+          unitOfWork,
+          outbox,
+        ),
+      inject: [
+        FLEET_ENROLLMENT_OPERATION_PORT,
+        FLEET_INVITATION_PORT,
+        FLEET_INSTALLATION_PORT,
+        NODE_ELIGIBILITY_PORT,
+        FLEET_BINDING_PROJECTION_PORT,
+        UNIT_OF_WORK_PORT,
+        OUTBOX_WRITER_PORT,
       ],
     },
   ],

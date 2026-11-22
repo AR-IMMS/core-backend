@@ -4,7 +4,7 @@ export interface FleetActorContext {
 }
 
 export type FleetInvitationState =
-  'PENDING' | 'REDEEMED' | 'CANCELLED' | 'EXPIRED';
+  'PENDING' | 'REDEEMED' | 'CANCELLED' | 'EXPIRED' | 'UNKNOWN';
 
 export interface FleetInvitationView {
   readonly invitationId: string;

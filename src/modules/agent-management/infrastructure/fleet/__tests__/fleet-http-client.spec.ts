@@ -1,5 +1,7 @@
 import {
   FleetHttpClient,
+  createFleetHttpsAgent,
+  createFleetRequestHeaders,
   type FleetHttpConfig,
   type FleetHttpExecutor,
   type FleetHttpRequest,
@@ -38,6 +40,25 @@ function response(
 }
 
 describe('FleetHttpClient', () => {
+  test('uses mTLS service identity and trusted actor/request/operation headers', () => {
+    const agent = createFleetHttpsAgent(config);
+    expect(agent.options).toMatchObject({
+      cert: config.clientCertificate,
+      key: config.clientKey,
+      rejectUnauthorized: true,
+    });
+    agent.destroy();
+    expect(
+      createFleetRequestHeaders(request, JSON.stringify(request.body)),
+    ).toMatchObject({
+      'x-arimms-actor-id': 'user-1',
+      'x-arimms-request-id': 'request-1',
+      'x-arimms-operation-id': 'operation-1',
+      'idempotency-key': 'key-1',
+      'content-type': 'application/json',
+    });
+  });
+
   test('preserves operation and actor context across a 429 retry', async () => {
     const execute = jest
       .fn<Promise<FleetHttpResponse>, Parameters<FleetHttpExecutor>>()
@@ -139,5 +160,21 @@ describe('FleetHttpClient', () => {
     await expect(client.request(request)).rejects.toBeInstanceOf(
       FleetProtocolError,
     );
+  });
+
+  test('rejects oversized responses without retrying them as transport failures', async () => {
+    const execute = jest
+      .fn<Promise<FleetHttpResponse>, Parameters<FleetHttpExecutor>>()
+      .mockResolvedValue(
+        response(200, 'x'.repeat(config.maxResponseBytes + 1)),
+      );
+    const client = new FleetHttpClient(config, execute, () =>
+      Promise.resolve(),
+    );
+
+    await expect(client.request(request)).rejects.toBeInstanceOf(
+      FleetProtocolError,
+    );
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });

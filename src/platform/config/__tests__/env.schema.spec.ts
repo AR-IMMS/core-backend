@@ -63,6 +63,27 @@ describe('validated IAM runtime configuration', () => {
     ).toBe(true);
   });
 
+  const userInfoUrl = new URL('https://fleet.example.test');
+  userInfoUrl.username = 'user';
+  userInfoUrl.password = 'password';
+  const tokenUrl = new URL('https://fleet.example.test/');
+  tokenUrl.searchParams.set('token', 'secret');
+
+  test.each([
+    userInfoUrl.toString(),
+    tokenUrl.toString(),
+    'https://fleet.example.test/#fragment',
+  ])('rejects unsafe Fleet base URL: %s', (url) => {
+    expect(
+      envSchema.safeParse({
+        ...validAgentConfiguration,
+        FLEET_MANAGER_BASE_URL: url,
+        FLEET_CLIENT_CERTIFICATE: 'cert',
+        FLEET_CLIENT_KEY: 'key',
+      }).success,
+    ).toBe(false);
+  });
+
   test('leaves the optional Fleet integration disabled without Fleet settings', () => {
     expect(envSchema.safeParse(validAgentConfiguration).success).toBe(true);
   });

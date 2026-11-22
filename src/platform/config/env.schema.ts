@@ -28,10 +28,16 @@ export const envSchema = z
       .string()
       .trim()
       .url()
-      .refine(
-        (value) => new URL(value).protocol === 'https:',
-        'FLEET_MANAGER_BASE_URL must use HTTPS',
-      )
+      .refine((value) => {
+        const url = new URL(value);
+        return (
+          url.protocol === 'https:' &&
+          !url.username &&
+          !url.password &&
+          !url.search &&
+          !url.hash
+        );
+      }, 'FLEET_MANAGER_BASE_URL must use HTTPS without credentials, query, or fragment')
       .optional(),
     FLEET_CLIENT_CERTIFICATE: z.string().min(1).optional(),
     FLEET_CLIENT_KEY: z.string().min(1).optional(),

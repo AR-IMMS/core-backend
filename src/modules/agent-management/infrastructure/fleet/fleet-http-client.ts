@@ -54,16 +54,37 @@ export class FleetHttpClient {
       ensureBasePath(this.config.baseUrl),
     );
     const maxAttempts = this.config.maxRetries + 1;
+    const deadline = Date.now() + this.config.timeoutMs;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        throw new FleetUnavailableError(isMutation(request));
+      }
       let response: FleetHttpResponse;
       try {
-        response = await this.executeHttps(url, request, this.config);
-      } catch {
+        response = await this.executeHttps(url, request, {
+          ...this.config,
+          timeoutMs: remainingMs,
+        });
+      } catch (error) {
+        if (error instanceof FleetResponseTooLargeError) {
+          throw new FleetProtocolError();
+        }
         if (attempt + 1 < maxAttempts) {
-          await this.delay(backoff(attempt));
+          const waitMs = backoff(attempt);
+          if (waitMs >= deadline - Date.now()) {
+            throw new FleetUnavailableError(isMutation(request));
+          }
+          await this.delay(waitMs);
           continue;
         }
         throw new FleetUnavailableError(isMutation(request));
+      }
+
+      if (
+        Buffer.byteLength(response.body, 'utf8') > this.config.maxResponseBytes
+      ) {
+        throw new FleetProtocolError();
       }
 
       if (response.status === 429 || response.status >= 500) {
@@ -73,14 +94,21 @@ export class FleetHttpClient {
               ? retryAfterMilliseconds(response.headers['retry-after'])
               : null;
           if (wait !== null) {
-            if (wait > this.config.maxRetryDelayMs) {
+            if (
+              wait > this.config.maxRetryDelayMs ||
+              wait >= deadline - Date.now()
+            ) {
               throw new FleetUnavailableError(isMutation(request));
             }
             if (wait > 0) await this.delay(wait);
             continue;
           }
           if (wait === null) {
-            await this.delay(backoff(attempt));
+            const waitMs = backoff(attempt);
+            if (waitMs >= deadline - Date.now()) {
+              throw new FleetUnavailableError(isMutation(request));
+            }
+            await this.delay(waitMs);
             continue;
           }
         }
@@ -101,6 +129,8 @@ export class FleetHttpClient {
     throw new FleetUnavailableError(isMutation(request));
   }
 }
+
+class FleetResponseTooLargeError extends Error {}
 
 function ensureBasePath(baseUrl: string): string {
   return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
@@ -129,32 +159,15 @@ function executeHttpsRequest(
   return new Promise((resolve, reject) => {
     const body =
       request.body === undefined ? undefined : JSON.stringify(request.body);
-    const headers: Record<string, string> = {
-      accept: 'application/json',
-      'x-arimms-actor-id': request.actor.actorId,
-      'x-arimms-request-id': request.actor.requestId,
-      'x-arimms-operation-id': request.operationId,
-    };
-    if (body !== undefined) {
-      headers['content-type'] = 'application/json';
-      headers['content-length'] = String(Buffer.byteLength(body));
-    }
-    if (request.idempotencyKey) {
-      headers['idempotency-key'] = request.idempotencyKey;
-    }
 
     let receivedBytes = 0;
     const outgoing = httpsRequest(
       url,
       {
         method: request.method,
-        headers,
-        agent: new Agent({
-          cert: config.clientCertificate,
-          key: config.clientKey,
-          ca: config.caCertificate,
-          rejectUnauthorized: true,
-        }),
+        headers: createFleetRequestHeaders(request, body),
+        agent: createFleetHttpsAgent(config),
+        signal: AbortSignal.timeout(config.timeoutMs),
         timeout: config.timeoutMs,
       },
       (incoming: IncomingMessage) => {
@@ -162,7 +175,7 @@ function executeHttpsRequest(
         incoming.on('data', (chunk: Buffer) => {
           receivedBytes += chunk.length;
           if (receivedBytes > config.maxResponseBytes) {
-            incoming.destroy(new Error('Fleet response too large'));
+            incoming.destroy(new FleetResponseTooLargeError());
             return;
           }
           chunks.push(chunk);
@@ -188,4 +201,32 @@ function executeHttpsRequest(
     if (body !== undefined) outgoing.write(body);
     outgoing.end();
   });
+}
+
+export function createFleetHttpsAgent(config: FleetHttpConfig): Agent {
+  return new Agent({
+    cert: config.clientCertificate,
+    key: config.clientKey,
+    ca: config.caCertificate,
+    rejectUnauthorized: true,
+  });
+}
+
+export function createFleetRequestHeaders(
+  request: FleetHttpRequest,
+  body?: string,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    accept: 'application/json',
+    'x-arimms-actor-id': request.actor.actorId,
+    'x-arimms-request-id': request.actor.requestId,
+    'x-arimms-operation-id': request.operationId,
+  };
+  if (body !== undefined) {
+    headers['content-type'] = 'application/json';
+    headers['content-length'] = String(Buffer.byteLength(body));
+  }
+  if (request.idempotencyKey)
+    headers['idempotency-key'] = request.idempotencyKey;
+  return headers;
 }

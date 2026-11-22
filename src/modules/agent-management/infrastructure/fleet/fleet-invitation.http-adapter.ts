@@ -125,7 +125,8 @@ function isInvitationResponse(value: unknown): value is InvitationResponse {
     (status === 'PENDING' ||
       status === 'REDEEMED' ||
       status === 'CANCELLED' ||
-      status === 'EXPIRED') &&
+      status === 'EXPIRED' ||
+      status === 'UNKNOWN') &&
     typeof value['expires_at'] === 'string' &&
     (value['invitation_token'] === undefined ||
       typeof value['invitation_token'] === 'string') &&

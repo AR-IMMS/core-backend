@@ -6,8 +6,8 @@ export class DisabledFleetInvitationPort implements FleetInvitationPort {
   create(): Promise<never> {
     return Promise.reject(new FleetUnavailableError(false));
   }
-  getByOperation(): Promise<never> {
-    return Promise.reject(new FleetUnavailableError(false));
+  getByOperation(): Promise<null> {
+    return Promise.resolve(null);
   }
   cancel(): Promise<never> {
     return Promise.reject(new FleetUnavailableError(false));
@@ -15,11 +15,13 @@ export class DisabledFleetInvitationPort implements FleetInvitationPort {
 }
 
 export class DisabledFleetInstallationPort implements FleetInstallationPort {
-  findById(): Promise<never> {
-    return Promise.reject(new FleetUnavailableError(false));
+  findById(): Promise<null> {
+    return Promise.resolve(null);
   }
-  findActiveByNode(): Promise<never> {
-    return Promise.reject(new FleetUnavailableError(false));
+  findActiveByNode(): Promise<null> {
+    // With the Fleet endpoint unset, this deployment remains in legacy-only
+    // mode; configured-but-unavailable Fleet still fails closed in the client.
+    return Promise.resolve(null);
   }
   closeEnrollmentGate(): Promise<never> {
     return Promise.reject(new FleetUnavailableError(false));
