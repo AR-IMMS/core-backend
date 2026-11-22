@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { UnitOfWorkContext, UnitOfWorkPort } from '@platform/events';
 import { UNIT_OF_WORK_PORT } from '@platform/events';
 import type { AgentNodeLifecycleCoordination } from '@modules/agent-management/contracts';
@@ -34,8 +34,8 @@ export class NodeLifecycleOrchestrator {
     @Inject(AGENT_NODE_LIFECYCLE_COORDINATION_PORT)
     private readonly fleet: AgentNodeLifecycleCoordination,
     @Inject(UNIT_OF_WORK_PORT) private readonly unitOfWork: UnitOfWorkPort,
-    private readonly now: () => Date = () => new Date(),
-    private readonly generateId: () => string = randomUUID,
+    @Optional() private readonly now: () => Date = () => new Date(),
+    @Optional() private readonly generateId: () => string = randomUUID,
   ) {}
 
   async execute<T>(input: {
