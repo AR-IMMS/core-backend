@@ -116,16 +116,23 @@ async function main(): Promise<void> {
       }),
       1,
     );
-    const installationAfterRevocation =
+    const installationWithBinding =
       await registryStore.findInstallation(installationId);
-    assert(installationAfterRevocation);
-    assert.equal(installationAfterRevocation.currentBinding, null);
-    assert.equal(installationAfterRevocation.updatedAt, null);
-    const nodeFilterAfterRevocation = await registryStore.listInstallations({
+    assert(installationWithBinding);
+    assert.equal(
+      installationWithBinding.currentBinding?.bindingId,
+      created.binding.id,
+    );
+    assert.equal(
+      installationWithBinding.currentBinding?.nodeId,
+      'node-agent-access',
+    );
+    assert.equal(installationWithBinding.updatedAt, null);
+    const nodeFilterWithBinding = await registryStore.listInstallations({
       pageSize: 20,
       nodeId: 'node-agent-access',
     });
-    assert.equal(nodeFilterAfterRevocation.items.length, 0);
+    assert.equal(nodeFilterWithBinding.items.length, 1);
     const recovered = await createEnrollmentUseCase().execute(input);
     assert.equal(recovered.accessToken, created.accessToken);
 

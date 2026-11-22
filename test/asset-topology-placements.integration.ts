@@ -110,9 +110,9 @@ async function main(): Promise<void> {
       { id: 'asset-c', name: 'Node C', assetTypeId: 'type-node' },
     ]);
     await racksModel.create([
-      { id: 'rack-a', uCapacity: 42 },
-      { id: 'rack-b', uCapacity: 42 },
-      { id: 'rack-c', uCapacity: 42 },
+      { id: 'rack-a', name: 'Rack A', uCapacity: 42 },
+      { id: 'rack-b', name: 'Rack B', uCapacity: 42 },
+      { id: 'rack-c', name: 'Rack C', uCapacity: 42 },
     ]);
 
     const actor = { type: 'user', id: 'admin-1' };

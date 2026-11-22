@@ -6,6 +6,7 @@ import { GetAssetUseCase } from '@modules/asset-topology/application/assets/asse
 import { RetireAssetUseCase } from '@modules/asset-topology/application/assets/retire-asset.use-case';
 import { AssetPlacementManagementUseCases } from '@modules/asset-topology/application/placements/asset-placement-management.use-case';
 import { NodeLifecycleOrchestrator } from '@modules/asset-topology/application/lifecycle/node-lifecycle-orchestrator';
+import { NodeLifecyclePendingError } from '@modules/asset-topology/application/lifecycle/node-lifecycle-orchestrator';
 import { MongoNodeLifecycleOperationStore } from '@modules/asset-topology/infrastructure/mongodb/mongo-node-lifecycle-operation.store';
 import { ASSET_PLACEMENT_MIGRATION } from '@modules/asset-topology/infrastructure/mongodb/migrations/asset-placement.migration';
 import { NODE_LIFECYCLE_OPERATIONS_MIGRATION } from '@modules/asset-topology/infrastructure/mongodb/migrations/node-lifecycle-operations.migration';
@@ -294,7 +295,7 @@ async function main(): Promise<void> {
         undefined,
         lifecycle,
       ).execute(assetId, actor),
-      /outbox unavailable/,
+      NodeLifecyclePendingError,
     );
     assert.equal(
       await db
