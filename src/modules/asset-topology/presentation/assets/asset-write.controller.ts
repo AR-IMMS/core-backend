@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Req,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -28,6 +29,7 @@ import {
   AssetReferenceNotFoundError,
   RegisterAssetUseCase,
 } from '../../application/assets/asset-registration.use-case';
+import { AgentFleetBindingStatusUnavailableError } from '@modules/agent-management/contracts';
 import { UpdateAssetUseCase } from '../../application/assets/asset-update.use-case';
 import { RetireAssetUseCase } from '../../application/assets/retire-asset.use-case';
 import { AssetRetirementConflictError } from '../../application/assets/asset-retirement.errors';
@@ -171,6 +173,11 @@ export class AssetWriteController {
         throw new BadRequestException({ message: error.message });
       if (error instanceof QrMappingConflictError)
         throw new ConflictException(error.message);
+      if (error instanceof AgentFleetBindingStatusUnavailableError) {
+        throw new ServiceUnavailableException({
+          code: 'FLEET_BINDING_STATUS_UNAVAILABLE',
+        });
+      }
       if (error instanceof ForbiddenException) throw error;
       throw error;
     }

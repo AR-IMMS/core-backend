@@ -39,6 +39,20 @@ export class RetireAssetUseCase {
   ) {}
 
   async execute(assetId: string, actor: AssetActor): Promise<void> {
+    const snapshot = await this.assets.findById(assetId);
+    if (!snapshot) throw new AssetReferenceNotFoundError('Asset');
+    if (snapshot.lifecycleState === 'RETIRED') return;
+    if (
+      await this.bindings.hasActiveFleetBindingForNode(assetId, {
+        actorId: actor.id,
+        requestId: actor.context?.request_id ?? randomUUID(),
+      })
+    ) {
+      throw new AssetRetirementConflictError(
+        'Asset has an active Agent binding',
+      );
+    }
+
     await this.unitOfWork.run(async (context) => {
       const current = await this.assets.findById(assetId, context);
       if (!current) throw new AssetReferenceNotFoundError('Asset');

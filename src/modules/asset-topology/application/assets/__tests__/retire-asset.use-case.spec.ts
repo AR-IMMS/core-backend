@@ -21,7 +21,10 @@ describe('RetireAssetUseCase', () => {
     save: jest.Mock;
     closeActive: jest.Mock;
   };
-  let bindings: { hasActiveBindingForNode: jest.Mock };
+  let bindings: {
+    hasActiveBindingForNode: jest.Mock;
+    hasActiveFleetBindingForNode: jest.Mock;
+  };
   let outbox: { append: jest.Mock };
   let unitOfWork: { run: jest.Mock };
 
@@ -46,7 +49,10 @@ describe('RetireAssetUseCase', () => {
       save: jest.fn(),
       closeActive: jest.fn(),
     };
-    bindings = { hasActiveBindingForNode: jest.fn().mockResolvedValue(false) };
+    bindings = {
+      hasActiveBindingForNode: jest.fn().mockResolvedValue(false),
+      hasActiveFleetBindingForNode: jest.fn().mockResolvedValue(false),
+    };
     outbox = { append: jest.fn().mockResolvedValue(undefined) };
     unitOfWork = { run: jest.fn((callback) => callback(context)) };
   });
@@ -117,6 +123,46 @@ describe('RetireAssetUseCase', () => {
     );
     expect(assets.save).not.toHaveBeenCalled();
     expect(outbox.append).not.toHaveBeenCalled();
+  });
+
+  it('checks Fleet before retiring when its binding projection may lag', async () => {
+    bindings.hasActiveFleetBindingForNode.mockResolvedValue(true);
+    const useCase = new RetireAssetUseCase(
+      assets,
+      placements,
+      bindings,
+      unitOfWork,
+      outbox,
+    );
+
+    await expect(useCase.execute('asset-1', actor)).rejects.toThrow(
+      'Asset has an active Agent binding',
+    );
+    expect(bindings.hasActiveFleetBindingForNode).toHaveBeenCalledWith(
+      'asset-1',
+      expect.objectContaining({ actorId: actor.id }),
+    );
+    expect(unitOfWork.run).not.toHaveBeenCalled();
+    expect(assets.save).not.toHaveBeenCalled();
+  });
+
+  it('fails closed if Fleet cannot report the authoritative binding state', async () => {
+    bindings.hasActiveFleetBindingForNode.mockRejectedValue(
+      new Error('Fleet binding status unavailable'),
+    );
+    const useCase = new RetireAssetUseCase(
+      assets,
+      placements,
+      bindings,
+      unitOfWork,
+      outbox,
+    );
+
+    await expect(useCase.execute('asset-1', actor)).rejects.toThrow(
+      'Fleet binding status unavailable',
+    );
+    expect(unitOfWork.run).not.toHaveBeenCalled();
+    expect(assets.save).not.toHaveBeenCalled();
   });
 
   it('rejects when Agent binding status cannot be determined', async () => {

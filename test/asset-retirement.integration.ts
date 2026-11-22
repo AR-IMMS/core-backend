@@ -117,6 +117,7 @@ async function main(): Promise<void> {
         {
           hasActiveBindingForNode: (nodeId, context) =>
             enrollmentStore.hasActiveBinding(nodeId, context),
+          hasActiveFleetBindingForNode: () => Promise.resolve(false),
         },
         unitOfWork,
         outbox,
@@ -198,6 +199,7 @@ async function main(): Promise<void> {
         {
           hasActiveBindingForNode: (nodeId, context) =>
             enrollmentStore.hasActiveBinding(nodeId, context),
+          hasActiveFleetBindingForNode: () => Promise.resolve(false),
         },
         unitOfWork,
         failingOutbox as never,

@@ -144,6 +144,7 @@ paths:
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
         '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '503': { $ref: ../baseline.yaml#/components/responses/Problem }
 
   /api/v1/asset-topology/data-centers/default:
     get:
