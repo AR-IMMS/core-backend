@@ -71,6 +71,8 @@ import type { FleetBindingProjectionPort } from './application/fleet/ports/fleet
 import { MongoFleetBindingProjectionStore } from './infrastructure/mongodb/mongo-fleet-binding-projection.store';
 import { FleetEnrollmentSyncController } from './presentation/fleet-enrollment/fleet-enrollment-sync.controller';
 import { SynchronizeFleetEnrollmentUseCase } from './application/fleet/use-cases/synchronize-fleet-enrollment.use-case';
+import { CoordinateNodeLifecycleUseCase } from './application/fleet/use-cases/coordinate-node-lifecycle.use-case';
+import { AGENT_NODE_LIFECYCLE_COORDINATION_PORT } from './contracts';
 
 @Module({
   imports: [forwardRef(() => AssetTopologyModule)],
@@ -128,6 +130,11 @@ import { SynchronizeFleetEnrollmentUseCase } from './application/fleet/use-cases
         return new FleetInstallationHttpAdapter(client);
       },
       inject: [ConfigService],
+    },
+    CoordinateNodeLifecycleUseCase,
+    {
+      provide: AGENT_NODE_LIFECYCLE_COORDINATION_PORT,
+      useExisting: CoordinateNodeLifecycleUseCase,
     },
     MongoBootstrapTokenStore,
     {
@@ -354,6 +361,6 @@ import { SynchronizeFleetEnrollmentUseCase } from './application/fleet/use-cases
       ],
     },
   ],
-  exports: [AGENT_BINDING_QUERIES_PORT],
+  exports: [AGENT_BINDING_QUERIES_PORT, AGENT_NODE_LIFECYCLE_COORDINATION_PORT],
 })
 export class AgentManagementModule {}
