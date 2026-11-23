@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
     ports:
-      - '27017:27017'
+      - '127.0.0.1:${CORE_MONGODB_HOST_PORT:-27017}:27017'
     volumes:
       - mongodb-data:/data/db
     healthcheck:
@@ -24,6 +24,40 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
+
+  core-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    env_file:
+      - .env.local
+    environment:
+      NODE_ENV: production
+      APP_PORT: '8080'
+      MONGODB_URI: mongodb://mongodb:27017/?directConnection=true
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME:-ar_imms_core}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ''
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:${CORE_API_HOST_PORT:-18080}:8080'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:8080/health/ready')
+          .then((response) => process.exit(response.ok ? 0 : 1))
+          .catch(() => process.exit(1))
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
 
 volumes:
   mongodb-data:
