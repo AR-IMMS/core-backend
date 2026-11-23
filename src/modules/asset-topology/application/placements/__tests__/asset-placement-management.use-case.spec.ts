@@ -3,10 +3,11 @@ import { Asset } from '../../../domain/asset/asset';
 import { Rack } from '../../../domain/topology/rack';
 import { AssetPlacement } from '../../../domain/placement/asset-placement';
 import { AssetPlacementManagementUseCases } from '../asset-placement-management.use-case';
+import type { AssetActor } from '../../assets/asset-registration.use-case';
 
 describe('AssetPlacementManagementUseCases', () => {
   const context = {} as never;
-  const actor = { type: 'user', id: 'admin-1' };
+  const actor: AssetActor = { type: 'user', id: 'admin-1' };
   const currentTime = new Date('2026-10-20T01:00:00.000Z');
   let assets: {
     findById: jest.Mock;
@@ -28,7 +29,7 @@ describe('AssetPlacementManagementUseCases', () => {
         change: (
           context: never,
           operation: { operationId: string },
-          actor: typeof actor,
+          actor: AssetActor,
         ) => Promise<unknown>;
       }) => input.change(context, { operationId: 'operation-1' }, actor),
     ),
