@@ -28,6 +28,8 @@ tags:
     description: Admin-facing Agent binding lifecycle
   - name: Agent Registry
     description: Admin-facing read-only installation and binding queries
+  - name: Fleet Enrollment
+    description: Core-authorized operations over Fleet-owned invitations
 paths:
   /api/v1/nodes/{nodeId}/agent-bootstrap-tokens:
     post:
@@ -77,6 +79,119 @@ paths:
         '409': { $ref: '#/components/responses/Problem' }
         '429': { $ref: '#/components/responses/RateLimitedProblem' }
         '500': { $ref: '#/components/responses/Problem' }
+  /api/v1/nodes/{nodeId}/agent-fleet-invitations:
+    post:
+      tags: [Fleet Enrollment]
+      operationId: requestFleetEnrollmentInvitation
+      summary: Request a Fleet enrollment invitation for a Node
+      description: |
+        Requires an authenticated human with `agent:manage`. Core checks that
+        the Node is active, placed, and not locally or remotely bound before
+        calling Fleet. The `Idempotency-Key` is scoped to the authenticated
+        actor and normalized Node request; reuse with another actor or request
+        conflicts. Core persists only an operation reference and status. A
+        pending, unexpired invitation token is returned with `Cache-Control:
+        no-store`; replay after redemption, cancellation, or expiry is status
+        only. This endpoint does not change the legacy bootstrap-token route.
+        Fleet REST details remain provisional pending C01 approval.
+      security:
+        - HumanAccessToken: []
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: '^[A-Za-z0-9._:-]+$'
+      responses:
+        '201':
+          description: Invitation created or the operation replayed.
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              description: Core sends no-store because a pending response may contain an invitation secret.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [operation_id, status]
+                properties:
+                  operation_id: { type: string, format: uuid }
+                  invitation_id: { type: string }
+                  node_id: { type: string, format: uuid }
+                  status:
+                    type: string
+                    enum:
+                      [
+                        REQUEST_PENDING,
+                        PENDING,
+                        REDEEMED,
+                        CANCELLED,
+                        EXPIRED,
+                        UNKNOWN,
+                      ]
+                  expires_at: { type: string, format: date-time }
+                  invitation_token:
+                    type: string
+                    description: Present only while the invitation is pending and unexpired.
+                  installation_id: { type: string, format: uuid }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/RateLimitedProblem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/agent-fleet-invitations/{invitationId}/synchronize:
+    post:
+      tags: [Fleet Enrollment]
+      operationId: synchronizeFleetEnrollment
+      summary: Synchronize Fleet registration into the Core Node binding
+      description: |
+        Requires an authenticated human with `agent:manage`. This explicit
+        query asks Fleet for the invitation's current state; Core creates a
+        local business binding only after Fleet confirms redemption and an
+        active installation matching the invitation's authorized Node. Pending
+        and terminal states do not create a binding. If Fleet succeeds but the
+        Core transaction fails, Core returns 503 with the stable operation ID;
+        retry this action. The response never contains an invitation secret.
+        Core's local binding projection is not Fleet registry or credential data.
+      security:
+        - HumanAccessToken: []
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Current remote state and Core synchronization result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [operation_id, invitation_id, node_id, status]
+                properties:
+                  operation_id: { type: string, format: uuid }
+                  invitation_id: { type: string, format: uuid }
+                  node_id: { type: string, format: uuid }
+                  status:
+                    type: string
+                    enum:
+                      [PENDING, REDEEMED, CANCELLED, EXPIRED, UNKNOWN, BOUND]
+                  installation_id: { type: string, format: uuid }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
   /api/v1/agent-bindings/{bindingId}/revoke:
     post:
       tags: [Bindings]
@@ -520,7 +635,15 @@ components:
     AgentInstallation:
       type: object
       additionalProperties: false
-      required: [installation_id, agent_version, environment, created_at, updated_at, current_binding]
+      required:
+        [
+          installation_id,
+          agent_version,
+          environment,
+          created_at,
+          updated_at,
+          current_binding,
+        ]
       properties:
         installation_id: { type: string, format: uuid }
         agent_version: { type: string }

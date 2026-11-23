@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-import { Controller, Get } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import type { Server } from 'node:http';
@@ -11,43 +9,12 @@ import {
   IAM_HUMAN_SESSION_ACCESS,
 } from '@modules/iam/application/ports/human-session-access.token';
 import { IAM_PERMISSION_CATALOG_PORT } from '@modules/iam/application/ports/permission-catalog.token';
-import type { AgentPrincipal } from '../../../application/access-lifecycle/ports/agent-credential-authorization.port';
-import { AGENT_CREDENTIAL_AUTHORIZATION_PORT } from '../../../application/access-lifecycle/ports/agent-credential-authorization.port';
 import { RevokeAgentBindingUseCase } from '../../../application/access-lifecycle/use-cases/revoke-agent-binding.use-case';
-import { AgentAuthenticationGuard } from '../agent-authentication.guard';
-import {
-  AgentAuthenticated,
-  CurrentAgentPrincipal,
-} from '../agent-authenticated.decorator';
 import { AgentBindingRevocationController } from '../agent-binding-revocation.controller';
-
-@Controller('agent-probe')
-class AgentProbeController {
-  @Get()
-  @AgentAuthenticated()
-  getPrincipal(@CurrentAgentPrincipal() principal: AgentPrincipal) {
-    return principal;
-  }
-}
 
 describe('Agent authentication and Admin revocation HTTP boundaries', () => {
   let app: INestApplication;
-  const credential = 'agent-only-opaque-secret';
-  const principal = {
-    installationId: 'installation-1',
-    bindingId: 'binding-1',
-    nodeId: 'node-1',
-  };
   const revoke = { execute: jest.fn().mockResolvedValue(undefined) };
-  const access = {
-    findActivePrincipalByCredentialHash: jest.fn((hash: string) =>
-      Promise.resolve(
-        hash === createHash('sha256').update(credential).digest('hex')
-          ? principal
-          : null,
-      ),
-    ),
-  };
   const tokenVerifier = {
     verifyAccessToken: jest.fn((token: string) =>
       Promise.resolve(
@@ -76,10 +43,8 @@ describe('Agent authentication and Admin revocation HTTP boundaries', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      controllers: [AgentProbeController, AgentBindingRevocationController],
+      controllers: [AgentBindingRevocationController],
       providers: [
-        AgentAuthenticationGuard,
-        { provide: AGENT_CREDENTIAL_AUTHORIZATION_PORT, useValue: access },
         { provide: RevokeAgentBindingUseCase, useValue: revoke },
         { provide: IAM_ACCESS_TOKEN_VERIFIER, useValue: tokenVerifier },
         { provide: IAM_HUMAN_SESSION_ACCESS, useValue: sessionAccess },
@@ -103,20 +68,10 @@ describe('Agent authentication and Admin revocation HTTP boundaries', () => {
   afterAll(() => app.close());
   beforeEach(() => jest.clearAllMocks());
 
-  it('uses Agent credentials on Agent routes without invoking Human IAM', async () => {
-    const response = await request(app.getHttpServer() as Server)
-      .get('/api/v1/agent-probe')
-      .set('Authorization', `Bearer ${credential}`)
-      .expect(200);
-
-    expect(response.body).toEqual(principal);
-    expect(tokenVerifier.verifyAccessToken).not.toHaveBeenCalled();
-  });
-
   it('does not accept an Agent credential on the Human Admin revoke route', async () => {
     await request(app.getHttpServer() as Server)
       .post('/api/v1/agent-bindings/binding-1/revoke')
-      .set('Authorization', `Bearer ${credential}`)
+      .set('Authorization', 'Bearer opaque-agent-secret')
       .expect(401);
 
     expect(revoke.execute).not.toHaveBeenCalled();

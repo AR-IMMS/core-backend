@@ -4,12 +4,14 @@ import {
   ConflictException,
   Controller,
   ForbiddenException,
+  Headers,
   HttpCode,
   NotFoundException,
   Param,
   Patch,
   Post,
   Req,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -42,9 +44,18 @@ import {
   registerAssetSchema,
   updateAssetSchema,
 } from './asset-registry.schemas';
-import { requireAssetAdmin, type AssetHttpRequest } from './asset-http-support';
+import {
+  parseIdempotencyKey,
+  requireAssetAdmin,
+  type AssetHttpRequest,
+} from './asset-http-support';
 import { QrMappingConflictError } from '../../application/qr/qr-mapping.errors';
 import { assetTypeCodeFromId, assetTypeIdFromCode } from './asset-type-code';
+import {
+  NodeLifecycleConflictError,
+  NodeLifecycleIdempotencyConflictError,
+} from '../../application/lifecycle/node-lifecycle.errors';
+import { NodeLifecyclePendingError } from '../../application/lifecycle/node-lifecycle-orchestrator';
 
 @ApiTags('Asset Registry')
 @ApiBearerAuth('HumanAccessToken')
@@ -141,6 +152,7 @@ export class AssetWriteController {
   async retire(
     @Req() request: AssetHttpRequest,
     @Param() rawParams: AssetParamsDto,
+    @Headers('idempotency-key') idempotencyHeader?: string,
   ): Promise<void> {
     return this.execute(async () => {
       const actor = requireAssetAdmin(request);
@@ -149,7 +161,9 @@ export class AssetWriteController {
         rawParams,
         'Invalid Asset ID',
       );
-      await this.retireAsset.execute(params.asset_id, actor);
+      await this.retireAsset.execute(params.asset_id, actor, {
+        idempotencyKey: parseIdempotencyKey(idempotencyHeader),
+      });
     });
   }
 
@@ -161,6 +175,24 @@ export class AssetWriteController {
         throw new NotFoundException(error.message);
       if (error instanceof AssetRetirementConflictError)
         throw new ConflictException(error.message);
+      if (
+        error instanceof NodeLifecycleConflictError ||
+        error instanceof NodeLifecycleIdempotencyConflictError
+      ) {
+        throw new ConflictException({
+          code: error.code,
+          ...(error instanceof NodeLifecycleConflictError
+            ? { operation_id: error.operationId }
+            : {}),
+        });
+      }
+      if (error instanceof NodeLifecyclePendingError) {
+        throw new ServiceUnavailableException({
+          code: 'NODE_LIFECYCLE_PENDING',
+          operation_id: error.operationId,
+          stage: error.stage,
+        });
+      }
       if (
         error instanceof DomainError &&
         error.code === 'ASSET_INVALID_RETIREMENT'

@@ -27,13 +27,11 @@ import { ENROLLMENT_PERSISTENCE_PORT } from './application/registration/ports/en
 import type { EnrollmentPersistencePort } from './application/registration/ports/enrollment.port';
 import { ENROLLMENT_RECOVERY_CIPHER } from './application/registration/ports/enrollment-recovery.port';
 import type { EnrollmentRecoveryCipherPort } from './application/registration/ports/enrollment-recovery.port';
-import { AGENT_CREDENTIAL_AUTHORIZATION_PORT } from './application/access-lifecycle/ports/agent-credential-authorization.port';
 import { BINDING_REVOCATION_PORT } from './application/access-lifecycle/ports/binding-revocation.port';
 import type { BindingRevocationPort } from './application/access-lifecycle/ports/binding-revocation.port';
 import { MongoEnrollmentStore } from './infrastructure/mongodb/mongo-enrollment.store';
 import { MongoAgentAccessStore } from './infrastructure/mongodb/mongo-agent-access.store';
 import { RevokeAgentBindingUseCase } from './application/access-lifecycle/use-cases/revoke-agent-binding.use-case';
-import { AgentAuthenticationGuard } from './presentation/access-lifecycle/agent-authentication.guard';
 import { AgentBindingRevocationController } from './presentation/access-lifecycle/agent-binding-revocation.controller';
 import { EnrollmentRecoveryCipher } from './infrastructure/security/enrollment-recovery-cipher';
 import { EnrollmentController } from './presentation/registration/enrollment.controller';
@@ -46,16 +44,40 @@ import { ListAgentInstallationsUseCase } from './application/agent-registry/use-
 import { GetAgentInstallationUseCase } from './application/agent-registry/use-cases/get-agent-installation.use-case';
 import { ListInstallationBindingsUseCase } from './application/agent-registry/use-cases/list-installation-bindings.use-case';
 import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-agent-registry-query.store';
+import { FLEET_INVITATION_PORT } from './application/fleet/ports/fleet-invitation.port';
+import { FLEET_INSTALLATION_PORT } from './application/fleet/ports/fleet-installation.port';
+import { FleetManagerAdapterModule } from './infrastructure/fleet/fleet-manager-adapter.module';
+import { FleetInvitationController } from './presentation/fleet-enrollment/fleet-invitation.controller';
+import { MongoFleetEnrollmentOperationStore } from './infrastructure/mongodb/mongo-fleet-enrollment-operation.store';
+import { FLEET_ENROLLMENT_OPERATION_PORT } from './application/fleet/ports/fleet-enrollment-operation.port';
+import type { FleetEnrollmentOperationPort } from './application/fleet/ports/fleet-enrollment-operation.port';
+import type { FleetInvitationPort } from './application/fleet/ports/fleet-invitation.port';
+import type { FleetInstallationPort } from './application/fleet/ports/fleet-installation.port';
+import { RequestFleetInvitationUseCase } from './application/fleet/use-cases/request-fleet-invitation.use-case';
+import { FLEET_BINDING_PROJECTION_PORT } from './application/fleet/ports/fleet-binding-projection.port';
+import type { FleetBindingProjectionPort } from './application/fleet/ports/fleet-binding-projection.port';
+import { MongoFleetBindingProjectionStore } from './infrastructure/mongodb/mongo-fleet-binding-projection.store';
+import { FleetEnrollmentSyncController } from './presentation/fleet-enrollment/fleet-enrollment-sync.controller';
+import { SynchronizeFleetEnrollmentUseCase } from './application/fleet/use-cases/synchronize-fleet-enrollment.use-case';
+import { CoordinateNodeLifecycleUseCase } from './application/fleet/use-cases/coordinate-node-lifecycle.use-case';
+import { AGENT_NODE_LIFECYCLE_COORDINATION_PORT } from './contracts';
 
 @Module({
-  imports: [forwardRef(() => AssetTopologyModule)],
+  imports: [forwardRef(() => AssetTopologyModule), FleetManagerAdapterModule],
   controllers: [
     BootstrapTokenController,
     EnrollmentController,
     AgentBindingRevocationController,
     AgentRegistryController,
+    FleetInvitationController,
+    FleetEnrollmentSyncController,
   ],
   providers: [
+    CoordinateNodeLifecycleUseCase,
+    {
+      provide: AGENT_NODE_LIFECYCLE_COORDINATION_PORT,
+      useExisting: CoordinateNodeLifecycleUseCase,
+    },
     MongoBootstrapTokenStore,
     {
       provide: ENROLLMENT_RECOVERY_CIPHER,
@@ -68,6 +90,16 @@ import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-age
     MongoEnrollmentStore,
     MongoAgentAccessStore,
     MongoAgentRegistryQueryStore,
+    MongoFleetEnrollmentOperationStore,
+    MongoFleetBindingProjectionStore,
+    {
+      provide: FLEET_BINDING_PROJECTION_PORT,
+      useExisting: MongoFleetBindingProjectionStore,
+    },
+    {
+      provide: FLEET_ENROLLMENT_OPERATION_PORT,
+      useExisting: MongoFleetEnrollmentOperationStore,
+    },
     {
       provide: AGENT_REGISTRY_QUERY_PORT,
       useExisting: MongoAgentRegistryQueryStore,
@@ -90,11 +122,6 @@ import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-age
         new ListInstallationBindingsUseCase(query),
       inject: [AGENT_REGISTRY_QUERY_PORT],
     },
-    AgentAuthenticationGuard,
-    {
-      provide: AGENT_CREDENTIAL_AUTHORIZATION_PORT,
-      useExisting: MongoAgentAccessStore,
-    },
     {
       provide: BINDING_REVOCATION_PORT,
       useExisting: MongoAgentAccessStore,
@@ -112,11 +139,18 @@ import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-age
     },
     {
       provide: AGENT_BINDING_QUERIES_PORT,
-      useFactory: (persistence: EnrollmentPersistencePort) => ({
-        hasActiveBindingForNode: (nodeId: string, context: UnitOfWorkContext) =>
-          persistence.hasActiveBinding(nodeId, context),
+      useFactory: (
+        persistence: EnrollmentPersistencePort,
+        fleetBindings: FleetBindingProjectionPort,
+      ) => ({
+        hasActiveBindingForNode: async (
+          nodeId: string,
+          context: UnitOfWorkContext,
+        ) =>
+          (await persistence.hasActiveBinding(nodeId, context)) ||
+          (await fleetBindings.hasActiveForNode(nodeId, context)),
       }),
-      inject: [ENROLLMENT_PERSISTENCE_PORT],
+      inject: [ENROLLMENT_PERSISTENCE_PORT, FLEET_BINDING_PROJECTION_PORT],
     },
     {
       provide: NODE_ELIGIBILITY_PORT,
@@ -181,7 +215,67 @@ import { MongoAgentRegistryQueryStore } from './infrastructure/mongodb/mongo-age
         ENROLLMENT_RECOVERY_CIPHER,
       ],
     },
+    {
+      provide: RequestFleetInvitationUseCase,
+      useFactory: (
+        nodes: NodeEligibilityPort,
+        persistence: EnrollmentPersistencePort,
+        fleetInstallations: FleetInstallationPort,
+        fleetInvitations: FleetInvitationPort,
+        operations: FleetEnrollmentOperationPort,
+        unitOfWork: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[2],
+        outbox: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[3],
+      ) =>
+        new RequestFleetInvitationUseCase(
+          nodes,
+          persistence,
+          fleetInstallations,
+          fleetInvitations,
+          operations,
+          unitOfWork,
+          outbox,
+        ),
+      inject: [
+        NODE_ELIGIBILITY_PORT,
+        ENROLLMENT_PERSISTENCE_PORT,
+        FLEET_INSTALLATION_PORT,
+        FLEET_INVITATION_PORT,
+        FLEET_ENROLLMENT_OPERATION_PORT,
+        UNIT_OF_WORK_PORT,
+        OUTBOX_WRITER_PORT,
+      ],
+    },
+    {
+      provide: SynchronizeFleetEnrollmentUseCase,
+      useFactory: (
+        operations: FleetEnrollmentOperationPort,
+        invitations: FleetInvitationPort,
+        installations: FleetInstallationPort,
+        nodes: NodeEligibilityPort,
+        bindings: FleetBindingProjectionPort,
+        unitOfWork: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[2],
+        outbox: ConstructorParameters<typeof IssueBootstrapTokenUseCase>[3],
+      ) =>
+        new SynchronizeFleetEnrollmentUseCase(
+          operations,
+          invitations,
+          installations,
+          nodes,
+          bindings,
+          unitOfWork,
+          outbox,
+        ),
+      inject: [
+        FLEET_ENROLLMENT_OPERATION_PORT,
+        FLEET_INVITATION_PORT,
+        FLEET_INSTALLATION_PORT,
+        NODE_ELIGIBILITY_PORT,
+        FLEET_BINDING_PROJECTION_PORT,
+        UNIT_OF_WORK_PORT,
+        OUTBOX_WRITER_PORT,
+      ],
+    },
   ],
-  exports: [AGENT_BINDING_QUERIES_PORT],
+  exports: [AGENT_BINDING_QUERIES_PORT, AGENT_NODE_LIFECYCLE_COORDINATION_PORT],
 })
 export class AgentManagementModule {}

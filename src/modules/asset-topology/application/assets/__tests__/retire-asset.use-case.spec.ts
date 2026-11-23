@@ -4,7 +4,12 @@ import { RetireAssetUseCase } from '../retire-asset.use-case';
 
 describe('RetireAssetUseCase', () => {
   const context = {} as never;
-  const actor = { type: 'user', id: 'admin-1' };
+  type TestActor = {
+    readonly type: string;
+    readonly id: string;
+    readonly context?: { readonly request_id?: string };
+  };
+  const actor: TestActor = { type: 'user', id: 'admin-1' };
   let asset: Asset;
   let assets: {
     findById: jest.Mock;
@@ -21,9 +26,50 @@ describe('RetireAssetUseCase', () => {
     save: jest.Mock;
     closeActive: jest.Mock;
   };
-  let bindings: { hasActiveBindingForNode: jest.Mock };
+  let bindings: {
+    hasActiveBindingForNode: jest.Mock;
+  };
+  let fleetActiveBinding: { installationId: string; bindingId: string } | null;
   let outbox: { append: jest.Mock };
   let unitOfWork: { run: jest.Mock };
+  const lifecycle = {
+    execute: jest.fn(
+      async (input: {
+        beforeChange?: (
+          operation: {
+            operationId: string;
+            gate?: {
+              activeBinding: {
+                installationId: string;
+                bindingId: string;
+              } | null;
+            };
+          },
+          actor: TestActor,
+        ) => Promise<void> | void;
+        change: (
+          context: never,
+          operation: { operationId: string },
+          actor: TestActor,
+        ) => Promise<unknown>;
+      }) => {
+        await input.beforeChange?.(
+          {
+            operationId: 'operation-1',
+            gate: { activeBinding: fleetActiveBinding },
+          },
+          actor,
+        );
+        return unitOfWork.run((transactionContext: never) =>
+          input.change(
+            transactionContext,
+            { operationId: 'operation-1' },
+            actor,
+          ),
+        );
+      },
+    ),
+  };
 
   beforeEach(() => {
     asset = Asset.register({
@@ -46,7 +92,10 @@ describe('RetireAssetUseCase', () => {
       save: jest.fn(),
       closeActive: jest.fn(),
     };
-    bindings = { hasActiveBindingForNode: jest.fn().mockResolvedValue(false) };
+    bindings = {
+      hasActiveBindingForNode: jest.fn().mockResolvedValue(false),
+    };
+    fleetActiveBinding = null;
     outbox = { append: jest.fn().mockResolvedValue(undefined) };
     unitOfWork = { run: jest.fn((callback) => callback(context)) };
   });
@@ -56,10 +105,10 @@ describe('RetireAssetUseCase', () => {
       assets,
       placements,
       bindings,
-      unitOfWork,
       outbox,
       () => new Date('2026-11-08T00:00:00.000Z'),
       () => 'fact-1',
+      lifecycle as never,
     );
 
     await useCase.execute('asset-1', actor);
@@ -91,8 +140,10 @@ describe('RetireAssetUseCase', () => {
       assets,
       placements,
       bindings,
-      unitOfWork,
       outbox,
+      undefined,
+      undefined,
+      lifecycle as never,
     );
 
     await expect(useCase.execute('asset-1', actor)).rejects.toThrow(
@@ -108,8 +159,10 @@ describe('RetireAssetUseCase', () => {
       assets,
       placements,
       bindings,
-      unitOfWork,
       outbox,
+      undefined,
+      undefined,
+      lifecycle as never,
     );
 
     await expect(useCase.execute('asset-1', actor)).rejects.toThrow(
@@ -117,6 +170,28 @@ describe('RetireAssetUseCase', () => {
     );
     expect(assets.save).not.toHaveBeenCalled();
     expect(outbox.append).not.toHaveBeenCalled();
+  });
+
+  it('rejects a Fleet binding returned atomically when closing the enrollment gate', async () => {
+    fleetActiveBinding = {
+      installationId: 'install-1',
+      bindingId: 'binding-1',
+    };
+    const useCase = new RetireAssetUseCase(
+      assets,
+      placements,
+      bindings,
+      outbox,
+      undefined,
+      undefined,
+      lifecycle as never,
+    );
+
+    await expect(useCase.execute('asset-1', actor)).rejects.toThrow(
+      'Asset has an active Agent binding',
+    );
+    expect(unitOfWork.run).not.toHaveBeenCalled();
+    expect(assets.save).not.toHaveBeenCalled();
   });
 
   it('rejects when Agent binding status cannot be determined', async () => {
@@ -127,8 +202,10 @@ describe('RetireAssetUseCase', () => {
       assets,
       placements,
       bindings,
-      unitOfWork,
       outbox,
+      undefined,
+      undefined,
+      lifecycle as never,
     );
 
     await expect(useCase.execute('asset-1', actor)).rejects.toThrow(
@@ -150,8 +227,10 @@ describe('RetireAssetUseCase', () => {
       assets,
       placements,
       bindings,
-      unitOfWork,
       outbox,
+      undefined,
+      undefined,
+      lifecycle as never,
     );
 
     await expect(useCase.execute('asset-1', actor)).resolves.toBeUndefined();
@@ -166,8 +245,10 @@ describe('RetireAssetUseCase', () => {
       assets,
       placements,
       bindings,
-      unitOfWork,
       outbox,
+      undefined,
+      undefined,
+      lifecycle as never,
     );
 
     await expect(useCase.execute('asset-1', actor)).rejects.toThrow(

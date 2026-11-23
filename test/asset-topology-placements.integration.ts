@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { createConnection } from 'mongoose';
 import { AssetPlacementManagementUseCases } from '@modules/asset-topology/application/placements/asset-placement-management.use-case';
+import { NodeLifecycleOrchestrator } from '@modules/asset-topology/application/lifecycle/node-lifecycle-orchestrator';
+import { MongoNodeLifecycleOperationStore } from '@modules/asset-topology/infrastructure/mongodb/mongo-node-lifecycle-operation.store';
+import { NODE_LIFECYCLE_OPERATIONS_MIGRATION } from '@modules/asset-topology/infrastructure/mongodb/migrations/node-lifecycle-operations.migration';
+import { DisabledFleetNodeEnrollmentGatePort } from '@modules/agent-management/infrastructure/fleet/disabled-fleet-ports';
 import { MongoAssetPlacementStore } from '@modules/asset-topology/infrastructure/mongodb/mongo-asset-placement.store';
 import { ASSET_PLACEMENT_MIGRATION } from '@modules/asset-topology/infrastructure/mongodb/migrations/asset-placement.migration';
 import { ASSET_CATALOG_MIGRATION } from '@modules/asset-topology/infrastructure/mongodb/migrations/asset-catalog.migration';
@@ -46,6 +50,7 @@ async function main(): Promise<void> {
       ASSET_CATALOG_MIGRATION.up(connection),
       RACK_MANAGEMENT_MIGRATION.up(connection),
       ASSET_PLACEMENT_MIGRATION.up(connection),
+      NODE_LIFECYCLE_OPERATIONS_MIGRATION.up(connection),
     ]);
 
     const assetsModel = connection.model(ASSET_MODEL, AssetSchema);
@@ -80,6 +85,11 @@ async function main(): Promise<void> {
     );
     const unitOfWork = new MongoUnitOfWork(connection);
     const outbox = new MongoOutboxStore(outboxModel as MongoOutboxModel);
+    const lifecycle = new NodeLifecycleOrchestrator(
+      new MongoNodeLifecycleOperationStore(connection),
+      new DisabledFleetNodeEnrollmentGatePort(),
+      unitOfWork,
+    );
     let generatedId = 0;
     let clockTick = 0;
     const createUseCases = (writer: OutboxWriterPort = outbox) =>
@@ -91,6 +101,7 @@ async function main(): Promise<void> {
         writer,
         () => new Date(Date.UTC(2026, 9, 20, 0, 0, 0, clockTick++)),
         () => `placement-${++generatedId}`,
+        lifecycle,
       );
 
     await assetsModel.create([
@@ -99,9 +110,9 @@ async function main(): Promise<void> {
       { id: 'asset-c', name: 'Node C', assetTypeId: 'type-node' },
     ]);
     await racksModel.create([
-      { id: 'rack-a', uCapacity: 42 },
-      { id: 'rack-b', uCapacity: 42 },
-      { id: 'rack-c', uCapacity: 42 },
+      { id: 'rack-a', name: 'Rack A', uCapacity: 42 },
+      { id: 'rack-b', name: 'Rack B', uCapacity: 42 },
+      { id: 'rack-c', name: 'Rack C', uCapacity: 42 },
     ]);
 
     const actor = { type: 'user', id: 'admin-1' };

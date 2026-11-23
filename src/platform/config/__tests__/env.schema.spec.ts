@@ -38,6 +38,56 @@ describe('validated IAM runtime configuration', () => {
     expect(envSchema.safeParse(validAgentConfiguration).success).toBe(true);
   });
 
+  test('requires Fleet HTTPS and a paired client certificate when Fleet is enabled', () => {
+    expect(
+      envSchema.safeParse({
+        ...validAgentConfiguration,
+        FLEET_MANAGER_BASE_URL: 'http://fleet.example.test',
+        FLEET_CLIENT_CERTIFICATE: 'cert',
+        FLEET_CLIENT_KEY: 'key',
+      }).success,
+    ).toBe(false);
+    expect(
+      envSchema.safeParse({
+        ...validAgentConfiguration,
+        FLEET_MANAGER_BASE_URL: 'https://fleet.example.test',
+      }).success,
+    ).toBe(false);
+    expect(
+      envSchema.safeParse({
+        ...validAgentConfiguration,
+        FLEET_MANAGER_BASE_URL: 'https://fleet.example.test',
+        FLEET_CLIENT_CERTIFICATE: 'cert',
+        FLEET_CLIENT_KEY: 'key',
+      }).success,
+    ).toBe(true);
+  });
+
+  const userInfoUrl = new URL('https://fleet.example.test');
+  userInfoUrl.username = 'user';
+  userInfoUrl.password = 'password';
+  const tokenUrl = new URL('https://fleet.example.test/');
+  tokenUrl.searchParams.set('token', 'secret');
+
+  test.each([
+    userInfoUrl.toString(),
+    tokenUrl.toString(),
+    'https://fleet.example.test/#fragment',
+  ])('rejects unsafe Fleet base URL: %s', (url) => {
+    expect(
+      envSchema.safeParse({
+        ...validAgentConfiguration,
+        FLEET_MANAGER_BASE_URL: url,
+        FLEET_CLIENT_CERTIFICATE: 'cert',
+        FLEET_CLIENT_KEY: 'key',
+      }).success,
+    ).toBe(false);
+  });
+
+  test('leaves the optional Fleet integration disabled without Fleet settings', () => {
+    expect(envSchema.safeParse(validAgentConfiguration).success).toBe(true);
+  });
+
   /** It rejects lease settings that can expire before the next heartbeat. */
   test('requires presence lease lifetime to exceed heartbeat interval', () => {
     const result = envSchema.safeParse({

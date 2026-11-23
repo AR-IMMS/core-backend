@@ -81,6 +81,10 @@ import {
 import { AgentManagementModule } from '@modules/agent-management/agent-management.module';
 import { RetireAssetUseCase } from './application/assets/retire-asset.use-case';
 import { AgentEnrollmentEligibilityUseCase } from './application/assets/agent-enrollment-eligibility.use-case';
+import { NODE_LIFECYCLE_OPERATION_PORT } from './application/lifecycle/node-lifecycle-operation.port';
+import { MongoNodeLifecycleOperationStore } from './infrastructure/mongodb/mongo-node-lifecycle-operation.store';
+import { NodeLifecycleOrchestrator } from './application/lifecycle/node-lifecycle-orchestrator';
+import { NodeLifecycleOperationController } from './presentation/assets/node-lifecycle-operation.controller';
 
 /** Asset & Topology's Dashboard API and owned persistence adapters. */
 @Module({
@@ -111,6 +115,7 @@ import { AgentEnrollmentEligibilityUseCase } from './application/assets/agent-en
     AssetReadController,
     AssetWriteController,
     AssetPlacementController,
+    NodeLifecycleOperationController,
     QrMappingController,
     LabelExportController,
   ],
@@ -128,6 +133,12 @@ import { AgentEnrollmentEligibilityUseCase } from './application/assets/agent-en
     MongoQrMappingStore,
     { provide: QR_MAPPING_STORE, useExisting: MongoQrMappingStore },
     MongoAssetPlacementStore,
+    MongoNodeLifecycleOperationStore,
+    {
+      provide: NODE_LIFECYCLE_OPERATION_PORT,
+      useExisting: MongoNodeLifecycleOperationStore,
+    },
+    NodeLifecycleOrchestrator,
     { provide: ASSET_PLACEMENT_STORE, useExisting: MongoAssetPlacementStore },
     { provide: ASSET_STORE, useExisting: MongoAssetStore },
     { provide: ASSET_CATALOG_STORE, useExisting: MongoAssetStore },

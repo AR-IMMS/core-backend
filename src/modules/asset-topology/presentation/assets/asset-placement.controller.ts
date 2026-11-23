@@ -5,12 +5,14 @@ import {
   Controller,
   Delete,
   ForbiddenException,
+  Headers,
   HttpCode,
   NotFoundException,
   Param,
   Patch,
   Post,
   Req,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -39,7 +41,16 @@ import {
   assetPlacementRequestSchema,
   parseAssetPlacementRequest,
 } from './asset-placement.schemas';
-import { requireAssetAdmin, type AssetHttpRequest } from './asset-http-support';
+import {
+  parseIdempotencyKey,
+  requireAssetAdmin,
+  type AssetHttpRequest,
+} from './asset-http-support';
+import {
+  NodeLifecycleConflictError,
+  NodeLifecycleIdempotencyConflictError,
+} from '../../application/lifecycle/node-lifecycle.errors';
+import { NodeLifecyclePendingError } from '../../application/lifecycle/node-lifecycle-orchestrator';
 
 @ApiTags('Asset Placement')
 @ApiBearerAuth('HumanAccessToken')
@@ -127,6 +138,7 @@ export class AssetPlacementController {
   async unmap(
     @Req() request: AssetHttpRequest,
     @Param() rawParams: AssetPlacementParamsDto,
+    @Headers('idempotency-key') idempotencyHeader?: string,
   ): Promise<void> {
     await this.execute(async () => {
       const params = parseAssetPlacementRequest(
@@ -134,7 +146,9 @@ export class AssetPlacementController {
         rawParams,
         'Invalid Asset ID',
       );
-      await this.placements.unmap(params.asset_id, requireAssetAdmin(request));
+      await this.placements.unmap(params.asset_id, requireAssetAdmin(request), {
+        idempotencyKey: parseIdempotencyKey(idempotencyHeader),
+      });
     });
   }
 
@@ -148,6 +162,24 @@ export class AssetPlacementController {
         throw new NotFoundException(error.message);
       if (error instanceof AssetPlacementConflictError)
         throw new ConflictException(error.message);
+      if (
+        error instanceof NodeLifecycleConflictError ||
+        error instanceof NodeLifecycleIdempotencyConflictError
+      ) {
+        throw new ConflictException({
+          code: error.code,
+          ...(error instanceof NodeLifecycleConflictError
+            ? { operation_id: error.operationId }
+            : {}),
+        });
+      }
+      if (error instanceof NodeLifecyclePendingError) {
+        throw new ServiceUnavailableException({
+          code: 'NODE_LIFECYCLE_PENDING',
+          operation_id: error.operationId,
+          stage: error.stage,
+        });
+      }
       if (error instanceof DomainError)
         throw new BadRequestException({ message: error.message });
       if (error instanceof ForbiddenException) throw error;
