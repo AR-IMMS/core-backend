@@ -219,7 +219,7 @@ export function createFleetRequestHeaders(
   const headers: Record<string, string> = {
     accept: 'application/json',
     'x-arimms-actor-id': request.actor.actorId,
-    'x-arimms-request-id': request.actor.requestId,
+    'x-request-id': request.actor.requestId,
     'x-arimms-operation-id': request.operationId,
   };
   if (body !== undefined) {

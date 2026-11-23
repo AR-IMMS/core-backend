@@ -8,6 +8,7 @@ import type {
 } from '../fleet-http-client';
 import { FleetHttpClient } from '../fleet-http-client';
 import { FleetInvitationHttpAdapter } from '../fleet-invitation.http-adapter';
+import { FleetInstallationHttpAdapter } from '../fleet-installation.http-adapter';
 import { FleetNodeEnrollmentGateHttpAdapter } from '../fleet-node-enrollment-gate.http-adapter';
 
 const config: FleetHttpConfig = {
@@ -41,9 +42,10 @@ function makeAdapter(body: unknown, status = 200) {
 }
 
 describe('Fleet invitation HTTP adapter', () => {
-  test('creates with verified actor, stable operation ID, and idempotency key', async () => {
+  test('creates with verified actor, operation ID, TTL, and idempotency key', async () => {
     const { client, calls } = makeAdapter(
       {
+        schema_version: 1,
         invitation_id: 'invite-1',
         operation_id: 'op-1',
         node_id: 'node-1',
@@ -53,10 +55,9 @@ describe('Fleet invitation HTTP adapter', () => {
       },
       201,
     );
-    const adapter = new FleetInvitationHttpAdapter(client);
 
     await expect(
-      adapter.create({
+      new FleetInvitationHttpAdapter(client).create({
         nodeId: 'node-1',
         operationId: 'op-1',
         idempotencyKey: 'same-key',
@@ -68,44 +69,155 @@ describe('Fleet invitation HTTP adapter', () => {
       status: 'PENDING',
       invitationToken: 'one-time-secret',
     });
-    expect(calls[0].url.pathname).toBe('/internal/v1/enrollment-invitations');
+
+    expect(calls[0].url.pathname).toBe('/internal/v1/enrollment/invitations');
     expect(calls[0].request).toMatchObject({
       operationId: 'op-1',
       idempotencyKey: 'same-key',
       actor,
-      body: { schema_version: 1, operation_id: 'op-1', node_id: 'node-1' },
+      body: {
+        schema_version: 1,
+        operation_id: 'op-1',
+        node_id: 'node-1',
+        requested_ttl_seconds: 600,
+      },
     });
   });
 
-  test('does not expose a secret for redeemed, cancelled, or expired invitations', async () => {
-    for (const status of ['REDEEMED', 'CANCELLED', 'EXPIRED'] as const) {
-      const payload = {
-        invitation_id: 'invite-1',
-        operation_id: 'op-1',
-        node_id: 'node-1',
-        status,
-        expires_at: '2026-11-22T00:10:00.000Z',
-        ...(status === 'REDEEMED' ? { installation_id: 'install-1' } : {}),
-      };
-      const { client } = makeAdapter(payload);
-      const result = await new FleetInvitationHttpAdapter(
-        client,
-      ).getByOperation({
-        operationId: 'op-1',
-        actor,
-      });
-      expect(result).toMatchObject({ status });
-      expect(result).not.toHaveProperty('invitationToken');
-    }
+  test('reads secret-free installation projections from both Core lookup routes', async () => {
+    const { client, calls } = makeAdapter({
+      installation_id: 'install-1',
+      node_id: 'node-1',
+      status: 'ACTIVE',
+    });
+    const adapter = new FleetInstallationHttpAdapter(client);
+
+    await expect(
+      adapter.findById({ installationId: 'install-1', actor }),
+    ).resolves.toEqual({
+      installationId: 'install-1',
+      nodeId: 'node-1',
+      status: 'ACTIVE',
+    });
+    await expect(
+      adapter.findActiveByNode({ nodeId: 'node-1', actor }),
+    ).resolves.toEqual({
+      installationId: 'install-1',
+      nodeId: 'node-1',
+      status: 'ACTIVE',
+    });
+
+    expect(calls.map((call) => call.url.pathname)).toEqual([
+      '/internal/v1/installations/install-1',
+      '/internal/v1/nodes/node-1/active-installation',
+    ]);
   });
 
-  test('rejects terminal replay that includes a stale invitation secret', async () => {
+  test('rejects an installation response for a different agent ID', async () => {
     const { client } = makeAdapter({
+      installation_id: 'another-installation',
+      node_id: 'node-1',
+      status: 'ACTIVE',
+    });
+
+    await expect(
+      new FleetInstallationHttpAdapter(client).findById({
+        installationId: 'install-1',
+        actor,
+      }),
+    ).rejects.toBeInstanceOf(FleetProtocolError);
+  });
+
+  test('rejects an active-installation response for a different Node ID', async () => {
+    const { client } = makeAdapter({
+      installation_id: 'install-1',
+      node_id: 'another-node',
+      status: 'ACTIVE',
+    });
+
+    await expect(
+      new FleetInstallationHttpAdapter(client).findActiveByNode({
+        nodeId: 'node-1',
+        actor,
+      }),
+    ).rejects.toBeInstanceOf(FleetProtocolError);
+  });
+  test('cancels with the Fleet enrollment invitation route', async () => {
+    const { client, calls } = makeAdapter({}, 204);
+
+    await new FleetInvitationHttpAdapter(client).cancel({
+      invitationId: 'invite-1',
+      operationId: 'op-1',
+      actor,
+    });
+
+    expect(calls[0].url.pathname).toBe(
+      '/internal/v1/enrollment/invitations/invite-1/cancel',
+    );
+    expect(calls[0].request.body).toEqual({
+      schema_version: 1,
+      operation_id: 'op-1',
+    });
+  });
+  test('decodes secret-free Fleet EXCHANGED status as Core REDEEMED', async () => {
+    const payload = {
+      schema_version: 1,
+      operation_id: 'op-1',
+      invitation_id: 'invite-1',
+      node_id: 'node-1',
+      status: 'EXCHANGED',
+      agent_id: 'install-1',
+      credential_id: 'credential-1',
+    };
+    const { client, calls } = makeAdapter(payload);
+
+    await expect(
+      new FleetInvitationHttpAdapter(client).getByOperation({
+        operationId: 'op-1',
+        actor,
+      }),
+    ).resolves.toEqual({
+      invitationId: 'invite-1',
+      operationId: 'op-1',
+      nodeId: 'node-1',
+      status: 'REDEEMED',
+      installationId: 'install-1',
+    });
+
+    expect(calls[0].url.pathname).toBe(
+      '/internal/v1/enrollment/operations/op-1',
+    );
+  });
+
+  test('accepts pending status without an expiry or token', async () => {
+    const { client } = makeAdapter({
+      schema_version: 1,
+      operation_id: 'op-1',
+      invitation_id: 'invite-1',
+      node_id: 'node-1',
+      status: 'PENDING',
+    });
+
+    await expect(
+      new FleetInvitationHttpAdapter(client).getByOperation({
+        operationId: 'op-1',
+        actor,
+      }),
+    ).resolves.toEqual({
+      invitationId: 'invite-1',
+      operationId: 'op-1',
+      nodeId: 'node-1',
+      status: 'PENDING',
+    });
+  });
+
+  test('rejects operation status that includes a stale invitation secret', async () => {
+    const { client } = makeAdapter({
+      schema_version: 1,
       invitation_id: 'invite-1',
       operation_id: 'op-1',
       node_id: 'node-1',
       status: 'EXPIRED',
-      expires_at: '2026-11-22T00:10:00.000Z',
       invitation_token: 'stale-secret',
     });
 

@@ -52,7 +52,7 @@ describe('FleetHttpClient', () => {
       createFleetRequestHeaders(request, JSON.stringify(request.body)),
     ).toMatchObject({
       'x-arimms-actor-id': 'user-1',
-      'x-arimms-request-id': 'request-1',
+      'x-request-id': 'request-1',
       'x-arimms-operation-id': 'operation-1',
       'idempotency-key': 'key-1',
       'content-type': 'application/json',

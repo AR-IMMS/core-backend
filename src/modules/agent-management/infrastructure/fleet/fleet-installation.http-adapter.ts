@@ -17,9 +17,10 @@ export class FleetInstallationHttpAdapter implements FleetInstallationPort {
     readonly actor: FleetActorContext;
   }): Promise<FleetInstallationView | null> {
     return this.find(
-      `installations/${encodeURIComponent(input.installationId)}`,
+      'installations/' + encodeURIComponent(input.installationId),
       input.actor,
       input.installationId,
+      'installation_id',
     );
   }
 
@@ -28,9 +29,10 @@ export class FleetInstallationHttpAdapter implements FleetInstallationPort {
     readonly actor: FleetActorContext;
   }): Promise<FleetInstallationView | null> {
     return this.find(
-      `nodes/${encodeURIComponent(input.nodeId)}/active-installation`,
+      'nodes/' + encodeURIComponent(input.nodeId) + '/active-installation',
       input.actor,
       input.nodeId,
+      'node_id',
     );
   }
 
@@ -38,15 +40,21 @@ export class FleetInstallationHttpAdapter implements FleetInstallationPort {
     path: string,
     actor: FleetActorContext,
     expectedId: string,
+    expectedIdentityField: 'installation_id' | 'node_id',
   ): Promise<FleetInstallationView | null> {
     try {
       const value = await this.client.request<unknown>({
         method: 'GET',
         path,
         actor,
-        operationId: `read:${expectedId}`,
+        operationId: 'read:' + expectedId,
       });
-      if (!isInstallation(value)) throw new FleetProtocolError();
+      if (
+        !isInstallation(value) ||
+        value[expectedIdentityField] !== expectedId
+      ) {
+        throw new FleetProtocolError();
+      }
       return {
         installationId: value.installation_id,
         nodeId: value.node_id ?? null,
