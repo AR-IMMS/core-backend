@@ -1,9 +1,31 @@
 # Core Backend ↔ Fleet Manager Integration Design
 
-**Status:** Core invitation/sync baseline and Core lifecycle gate orchestration implemented; production Fleet wire behavior remains unapproved and unverified.
+**Status:** Core invitation/sync baseline and Core lifecycle gate orchestration are implemented. Core now matches the proposed Fleet registration v1 routes and status DTO. Live three-service compatibility remains unverified; the shared wire contract remains proposed.
 **Scope:** Core side of Fleet Manager integration for the B+ architecture.  
 **Contract baseline:** The preceding version references `docs/shared/contracts/fleet-management/`; that submodule is unavailable in this worktree, so the C01/C04 statements were not independently revalidated for this revision. Treat them as prior-document citations and review drafts, not wire contracts.
 
+### Current proposal-level adapter mapping
+
+Core now calls POST /internal/v1/enrollment/invitations,
+GET /internal/v1/enrollment/operations/{operation_id},
+POST /internal/v1/enrollment/invitations/{invitation_id}/cancel, and the
+secret-free installation reads
+GET /internal/v1/installations/{agent_id} and
+GET /internal/v1/nodes/{node_id}/active-installation. The service client uses
+mTLS, X-Request-Id, operation and idempotency headers, and a verified actor
+attribution header.
+
+Fleet operation status uses EXCHANGED; Core normalizes that to its local
+REDEEMED state and maps Fleet agent_id to Core's installation_id
+projection. Status does not contain invitation tokens or expiry. If Core sees
+a still-pending status without a token, it retries the identical create request
+with the same Fleet operation/idempotency ID to recover the pending secret.
+If that request conflicts due to a concurrent exchange, Core re-reads status
+and returns only the confirmed non-pending state.
+
+These paths and mappings implement the Fleet OpenAPI proposal, not an accepted
+cross-repository contract. Production Fleet compatibility and OpAMP connection
+remain unverified.
 ## 1. Current-state findings
 
 ### Core Agent Management
