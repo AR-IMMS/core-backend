@@ -82,7 +82,7 @@ export class MongoFleetEnrollmentOperationStore implements FleetEnrollmentOperat
       readonly invitationId: string;
       readonly status: FleetInvitationState;
       readonly installationId?: string;
-      readonly expiresAt: Date;
+      readonly expiresAt?: Date;
       readonly updatedAt: Date;
     },
     context: UnitOfWorkContext,
@@ -181,14 +181,14 @@ function invitationFields(input: {
   readonly invitationId: string;
   readonly status: FleetInvitationState;
   readonly installationId?: string;
-  readonly expiresAt: Date;
+  readonly expiresAt?: Date;
   readonly updatedAt: Date;
 }): Record<string, unknown> {
   const status = mapStatus(input.status);
   return {
     invitationId: input.invitationId,
     ...(status ? { status } : {}),
-    expiresAt: input.expiresAt,
+    ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
     updatedAt: input.updatedAt,
     ...(input.installationId ? { installationId: input.installationId } : {}),
   };

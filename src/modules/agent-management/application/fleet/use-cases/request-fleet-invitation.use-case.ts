@@ -16,6 +16,7 @@ import {
 } from '../../../domain/errors/registration.errors';
 import {
   FleetConflictError,
+  FleetProtocolError,
   FleetUnavailableError,
 } from '../errors/fleet-errors';
 import { FleetOperationPendingError } from '../errors/fleet-operation-pending.error';
@@ -185,36 +186,28 @@ export class RequestFleetInvitationUseCase {
       throw error;
     }
     if (!invitation) {
-      if (operation.status === 'REQUEST_PENDING') {
-        try {
-          invitation = await this.fleetInvitations.create({
-            nodeId: operation.nodeId,
-            operationId: operation.operationId,
-            idempotencyKey: operation.operationId,
-            requestedTtlSeconds: INVITATION_TTL_SECONDS,
-            actor,
-          });
-        } catch (error) {
-          if (error instanceof FleetUnavailableError && error.outcomeUnknown) {
-            throw new FleetOperationPendingError(
-              operation.operationId,
-              'FLEET_CREATE_UNKNOWN',
-            );
-          }
-          throw error;
-        }
-        await this.persistInvitation(operation, invitation, actor);
-        return this.toResponse(invitation, operation.operationId);
+      if (
+        operation.status !== 'REQUEST_PENDING' &&
+        operation.status !== 'INVITATION_ISSUED'
+      ) {
+        return {
+          operationId: operation.operationId,
+          status: 'REQUEST_PENDING' as const,
+        };
       }
-      return {
-        operationId: operation.operationId,
-        status: 'REQUEST_PENDING' as const,
-      };
+      invitation = await this.replayPendingCreate(operation, actor);
     }
     if (invitation.nodeId !== operation.nodeId) {
       throw new FleetUnavailableError(false);
     }
-    if (invitation.status === 'PENDING' && invitation.expiresAt <= this.now()) {
+    if (invitation.status === 'PENDING' && !invitation.invitationToken) {
+      invitation = await this.replayPendingCreate(operation, actor);
+    }
+    if (
+      invitation.status === 'PENDING' &&
+      invitation.expiresAt &&
+      invitation.expiresAt <= this.now()
+    ) {
       invitation = {
         ...invitation,
         status: 'EXPIRED',
@@ -225,11 +218,54 @@ export class RequestFleetInvitationUseCase {
     return this.toResponse(invitation, operation.operationId);
   }
 
+  private async replayPendingCreate(
+    operation: FleetEnrollmentOperation,
+    actor: FleetActorContext,
+  ): Promise<FleetInvitationView> {
+    try {
+      return await this.fleetInvitations.create({
+        nodeId: operation.nodeId,
+        operationId: operation.operationId,
+        idempotencyKey: operation.operationId,
+        requestedTtlSeconds: INVITATION_TTL_SECONDS,
+        actor,
+      });
+    } catch (error) {
+      if (error instanceof FleetConflictError) {
+        try {
+          const current = await this.fleetInvitations.getByOperation({
+            operationId: operation.operationId,
+            actor,
+          });
+          if (current && current.status !== 'PENDING') return current;
+        } catch (readError) {
+          if (readError instanceof FleetUnavailableError) {
+            throw new FleetOperationPendingError(
+              operation.operationId,
+              'FLEET_READ_AFTER_CREATE_CONFLICT',
+            );
+          }
+          throw readError;
+        }
+      }
+      if (error instanceof FleetUnavailableError && error.outcomeUnknown) {
+        throw new FleetOperationPendingError(
+          operation.operationId,
+          'FLEET_CREATE_UNKNOWN',
+        );
+      }
+      throw error;
+    }
+  }
+
   private async persistInvitation(
     operation: FleetEnrollmentOperation,
     invitation: FleetInvitationView,
     actor: FleetActorContext,
   ): Promise<void> {
+    if (invitation.status === 'PENDING' && !invitation.expiresAt) {
+      throw new FleetProtocolError();
+    }
     try {
       await this.unitOfWork.run(async (context) => {
         const firstRecording = await this.operations.recordInvitation(
@@ -238,14 +274,18 @@ export class RequestFleetInvitationUseCase {
             invitationId: invitation.invitationId,
             status: invitation.status,
             installationId: invitation.installationId,
-            expiresAt: invitation.expiresAt,
+            ...(invitation.expiresAt
+              ? { expiresAt: invitation.expiresAt }
+              : {}),
             updatedAt: this.now(),
           },
           context,
         );
         if (firstRecording && invitation.status === 'PENDING') {
+          const expiresAt = invitation.expiresAt;
+          if (!expiresAt) throw new FleetProtocolError();
           await this.outbox.append(
-            this.auditFact(operation, invitation, actor),
+            this.auditFact(operation, { ...invitation, expiresAt }, actor),
             context,
           );
         }
@@ -263,7 +303,9 @@ export class RequestFleetInvitationUseCase {
     operationId: string,
   ): FleetInvitationOperationResponse {
     const status =
-      invitation.status === 'PENDING' && invitation.expiresAt <= this.now()
+      invitation.status === 'PENDING' &&
+      invitation.expiresAt !== undefined &&
+      invitation.expiresAt <= this.now()
         ? 'EXPIRED'
         : invitation.status;
     return {
@@ -271,7 +313,7 @@ export class RequestFleetInvitationUseCase {
       invitationId: invitation.invitationId,
       nodeId: invitation.nodeId,
       status,
-      expiresAt: invitation.expiresAt,
+      ...(invitation.expiresAt ? { expiresAt: invitation.expiresAt } : {}),
       ...(status === 'PENDING' && invitation.invitationToken
         ? { invitationToken: invitation.invitationToken }
         : {}),
@@ -283,7 +325,7 @@ export class RequestFleetInvitationUseCase {
 
   private auditFact(
     operation: FleetEnrollmentOperation,
-    invitation: FleetInvitationView,
+    invitation: FleetInvitationView & { readonly expiresAt: Date },
     actor: FleetActorContext,
   ): AuditFactV2 {
     return {

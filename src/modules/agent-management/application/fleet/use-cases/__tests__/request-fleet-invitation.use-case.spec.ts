@@ -181,6 +181,89 @@ describe('RequestFleetInvitationUseCase', () => {
     expect(fleetInvitations.create).not.toHaveBeenCalled();
   });
 
+  test('recovers a pending invitation secret by replaying the same Fleet create operation', async () => {
+    operations.findByIdempotencyHash.mockResolvedValue({
+      operationId: 'op-1',
+      actorId: 'user-1',
+      nodeId: 'node-1',
+      fingerprint,
+      status: 'INVITATION_ISSUED',
+      invitationId: 'invite-1',
+    });
+    fleetInvitations.getByOperation.mockResolvedValue({
+      invitationId: 'invite-1',
+      operationId: 'op-1',
+      nodeId: 'node-1',
+      status: 'PENDING',
+    });
+    fleetInvitations.create.mockResolvedValue({
+      invitationId: 'invite-1',
+      operationId: 'op-1',
+      nodeId: 'node-1',
+      status: 'PENDING',
+      expiresAt: new Date('2026-11-22T01:00:00Z'),
+      invitationToken: 'same-pending-secret',
+    });
+
+    await expect(
+      useCase.execute({
+        nodeId: 'node-1',
+        idempotencyKey: 'client-key-12345678',
+        actor,
+      }),
+    ).resolves.toMatchObject({
+      status: 'PENDING',
+      invitationId: 'invite-1',
+      invitationToken: 'same-pending-secret',
+    });
+    expect(fleetInvitations.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodeId: 'node-1',
+        operationId: 'op-1',
+        idempotencyKey: 'op-1',
+        requestedTtlSeconds: 600,
+      }),
+    );
+  });
+  test('re-reads status if a pending invitation is exchanged during secret recovery', async () => {
+    operations.findByIdempotencyHash.mockResolvedValue({
+      operationId: 'op-1',
+      actorId: 'user-1',
+      nodeId: 'node-1',
+      fingerprint,
+      status: 'INVITATION_ISSUED',
+      invitationId: 'invite-1',
+    });
+    fleetInvitations.getByOperation
+      .mockResolvedValueOnce({
+        invitationId: 'invite-1',
+        operationId: 'op-1',
+        nodeId: 'node-1',
+        status: 'PENDING',
+      })
+      .mockResolvedValueOnce({
+        invitationId: 'invite-1',
+        operationId: 'op-1',
+        nodeId: 'node-1',
+        status: 'REDEEMED',
+        installationId: 'install-1',
+      });
+    fleetInvitations.create.mockRejectedValueOnce(
+      new FleetConflictError('CONFLICT'),
+    );
+
+    await expect(
+      useCase.execute({
+        nodeId: 'node-1',
+        idempotencyKey: 'client-key-12345678',
+        actor,
+      }),
+    ).resolves.toMatchObject({
+      status: 'REDEEMED',
+      installationId: 'install-1',
+    });
+    expect(fleetInvitations.getByOperation).toHaveBeenCalledTimes(2);
+  });
   test('returns operation state and no secret after redemption', async () => {
     operations.findByIdempotencyHash.mockResolvedValue({
       operationId: 'op-1',

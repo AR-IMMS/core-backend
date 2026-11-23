@@ -46,7 +46,7 @@ export interface FleetEnrollmentOperationPort {
       readonly invitationId: string;
       readonly status: FleetInvitationState;
       readonly installationId?: string;
-      readonly expiresAt: Date;
+      readonly expiresAt?: Date;
       readonly updatedAt: Date;
     },
     context: UnitOfWorkContext,

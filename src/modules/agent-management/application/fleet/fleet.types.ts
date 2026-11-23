@@ -11,7 +11,7 @@ export interface FleetInvitationView {
   readonly operationId: string;
   readonly nodeId: string;
   readonly status: FleetInvitationState;
-  readonly expiresAt: Date;
+  readonly expiresAt?: Date;
   readonly invitationToken?: string;
   readonly installationId?: string;
 }

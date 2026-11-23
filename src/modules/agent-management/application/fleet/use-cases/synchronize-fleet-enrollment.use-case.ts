@@ -92,7 +92,9 @@ export class SynchronizeFleetEnrollmentUseCase {
       return this.response(
         operation.operationId,
         invitation,
-        invitation.expiresAt <= this.now() ? 'EXPIRED' : 'PENDING',
+        invitation.expiresAt && invitation.expiresAt <= this.now()
+          ? 'EXPIRED'
+          : 'PENDING',
       );
     }
     if (invitation.status === 'CANCELLED' || invitation.status === 'EXPIRED') {
