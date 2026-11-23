@@ -212,3 +212,28 @@ Pull requests should target `dev`, including a brief description of changes and 
 - Do not place business logic into `shared` or `platform` purely for convenience of importing.
 - Update OpenAPI, README, or related documentation within the same Pull Request whenever contracts or setup instructions change.
 - Avoid adding abstractions before an actual use case explicitly requires them.
+
+### Run the API and MongoDB with Docker Compose
+
+The development Compose stack builds Core as a non-root production Node image
+and starts the API with its MongoDB replica set. It publishes the API on
+`127.0.0.1:18080` and MongoDB on `127.0.0.1:27017` by default. Override
+`CORE_API_HOST_PORT` or `CORE_MONGODB_HOST_PORT` when either host port is in use.
+The MongoDB data remains in the named `mongodb-data` volume when the stack stops.
+MongoDB is bound to host loopback; Compose may recreate an existing container to
+apply that binding, while retaining its named data volume.
+
+Create `.env.local` from `.env.example` if it does not exist, and replace the
+recovery-key placeholder with a private local 32-byte base64 key before starting.
+The env file is passed to the container at runtime and excluded from the Docker
+build context; never commit it.
+
+```bash
+docker compose up --build --wait
+docker compose ps
+```
+
+Check readiness at `http://127.0.0.1:18080/health/ready` and follow logs with
+`docker compose logs -f core-backend`. Stop the stack with `docker compose down`;
+the database volume is retained. Use `docker compose down -v` only when you
+intend to delete the local MongoDB data.
