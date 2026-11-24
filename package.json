@@ -32,6 +32,7 @@
     "agent-access:integration": "node -r ts-node/register -r tsconfig-paths/register test/agent-access.integration.ts",
     "asset-retirement:integration": "node -r ts-node/register -r tsconfig-paths/register test/asset-retirement.integration.ts",
     "asset-topology:debug-room-map": "node -r ts-node/register -r tsconfig-paths/register src/modules/asset-topology/scripts/debug-room-map.ts",
+    "asset-topology:seed-example": "node -r ts-node/register -r tsconfig-paths/register src/modules/asset-topology/scripts/seed-example-topology.ts",
     "iam:seed-admin": "node -r ts-node/register -r tsconfig-paths/register src/modules/iam/scripts/seed-initial-admin.ts",
     "prepare": "husky"
   },
