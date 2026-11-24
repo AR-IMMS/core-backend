@@ -133,9 +133,6 @@ async function main(): Promise<void> {
           room.id,
           {
             name: 'Server Room B',
-            widthMm: 12_000,
-            depthMm: 8_000,
-            gridSnapMm: 100,
           },
           { type: 'user', id: 'admin-1' },
         );

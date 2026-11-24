@@ -11,6 +11,45 @@ export const envSchema = z
       .default('info'),
 
     APP_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
+    AGENT_CONTROL_PLANE_BASE_URL: z
+      .string()
+      .trim()
+      .url()
+      .refine(
+        (value) => new URL(value).protocol === 'https:',
+        'AGENT_CONTROL_PLANE_BASE_URL must use HTTPS',
+      ),
+    AGENT_ENROLLMENT_RECOVERY_KEY: z.string().refine((value) => {
+      const key = Buffer.from(value, 'base64');
+      return key.length === 32 && key.toString('base64') === value;
+    }, 'AGENT_ENROLLMENT_RECOVERY_KEY must be a base64-encoded 32-byte key'),
+
+    FLEET_MANAGER_BASE_URL: z
+      .string()
+      .trim()
+      .url()
+      .refine((value) => {
+        const url = new URL(value);
+        return (
+          url.protocol === 'https:' &&
+          !url.username &&
+          !url.password &&
+          !url.search &&
+          !url.hash
+        );
+      }, 'FLEET_MANAGER_BASE_URL must use HTTPS without credentials, query, or fragment')
+      .optional(),
+    FLEET_CLIENT_CERTIFICATE: z.string().min(1).optional(),
+    FLEET_CLIENT_KEY: z.string().min(1).optional(),
+    FLEET_CA_CERTIFICATE: z.string().min(1).optional(),
+    FLEET_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(3_000),
+    FLEET_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+    FLEET_MAX_RETRY_DELAY_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(5_000)
+      .default(1_000),
 
     // Optional until the Ticket integration module is composed. Its provider
     // validates the complete configuration without exposing credential values.
@@ -118,6 +157,27 @@ export const envSchema = z
     ),
   })
   .superRefine((env, context) => {
+    if (
+      Boolean(env.FLEET_CLIENT_CERTIFICATE) !== Boolean(env.FLEET_CLIENT_KEY)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['FLEET_CLIENT_CERTIFICATE'],
+        message:
+          'FLEET_CLIENT_CERTIFICATE and FLEET_CLIENT_KEY must be configured together',
+      });
+    }
+    if (
+      env.FLEET_MANAGER_BASE_URL &&
+      (!env.FLEET_CLIENT_CERTIFICATE || !env.FLEET_CLIENT_KEY)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['FLEET_MANAGER_BASE_URL'],
+        message:
+          'Fleet integration requires FLEET_CLIENT_CERTIFICATE and FLEET_CLIENT_KEY',
+      });
+    }
     const browserOrigins = env.IAM_BROWSER_ALLOWED_ORIGINS.split(',')
       .map((item) => item.trim())
       .filter(Boolean);

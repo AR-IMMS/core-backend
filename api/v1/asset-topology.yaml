@@ -13,7 +13,7 @@ paths:
     get:
       operationId: listAssets
       summary: List Assets by canonical ID
-      description: Lists Assets in stable Asset ID order. AT-03 has no filters.
+      description: Lists Assets in stable Asset ID order, optionally filtered by type, lifecycle state, current Rack placement, or a partial match against Asset Name or manufacturer serial number.
       security:
         - HumanAccessToken: []
       x-required-permissions: [asset:read]
@@ -27,6 +27,23 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: asset_type
+          in: query
+          required: false
+          schema: { type: string, enum: [NODE] }
+        - name: lifecycle_state
+          in: query
+          required: false
+          schema: { type: string, enum: [ACTIVE, MAINTENANCE, RETIRED] }
+        - name: rack_id
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive partial match against Asset Name or manufacturer serial number.
+          schema: { type: string, minLength: 1, maxLength: 128 }
       responses:
         '200':
           description: Cursor-paginated Asset list.
@@ -105,6 +122,87 @@ paths:
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/assets/{asset_id}/retire:
+    parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    post:
+      operationId: retireAsset
+      summary: Retire an unassigned, unbound Asset
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Optional transition key. Existing clients may omit it; pending operations can be retried by operation_id.
+          schema: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        '204':
+          description: Asset retired or already retired.
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '503': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/node-lifecycle-operations:
+    get:
+      operationId: listPendingNodeLifecycleOperations
+      summary: List pending Node retirement and unassignment operations
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Pending operations without secrets or caller supplied identity.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/NodeLifecycleOperation' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+  /api/v1/asset-topology/node-lifecycle-operations/{operation_id}/retry:
+    parameters:
+      - name: operation_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    post:
+      operationId: retryNodeLifecycleOperationById
+      summary: Retry a pending Node lifecycle operation using the same Fleet operation ID
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:manage]
+      x-required-role: IT_ADMIN
+      responses:
+        '200':
+          description: Current durable operation status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NodeLifecycleOperation' }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '404': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '503': { $ref: ../baseline.yaml#/components/responses/Problem }
 
   /api/v1/asset-topology/data-centers/default:
     get:
@@ -186,8 +284,15 @@ paths:
         - HumanAccessToken: []
       x-required-permissions: [asset:manage]
       x-required-role: IT_ADMIN
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Optional transition key. Existing clients may omit it; pending operations can be retried by operation_id.
+          schema: { type: string, minLength: 1, maxLength: 128 }
       responses:
         '204': { description: Asset unmapped. }
+        '503': { $ref: ../baseline.yaml#/components/responses/Problem }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -224,6 +329,12 @@ paths:
       security:
         - HumanAccessToken: []
       x-required-permissions: [asset:read]
+      parameters:
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive partial match against Site Name.
+          schema: { type: string, minLength: 1, maxLength: 128 }
       responses:
         '200':
           description: Sites under the requested Data Center.
@@ -327,6 +438,12 @@ paths:
       security:
         - HumanAccessToken: []
       x-required-permissions: [asset:read]
+      parameters:
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive partial match against Room Name.
+          schema: { type: string, minLength: 1, maxLength: 128 }
       responses:
         '200':
           description: Active Rooms under the requested Site. Retired Rooms are excluded.
@@ -558,6 +675,31 @@ paths:
               schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
         '428': { $ref: ../baseline.yaml#/components/responses/Problem }
         '422': { $ref: ../baseline.yaml#/components/responses/Problem }
+
+  /api/v1/asset-topology/racks:
+    get:
+      operationId: listRacks
+      summary: List Racks by canonical ID
+      security:
+        - HumanAccessToken: []
+      x-required-permissions: [asset:read]
+      parameters:
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive partial match against Rack Name.
+          schema: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        '200':
+          description: Racks in stable Rack ID order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RackResponse' }
+        '400': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '401': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '403': { $ref: ../baseline.yaml#/components/responses/Problem }
 
   /api/v1/asset-topology/racks/{rack_id}:
     parameters:
@@ -876,6 +1018,17 @@ components:
         type: string
         minLength: 1
         maxLength: 128
+    NodeLifecycleOperation:
+      type: object
+      required: [operation_id, node_id, action, stage, created_at, updated_at]
+      properties:
+        operation_id: { type: string }
+        node_id: { type: string }
+        action: { type: string, enum: [RETIRE, UNMAP] }
+        stage: { type: string, enum: [GATE_CLOSE_PENDING, CORE_CHANGE_PENDING, COMMIT_PENDING_GATE_FINALIZE, ABORT_PENDING_GATE_RESTORE, COMPLETE] }
+        error_code: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
     Asset:
       type: object
       required:

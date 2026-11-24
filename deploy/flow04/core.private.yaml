@@ -1,4 +1,4 @@
-# Overlay on core-backend/compose.yaml with project name core-backend.
+# Overlay on deploy/flow04/mongo.private.yaml with project name core-backend.
 services:
   core:
     image: arimms-core-flow04:local

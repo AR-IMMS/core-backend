@@ -1,4 +1,5 @@
 import type { AssetLifecycleState } from '../domain/asset/asset';
+import type { UnitOfWorkContext } from '@platform/events';
 
 /** Opaque canonical Asset identity exposed to module consumers. */
 export type AssetId = string & { readonly __assetTopologyId: 'AssetId' };
@@ -44,9 +45,26 @@ export interface AssetReference {
 /** Independently provided Asset lookup for consumers that do not need topology. */
 export interface AssetTopologyAssetQueries {
   getAsset(assetId: AssetId): Promise<AssetReference | null>;
+  getAgentEnrollmentNodeEligibility(assetId: AssetId): Promise<{
+    readonly exists: boolean;
+    readonly active: boolean;
+    readonly hasActivePlacement: boolean;
+  }>;
   getAssetPlacementHistory(
     assetId: AssetId,
   ): Promise<readonly AssetPlacementHistoryEntry[] | null>;
+}
+
+/** Transaction-bound Asset coordination used by Agent enrollment. */
+export interface AssetTopologyAgentEnrollmentCommands {
+  /**
+   * Confirms an ACTIVE, placed Asset and writes its coordination revision in
+   * the caller's transaction so enrollment serializes with Asset retirement.
+   */
+  serializeAgentEnrollment(
+    assetId: AssetId,
+    context: UnitOfWorkContext,
+  ): Promise<boolean>;
 }
 
 /** Current Room-map location of a Rack, or `null` when it has no location. */

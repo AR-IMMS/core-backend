@@ -6,6 +6,7 @@ import { TicketModule } from '@modules/ticket/ticket.module';
 import { AuditEventConsumer } from '@modules/audit/application/audit-event.consumer';
 import { AuditModule } from '@modules/audit/audit.module';
 import { AssetTopologyModule } from '@modules/asset-topology/asset-topology.module';
+import { AgentManagementModule } from '@modules/agent-management/agent-management.module';
 import { IamModule } from '@modules/iam/iam.module';
 import { PlatformConfigModule } from '@platform/config';
 import { DatabaseModule } from '@platform/database';
@@ -28,6 +29,7 @@ import { OutboxRelayScheduler } from './outbox-relay.scheduler';
     ),
     IamModule,
     AssetTopologyModule,
+    AgentManagementModule,
     HttpModule,
     DatabaseModule,
     PlatformEventsModule.register({

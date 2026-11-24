@@ -18,9 +18,14 @@ describe('Zammad configuration (unit)', () => {
   });
 
   it('retains optional settings through platform environment validation', () => {
-    expect(envSchema.parse({}).ZAMMAD_BASE_URL).toBeUndefined();
+    const baseEnvironment = {
+      AGENT_CONTROL_PLANE_BASE_URL: 'https://control.example.test',
+      AGENT_ENROLLMENT_RECOVERY_KEY: Buffer.alloc(32).toString('base64'),
+    };
+    expect(envSchema.parse(baseEnvironment).ZAMMAD_BASE_URL).toBeUndefined();
     expect(
       envSchema.parse({
+        ...baseEnvironment,
         ZAMMAD_BASE_URL: valid.baseUrl,
         ZAMMAD_API_TOKEN: valid.apiToken,
         ZAMMAD_EXPECTED_GROUP_ID: '42',

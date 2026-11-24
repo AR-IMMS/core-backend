@@ -213,7 +213,7 @@ function setup(
       })),
     priorityAvailable: jest.fn(async () => true),
   };
-  const assets: AssetTopologyAssetQueries = {
+  const assets: Pick<AssetTopologyAssetQueries, 'getAsset'> = {
     getAsset: jest.fn(
       async (id): ReturnType<AssetTopologyAssetQueries['getAsset']> =>
         id.startsWith('asset-')
@@ -226,7 +226,6 @@ function setup(
             }
           : null,
     ),
-    getAssetPlacementHistory: jest.fn(async () => null),
   };
   const listed = [actor, tech, admin].sort();
   const directory = {

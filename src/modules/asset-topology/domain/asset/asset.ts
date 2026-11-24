@@ -11,6 +11,8 @@ export const AssetErrorCode = {
   MODEL_TYPE_MISMATCH: 'ASSET_MODEL_TYPE_MISMATCH',
   INVALID_MAINTENANCE_STATE_TRANSITION:
     'ASSET_INVALID_MAINTENANCE_STATE_TRANSITION',
+  INVALID_RETIREMENT: 'ASSET_INVALID_RETIREMENT',
+  RETIRED_IMMUTABLE: 'ASSET_RETIRED_IMMUTABLE',
 } as const;
 
 export type AssetLifecycleState = 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
@@ -149,6 +151,7 @@ export class Asset {
    * @throws {DomainError} If the new name is empty
    */
   rename(name: string): Asset {
+    this.assertNotRetired();
     const normalizedName = name.trim();
 
     if (!normalizedName) {
@@ -170,6 +173,7 @@ export class Asset {
 
   /** Updates descriptive fields while preserving canonical identity and Type. */
   updateDescription(props: UpdateAssetDescriptionProps): Asset {
+    this.assertNotRetired();
     const name = props.name === undefined ? this.name : props.name.trim();
     if (!name) {
       throw new DomainError(
@@ -219,5 +223,34 @@ export class Asset {
       this.serialNumber,
       target,
     );
+  }
+
+  /** Retires an unmaintained Asset without changing its identity or history. */
+  retire(): Asset {
+    if (this.lifecycleState === 'RETIRED') return this;
+    if (this.lifecycleState !== 'ACTIVE') {
+      throw new DomainError(
+        AssetErrorCode.INVALID_RETIREMENT,
+        'Only ACTIVE Assets can be retired',
+      );
+    }
+
+    return new Asset(
+      this.id,
+      this.name,
+      this.assetTypeId,
+      this.assetModelId,
+      this.serialNumber,
+      'RETIRED',
+    );
+  }
+
+  private assertNotRetired(): void {
+    if (this.lifecycleState === 'RETIRED') {
+      throw new DomainError(
+        AssetErrorCode.RETIRED_IMMUTABLE,
+        'Retired Assets cannot be modified',
+      );
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import type { AssetActor } from '../../application/assets/asset-registration.use-case';
 import type { RoleCode } from '@modules/iam';
 
@@ -16,4 +16,19 @@ export function requireAssetAdmin(request: AssetHttpRequest): AssetActor {
     id: request.user.userId,
     context: request.requestId ? { request_id: request.requestId } : undefined,
   };
+}
+
+export function parseIdempotencyKey(
+  value: string | undefined,
+): string | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim();
+  if (
+    !normalized ||
+    normalized.length > 128 ||
+    /[^\x21-\x7e]/.test(normalized)
+  ) {
+    throw new BadRequestException({ code: 'INVALID_IDEMPOTENCY_KEY' });
+  }
+  return normalized;
 }

@@ -5,6 +5,7 @@ export const IAM_PERMISSION_CODES = [
   'user:grant',
   'asset:read',
   'asset:manage',
+  'agent:manage',
   'monitoring:read',
   'monitoring:manage',
   'incident:read',

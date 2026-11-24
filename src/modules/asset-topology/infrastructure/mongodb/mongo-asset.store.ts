@@ -34,6 +34,7 @@ interface AssetDocument {
   serialNumber?: string;
   lifecycleState: 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
   auditSequence: number;
+  agentBindingRevision?: number;
 }
 interface CatalogDocument {
   id: string;
@@ -128,13 +129,43 @@ export class MongoAssetStore implements AssetStorePort, AssetCatalogStorePort {
     return result.auditSequence;
   }
 
+  async serializeAgentEnrollmentEligibility(
+    assetId: string,
+    context: UnitOfWorkContext,
+  ): Promise<boolean> {
+    const result = await this.assets
+      .findOneAndUpdate(
+        { id: assetId, lifecycleState: 'ACTIVE' },
+        { $inc: { agentBindingRevision: 1 } },
+        { new: true, session: context },
+      )
+      .lean()
+      .exec();
+    return result !== null;
+  }
+
   async list(input: {
     readonly afterAssetId?: string;
     readonly limit: number;
+    readonly assetTypeId?: string;
+    readonly lifecycleState?: 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
+    readonly assetIds?: readonly string[];
+    readonly search?: string;
   }): Promise<{ readonly items: readonly Asset[]; readonly hasMore: boolean }> {
-    const filter = input.afterAssetId
-      ? { id: { $gt: input.afterAssetId } }
-      : {};
+    const filter: Record<string, unknown> = {};
+    const idFilter: Record<string, unknown> = {};
+    if (input.afterAssetId) idFilter.$gt = input.afterAssetId;
+    if (input.assetIds) idFilter.$in = input.assetIds;
+    if (Object.keys(idFilter).length) filter.id = idFilter;
+    if (input.assetTypeId) filter.assetTypeId = input.assetTypeId;
+    if (input.lifecycleState) filter.lifecycleState = input.lifecycleState;
+    if (input.search) {
+      const escaped = input.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.$or = [
+        { name: { $regex: escaped, $options: 'i' } },
+        { serialNumber: { $regex: escaped, $options: 'i' } },
+      ];
+    }
     const found = await this.assets
       .find(filter)
       .sort({ id: 1 })

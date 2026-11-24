@@ -3,12 +3,17 @@ import { Asset } from '../../../domain/asset/asset';
 import { Rack } from '../../../domain/topology/rack';
 import { AssetPlacement } from '../../../domain/placement/asset-placement';
 import { AssetPlacementManagementUseCases } from '../asset-placement-management.use-case';
+import type { AssetActor } from '../../assets/asset-registration.use-case';
 
 describe('AssetPlacementManagementUseCases', () => {
   const context = {} as never;
-  const actor = { type: 'user', id: 'admin-1' };
+  const actor: AssetActor = { type: 'user', id: 'admin-1' };
   const currentTime = new Date('2026-10-20T01:00:00.000Z');
-  let assets: { findById: jest.Mock; save: jest.Mock };
+  let assets: {
+    findById: jest.Mock;
+    save: jest.Mock;
+    serializeAgentEnrollmentEligibility: jest.Mock;
+  };
   let racks: { getRack: jest.Mock };
   let placements: {
     findActiveByAsset: jest.Mock;
@@ -18,6 +23,17 @@ describe('AssetPlacementManagementUseCases', () => {
   };
   let unitOfWork: { run: jest.Mock };
   let outbox: { append: jest.Mock };
+  const lifecycle = {
+    execute: jest.fn(
+      (input: {
+        change: (
+          context: never,
+          operation: { operationId: string },
+          actor: AssetActor,
+        ) => Promise<unknown>;
+      }) => input.change(context, { operationId: 'operation-1' }, actor),
+    ),
+  };
   let useCases: AssetPlacementManagementUseCases;
 
   const asset = Asset.register({
@@ -31,6 +47,7 @@ describe('AssetPlacementManagementUseCases', () => {
     assets = {
       findById: jest.fn().mockResolvedValue(asset),
       save: jest.fn().mockResolvedValue(1),
+      serializeAgentEnrollmentEligibility: jest.fn().mockResolvedValue(true),
     };
     racks = { getRack: jest.fn().mockResolvedValue(rack) };
     placements = {
@@ -49,6 +66,7 @@ describe('AssetPlacementManagementUseCases', () => {
       outbox as never,
       () => currentTime,
       () => 'generated-id',
+      lifecycle as never,
     );
   });
 
@@ -104,6 +122,9 @@ describe('AssetPlacementManagementUseCases', () => {
       currentTime,
       context,
     );
+    // Enrollment increments this same Asset document in its transaction, so
+    // the write conflict serializes legacy enrollment with unassignment.
+    expect(assets.save).toHaveBeenCalledWith(asset, context);
     expect(placements.save).toHaveBeenCalledWith(result, context);
     expect(result.rackId).toBe('rack-2');
     expect(outbox.append).toHaveBeenCalledWith(
@@ -181,6 +202,10 @@ describe('AssetPlacementManagementUseCases', () => {
     expect(placements.closeActive).toHaveBeenCalledWith(
       'asset-1',
       currentTime,
+      context,
+    );
+    expect(assets.serializeAgentEnrollmentEligibility).toHaveBeenCalledWith(
+      'asset-1',
       context,
     );
     expect(outbox.append).toHaveBeenCalledWith(

@@ -115,9 +115,14 @@ export class MongoTopologyStore implements TopologyStorePort {
       : null;
   }
 
-  async listSites(dataCenterId: string): Promise<readonly Site[]> {
+  async listSites(
+    dataCenterId: string,
+    search?: string,
+  ): Promise<readonly Site[]> {
+    const filter: Record<string, unknown> = { dataCenterId };
+    if (search) filter.name = { $regex: escapeRegex(search), $options: 'i' };
     const sites = await this.sites
-      .find({ dataCenterId })
+      .find(filter)
       .sort({ name: 1, id: 1 })
       .lean()
       .exec();
@@ -151,9 +156,14 @@ export class MongoTopologyStore implements TopologyStorePort {
     return result.auditSequence;
   }
 
-  async listRooms(siteId: string): Promise<readonly Room[]> {
+  async listRooms(siteId: string, search?: string): Promise<readonly Room[]> {
+    const filter: Record<string, unknown> = {
+      siteId,
+      status: { $ne: 'RETIRED' },
+    };
+    if (search) filter.name = { $regex: escapeRegex(search), $options: 'i' };
     const rooms = await this.rooms
-      .find({ siteId, status: { $ne: 'RETIRED' } })
+      .find(filter)
       .sort({ name: 1, id: 1 })
       .lean()
       .exec();
@@ -242,6 +252,10 @@ export class MongoTopologyStore implements TopologyStorePort {
       .exec();
     return result?.auditSequence ?? null;
   }
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function toSite(document: TopologySiteDocument): Site {

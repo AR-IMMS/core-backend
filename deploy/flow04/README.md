@@ -101,7 +101,7 @@ The existing ignored `.env.local` supplies runtime secrets through Compose.
 Do not print expanded `docker compose config` or `docker inspect` environments.
 `config --quiet` validates safely. The overlay overrides database and Zammad
 origins; a host-only `pnpm start` no longer reaches the private database.
-The base `compose.yaml` now puts MongoDB on the named internal network with
+The Flow 04 base `deploy/flow04/mongo.private.yaml` puts MongoDB on the named internal network with
 the `mongodb` alias and no host port. Starting it without the secure Core
 overlay therefore keeps Mongo private and discoverable by Core. The separate
 `compose.host-dev.yaml` uses a different project and database volume for
@@ -190,7 +190,7 @@ that rollback and close the gateway. Then use the original project files:
 # SECURITY ROLLBACK ONLY: ordinary clients must be disconnected before these commands.
 $repoRoot=(Get-Location).Path
 $env:FLOW04_REPO_ROOT=$repoRoot
-docker compose -p core-backend -f compose.yaml -f deploy/flow04/core.private.yaml stop core
+docker compose --project-directory . -p core-backend -f deploy/flow04/mongo.private.yaml -f deploy/flow04/core.private.yaml stop core
 docker compose -f deploy/flow04/admin.private.yaml --profile maintenance stop admin-gateway
 docker compose -p zammad-docker-compose --project-directory C:/ARIMMS-Services/zammad-docker-compose -f C:/ARIMMS-Services/zammad-docker-compose/docker-compose.yml up -d zammad-postgresql zammad-redis zammad-memcached zammad-elasticsearch zammad-railsserver zammad-scheduler zammad-websocket zammad-nginx zammad-backup
 # Keep secured Mongo private. Restoring a host connection to its existing data requires a separate decision.

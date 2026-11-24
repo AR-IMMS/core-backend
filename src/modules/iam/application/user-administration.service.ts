@@ -502,6 +502,8 @@ export class UserAdministrationService {
       'user:grant': 'Assign roles and additional permissions',
       'asset:read': 'View asset hierarchy and topology',
       'asset:manage': 'Create, update, and remove assets and mappings',
+      'agent:manage':
+        'Issue Agent bootstrap tokens and manage Agent enrollment',
       'monitoring:read': 'View monitoring status, metrics, and alerts',
       'monitoring:manage': 'Manage monitoring configuration and alert rules',
       'incident:read': 'View incidents, episodes, and evidence',

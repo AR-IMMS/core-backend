@@ -27,6 +27,10 @@ export const updateAssetSchema = z
 export const assetListQuerySchema = z.strictObject({
   cursor: z.string().trim().min(1).max(512).optional(),
   page_size: z.coerce.number().int().min(1).max(100).default(20),
+  asset_type: z.enum(ASSET_TYPE_CODES).optional(),
+  lifecycle_state: z.enum(['ACTIVE', 'MAINTENANCE', 'RETIRED']).optional(),
+  rack_id: id.optional(),
+  search: z.string().trim().min(1).max(128).optional(),
 });
 
 export class AssetParamsDto extends createZodDto(assetParamsSchema) {}

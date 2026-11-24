@@ -3,6 +3,7 @@ import 'reflect-metadata';
 /** Generic route policy labels shared by HTTP modules without domain coupling. */
 export type HttpRoutePolicy =
   | { readonly kind: 'public' }
+  | { readonly kind: 'agent-authenticated' }
   | { readonly kind: 'authenticated' }
   | {
       readonly kind: 'permissions';

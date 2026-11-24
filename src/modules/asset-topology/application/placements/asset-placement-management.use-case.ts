@@ -19,11 +19,14 @@ import { AssetReferenceNotFoundError } from '../assets/asset-registration.use-ca
 import type { RackStorePort } from '../racks/rack-store.port';
 import { RACK_STORE } from '../racks/rack-store.token';
 import {
+  AssetPlacementConflictError,
   ActiveAssetPlacementNotFoundError,
   type AssetPlacementStorePort,
 } from './asset-placement-store.port';
 import { ASSET_PLACEMENT_STORE } from './asset-placement-store.token';
 import { ASSET_CLOCK, ASSET_ID_GENERATOR } from '../assets/asset-runtime.token';
+import { NodeLifecycleOrchestrator } from '../lifecycle/node-lifecycle-orchestrator';
+import { DomainError } from '../../domain/shared/domain-error';
 
 @Injectable()
 export class AssetPlacementManagementUseCases {
@@ -37,6 +40,7 @@ export class AssetPlacementManagementUseCases {
     @Inject(ASSET_CLOCK) private readonly now: () => Date = () => new Date(),
     @Inject(ASSET_ID_GENERATOR)
     private readonly generateId: () => string = randomUUID,
+    private readonly lifecycle: NodeLifecycleOrchestrator,
   ) {}
 
   place(
@@ -146,24 +150,82 @@ export class AssetPlacementManagementUseCases {
     });
   }
 
-  unmap(assetId: string, actor: AssetActor): Promise<void> {
-    return this.unitOfWork.run(async (context) => {
-      const asset = await this.requireAsset(assetId, context);
-      AssetPlacementPolicy.assertAssetEligible(asset);
-      const current = await this.placements.findActiveByAsset(assetId, context);
-      if (!current) throw new ActiveAssetPlacementNotFoundError(assetId);
-      const closed = AssetPlacementPolicy.unmap(current, [current], this.now());
-      await this.placements.closeActive(assetId, closed.validTo!, context);
-      await this.recordChange(
-        asset,
-        actor,
-        context,
-        'asset_topology.asset.unmapped',
-        [
-          { field: 'rack_id', before: current.rackId },
-          { field: 'u_position', before: current.uPosition.value },
-        ],
-      );
+  unmap(
+    assetId: string,
+    actor: AssetActor,
+    options: {
+      readonly idempotencyKey?: string;
+      readonly operationId?: string;
+    } = {},
+  ): Promise<void> {
+    return this.lifecycle.execute({
+      nodeId: assetId,
+      action: 'UNMAP',
+      actor,
+      ...options,
+      change: async (context) => {
+        const asset = await this.requireAsset(assetId, context);
+        AssetPlacementPolicy.assertAssetEligible(asset);
+        // Legacy Core enrollment writes this same Asset document through the
+        // enrollment coordination command. This transaction write serializes
+        // unmap with enrollment, so neither can pass on a stale placement.
+        if (
+          !(await this.assets.serializeAgentEnrollmentEligibility(
+            assetId,
+            context,
+          ))
+        ) {
+          throw new AssetPlacementConflictError();
+        }
+        const current = await this.placements.findActiveByAsset(
+          assetId,
+          context,
+        );
+        if (!current) throw new ActiveAssetPlacementNotFoundError(assetId);
+        const closed = AssetPlacementPolicy.unmap(
+          current,
+          [current],
+          this.now(),
+        );
+        await this.placements.closeActive(assetId, closed.validTo!, context);
+        await this.recordChange(
+          asset,
+          actor,
+          context,
+          'asset_topology.asset.unmapped',
+          [
+            { field: 'rack_id', before: current.rackId },
+            { field: 'u_position', before: current.uPosition.value },
+          ],
+        );
+      },
+      isBusinessFailure: (error) =>
+        error instanceof DomainError ||
+        error instanceof AssetReferenceNotFoundError ||
+        error instanceof ActiveAssetPlacementNotFoundError,
+      recordAbort: async (context, operation, retryActor, safeCode) => {
+        await this.outbox.append(
+          {
+            event_id: this.generateId(),
+            event_type: AUDIT_FACT_EVENT_TYPE,
+            event_version: AUDIT_FACT_EVENT_VERSION_V2,
+            producer: 'asset-topology',
+            occurred_at: this.now().toISOString(),
+            resource: {
+              type: 'asset-topology.node-lifecycle-operation',
+              id: operation.operationId,
+              sequence: 1,
+            },
+            payload: {
+              actor: retryActor,
+              action: 'asset_topology.node_lifecycle.aborted',
+              changes: [{ field: 'outcome', after: safeCode }],
+            },
+            context: retryActor.context ?? {},
+          },
+          context,
+        );
+      },
     });
   }
 

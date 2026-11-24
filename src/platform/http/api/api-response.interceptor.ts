@@ -9,6 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { trace } from '@opentelemetry/api';
 import type { Response } from 'express';
 import { ClsService } from 'nestjs-cls';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { map, type Observable } from 'rxjs';
 
 import { createApiMeta } from './api-meta';
@@ -24,6 +25,8 @@ export class ApiResponseInterceptor implements NestInterceptor<
   constructor(
     private readonly reflector: Reflector,
     private readonly cls: ClsService,
+    @InjectPinoLogger(ApiResponseInterceptor.name)
+    private readonly logger: PinoLogger,
   ) {}
 
   intercept(
@@ -45,14 +48,32 @@ export class ApiResponseInterceptor implements NestInterceptor<
         const spanContext = trace.getActiveSpan()?.spanContext();
         const meta = createApiMeta(this.cls.getId(), spanContext?.traceId);
 
+        let responseBody: unknown;
         if (payload instanceof PaginatedResult) {
-          return createListResponse(payload.items, meta, payload.pagination);
+          responseBody = createListResponse(
+            payload.items,
+            meta,
+            payload.pagination,
+          );
+        } else {
+          responseBody = createSingleResponse(
+            payload === undefined ? null : payload,
+            meta,
+          );
         }
 
-        return createSingleResponse(
-          payload === undefined ? null : payload,
-          meta,
-        );
+        if (this.logger.logger.isLevelEnabled('debug')) {
+          this.logger.debug(
+            {
+              requestId: meta.request_id,
+              statusCode: response.statusCode,
+              response: sanitizeResponseBody(responseBody),
+            },
+            'HTTP response body',
+          );
+        }
+
+        return responseBody;
       }),
     );
   }
@@ -65,4 +86,31 @@ export class ApiResponseInterceptor implements NestInterceptor<
       ]) ?? false
     );
   }
+}
+
+function sanitizeResponseBody(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeResponseBody);
+  }
+
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        isSensitiveField(key) ? '[REDACTED]' : sanitizeResponseBody(entry),
+      ]),
+    );
+  }
+
+  return value;
+}
+
+function isSensitiveField(fieldName: string): boolean {
+  return /(?:access|refresh|bootstrap|bearer)[_-]?token|(?:^|[_-])token(?:$|[_-](?!type\b))|secret|password|credential|authorization|cookie|api[_-]?key/i.test(
+    fieldName,
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

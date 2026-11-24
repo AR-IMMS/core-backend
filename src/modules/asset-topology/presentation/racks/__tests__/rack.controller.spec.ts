@@ -3,6 +3,31 @@ import { RackController } from '../rack.controller';
 import { DomainError } from '../../../domain/shared/domain-error';
 
 describe('RackController', () => {
+  it('lists Racks with an optional name search', async () => {
+    const queries = {
+      listRacks: jest.fn(async () => [
+        {
+          id: 'rack-1',
+          name: 'Core Rack',
+          uCapacity: 42,
+          currentLocation: null,
+        },
+      ]),
+    };
+    const controller = new RackController({} as never, queries as never);
+
+    await expect(controller.listRacks({ search: 'core' })).resolves.toEqual([
+      {
+        id: 'rack-1',
+        name: 'Core Rack',
+        u_capacity: 42,
+        location_label: null,
+        current_location: null,
+      },
+    ]);
+    expect(queries.listRacks).toHaveBeenCalledWith('core');
+  });
+
   it('removes a Rack from its Room and returns the updated layout ETag', async () => {
     const management = {
       unplace: jest.fn(async () => ({

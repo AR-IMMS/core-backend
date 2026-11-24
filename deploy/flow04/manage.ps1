@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $env:FLOW04_REPO_ROOT = $repoRoot
-$coreArgs = @('compose','-p','core-backend','-f',(Join-Path $repoRoot 'compose.yaml'),'-f',(Join-Path $PSScriptRoot 'core.private.yaml'))
+$coreArgs = @('compose','--project-directory',$repoRoot,'-p','core-backend','-f',(Join-Path $PSScriptRoot 'mongo.private.yaml'),'-f',(Join-Path $PSScriptRoot 'core.private.yaml'))
 $adminArgs = @('compose','-f',(Join-Path $PSScriptRoot 'admin.private.yaml'),'--profile','maintenance')
 $zammadArgs = @('compose','-p','zammad-docker-compose','--project-directory',$ZammadProject,'-f',(Join-Path $ZammadProject 'docker-compose.yml'),'-f',(Join-Path $PSScriptRoot 'zammad.private.yaml'))
 $zammadServices = @('zammad-postgresql','zammad-redis','zammad-memcached','zammad-elasticsearch','zammad-railsserver','zammad-scheduler','zammad-websocket','zammad-nginx','zammad-backup')

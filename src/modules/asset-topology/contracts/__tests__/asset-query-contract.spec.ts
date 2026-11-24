@@ -8,6 +8,11 @@ describe('Asset query contract', () => {
   it('exports an Asset query independently of Rack and Room-map queries', async () => {
     const query: AssetTopologyAssetQueries = {
       getAsset: jest.fn().mockResolvedValue(null),
+      getAgentEnrollmentNodeEligibility: jest.fn().mockResolvedValue({
+        exists: false,
+        active: false,
+        hasActivePlacement: false,
+      }),
       getAssetPlacementHistory: jest.fn().mockResolvedValue(null),
     };
 

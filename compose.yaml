@@ -1,35 +1,28 @@
 services:
-  mongodb:
-    image: mongo:8.0
+  core-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
-    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
-    networks:
-      core-data:
-        aliases: [mongodb]
-    volumes:
-      - mongodb-data:/data/db
-    healthcheck:
-      test:
-        - CMD
-        - mongosh
-        - --quiet
-        - --eval
-        - >-
-          try { rs.status(); }
-          catch (error) {
-            try { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]}); }
-            catch (initError) {}
-          }
-          quit(db.hello().isWritablePrimary ? 0 : 1);
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 10s
+    init: true
+    stop_grace_period: 30s
 
-volumes:
-  mongodb-data:
+    env_file:
+      - .env.local
+
+    environment:
+      NODE_ENV: production
+      APP_PORT: "8080"
+      MONGODB_URI: mongodb://mongodb:27017/?directConnection=true
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME:-ar_imms_core}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ""
+
+    networks:
+      - imms-shared
+
+    ports:
+      - "127.0.0.1:${CORE_API_HOST_PORT:-18080}:8080"
 
 networks:
-  core-data:
-    name: arimms-p0-core-data-v1
-    internal: true
+  imms-shared:
+    external: true

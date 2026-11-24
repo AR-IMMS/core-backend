@@ -25,6 +25,12 @@ describe('Asset & Topology consumer contract', () => {
           lifecycleState: 'ACTIVE',
           currentPlacement: null,
         }),
+      getAgentEnrollmentNodeEligibility: () =>
+        Promise.resolve({
+          exists: true,
+          active: true,
+          hasActivePlacement: false,
+        }),
       getRack: () => Promise.resolve(null),
       getRoomMap: () => Promise.resolve(null),
       getRackLocationHistory: () => Promise.resolve(null),
@@ -47,6 +53,12 @@ describe('Asset & Topology consumer contract', () => {
           assetTypeId: 'node' as AssetTypeId,
           lifecycleState: 'ACTIVE',
           currentPlacement: { rackId: 'rack-1' as RackId, uPosition: 4 },
+        }),
+      getAgentEnrollmentNodeEligibility: () =>
+        Promise.resolve({
+          exists: true,
+          active: true,
+          hasActivePlacement: true,
         }),
       getRack: () =>
         Promise.resolve({

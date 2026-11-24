@@ -90,6 +90,15 @@ export class MongoAssetPlacementStore implements AssetPlacementStorePort {
     return docs.map(toPlacement);
   }
 
+  async listActiveAssetIdsByRack(rackId: string): Promise<readonly string[]> {
+    const docs = await this.locations
+      .find({ rackId, validTo: { $exists: false } })
+      .sort({ assetId: 1 })
+      .lean()
+      .exec();
+    return docs.map(({ assetId }) => assetId);
+  }
+
   async listHistoryByAsset(
     assetId: string,
   ): Promise<readonly AssetPlacement[]> {

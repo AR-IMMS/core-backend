@@ -103,6 +103,19 @@ pnpm install
 pnpm start:dev
 ```
 
+Before starting the API, configure these required Agent enrollment settings in
+`.env.local` or the process environment. The application does not load
+`.env.example` automatically:
+
+- `AGENT_CONTROL_PLANE_BASE_URL` must be an HTTPS URL. For local development,
+  `https://localhost:8080/api/v1/agent-control` is a configuration placeholder;
+  no Control Plane endpoint is implemented yet.
+- `AGENT_ENROLLMENT_RECOVERY_KEY` must be a base64-encoded 32-byte AES-256 key.
+  Generate a private local value with `openssl rand -base64 32`. In deployments,
+  supply it through the secret manager. All Core instances must share the same
+  key and keep it unchanged until recovery records have expired (24 hours);
+  rotating it earlier makes still-live recovery records unreadable.
+
 Common verification commands:
 
 ```bash
@@ -113,18 +126,27 @@ pnpm build
 pnpm asset-topology:debug-room-map -- <room_id>
 ```
 
+For optional local demonstration data, run `pnpm db:migrate:mongo` against the
+configured MongoDB replica set, then `pnpm asset-topology:seed-example`. The
+seed adds two Sites, three Rooms, 18 placed Racks, and reserved walkway cells
+under the default Data Center. Rack names follow `R-<row>-<position>` within
+each Room (for example `R-E-02`); rack IDs remain globally unique. The command
+is repeatable: a complete existing example is left untouched, while partial
+example data causes an error rather than overwriting existing records. Inspect
+the maps with `pnpm asset-topology:debug-room-map -- example-room-main` (or
+`example-room-network` / `example-room-secondary`).
+
 The Room Map debug command reads the same Room-map query used by the API and prints a text grid, parent location names, and occupancy statistics. It is read-only and requires the configured database to be available.
 
 ### Local MongoDB and Readiness
 
-The default Compose MongoDB uses the secured Flow 04 data network and has no
-host port. Start the secured environment with the [Flow 04 startup script](deploy/flow04/README.md).
+The shared-infrastructure Core container uses the root `compose.yaml` and its external `imms-shared` network. The [Flow 04 startup script](deploy/flow04/README.md) uses a dedicated Compose base with private MongoDB on the existing PoC data network.
 For a host-run Core or host-run transaction tests, opt into the separate
 development project and volume:
 
 ```bash
-docker compose -f compose.yaml -f compose.host-dev.yaml up -d --wait mongodb
-docker compose -f compose.yaml -f compose.host-dev.yaml ps
+docker compose --project-directory . -f deploy/flow04/mongo.private.yaml -f compose.host-dev.yaml up -d --wait mongodb
+docker compose --project-directory . -f deploy/flow04/mongo.private.yaml -f compose.host-dev.yaml ps
 ```
 
 The health check initiates and waits for replica set `rs0`; a standalone MongoDB
@@ -143,16 +165,21 @@ MONGODB_TEST_URI=mongodb://localhost:27017/ar_imms_core_test?replicaSet=rs0
 The e2e setup maps `MONGODB_TEST_URI` into the application's Mongo settings and
 rejects URIs without a replica set or a database name ending in `_test`. Run
 `pnpm test:e2e` after starting Compose. Stop the development instance with
-`docker compose -f compose.yaml -f compose.host-dev.yaml stop mongodb`;
+`docker compose --project-directory . -f deploy/flow04/mongo.private.yaml -f compose.host-dev.yaml stop mongodb`;
 its data remains in the named `mongodb-data` volume. Use
 `docker compose down -v` only when you also intend to remove that data.
 
 ### Logging
 
 The application uses Pino structured JSON logging on `stdout`, including HTTP
-request logs. Request serialization omits query strings and sensitive headers
-are redacted. Logs are available through the container or process output;
-centralized aggregation with Loki/Grafana is deferred to a later phase.
+request logs. Access logs include the method, query-stripped path, response
+status, content type, and duration for successful requests. Set `LOG_LEVEL` to
+`debug` to also log standard HTTP response envelopes for inspection; secret-like
+fields such as tokens, passwords, credentials, cookies, and API keys are
+redacted. Set `LOG_LEVEL` to `info` to disable response detail logs. Sensitive
+request headers are redacted at every level. Logs are available through the
+container or process output; centralized aggregation with Loki/Grafana is
+deferred to a later phase.
 
 ### Continuous Integration
 
@@ -206,3 +233,28 @@ and pending approval gates, with Mermaid diagrams.
 - Do not place business logic into `shared` or `platform` purely for convenience of importing.
 - Update OpenAPI, README, or related documentation within the same Pull Request whenever contracts or setup instructions change.
 - Avoid adding abstractions before an actual use case explicitly requires them.
+
+### Run the API and MongoDB with Docker Compose
+
+The development Compose stack builds Core as a non-root production Node image
+and starts the API with its MongoDB replica set. It publishes the API on
+`127.0.0.1:18080` and MongoDB on `127.0.0.1:27017` by default. Override
+`CORE_API_HOST_PORT` or `CORE_MONGODB_HOST_PORT` when either host port is in use.
+The MongoDB data remains in the named `mongodb-data` volume when the stack stops.
+MongoDB is bound to host loopback; Compose may recreate an existing container to
+apply that binding, while retaining its named data volume.
+
+Create `.env.local` from `.env.example` if it does not exist, and replace the
+recovery-key placeholder with a private local 32-byte base64 key before starting.
+The env file is passed to the container at runtime and excluded from the Docker
+build context; never commit it.
+
+```bash
+docker compose up --build --wait
+docker compose ps
+```
+
+Check readiness at `http://127.0.0.1:18080/health/ready` and follow logs with
+`docker compose logs -f core-backend`. Stop the stack with `docker compose down`;
+the database volume is retained. Use `docker compose down -v` only when you
+intend to delete the local MongoDB data.

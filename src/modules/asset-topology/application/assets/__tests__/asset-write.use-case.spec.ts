@@ -6,7 +6,12 @@ import { QrMappingConflictError } from '../../qr/qr-mapping.errors';
 
 describe('Asset registry write use cases', () => {
   const context = {} as never;
-  let assets: { save: jest.Mock; findById: jest.Mock; list: jest.Mock };
+  let assets: {
+    save: jest.Mock;
+    findById: jest.Mock;
+    list: jest.Mock;
+    serializeAgentEnrollmentEligibility: jest.Mock;
+  };
   let catalog: { findType: jest.Mock; findModel: jest.Mock };
   let outbox: { append: jest.Mock };
   let unitOfWork: { run: jest.Mock };
@@ -18,6 +23,7 @@ describe('Asset registry write use cases', () => {
       save: jest.fn().mockResolvedValue(1),
       findById: jest.fn(),
       list: jest.fn(),
+      serializeAgentEnrollmentEligibility: jest.fn().mockResolvedValue(true),
     };
     catalog = {
       findType: jest.fn().mockResolvedValue({ id: 'type-node' }),

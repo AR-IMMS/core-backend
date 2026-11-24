@@ -3,6 +3,56 @@ import { AssetPlacement } from '../../../domain/placement/asset-placement';
 import { GetAssetUseCase, ListAssetsUseCase } from '../asset-query.use-case';
 
 describe('Asset query use cases', () => {
+  it('reports enrollment eligibility from Asset lifecycle and current placement', async () => {
+    const active = Asset.register({
+      id: 'asset-active',
+      name: 'Node',
+      type: { id: 'node' },
+    });
+    const retired = Asset.restore({
+      id: 'asset-retired',
+      name: 'Retired',
+      assetTypeId: 'node',
+      lifecycleState: 'RETIRED',
+    });
+    const assets = {
+      findById: jest
+        .fn()
+        .mockResolvedValueOnce(active)
+        .mockResolvedValueOnce(retired)
+        .mockResolvedValueOnce(null),
+    };
+    const placements = {
+      findActiveByAsset: jest
+        .fn()
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce(null),
+    };
+    const useCase = new GetAssetUseCase(assets as never, placements as never);
+
+    await expect(
+      useCase.getAgentEnrollmentNodeEligibility('asset-active' as never),
+    ).resolves.toEqual({
+      exists: true,
+      active: true,
+      hasActivePlacement: true,
+    });
+    await expect(
+      useCase.getAgentEnrollmentNodeEligibility('asset-retired' as never),
+    ).resolves.toEqual({
+      exists: true,
+      active: false,
+      hasActivePlacement: false,
+    });
+    await expect(
+      useCase.getAgentEnrollmentNodeEligibility('missing' as never),
+    ).resolves.toEqual({
+      exists: false,
+      active: false,
+      hasActivePlacement: false,
+    });
+  });
+
   it('returns canonical Asset facts with null placement and null for an absent Asset', async () => {
     const asset = Asset.register({
       id: 'asset-1',
@@ -41,6 +91,7 @@ describe('Asset query use cases', () => {
     };
     const placements = {
       listActiveByAssetIds: jest.fn().mockResolvedValue([]),
+      listActiveAssetIdsByRack: jest.fn().mockResolvedValue(['asset-1']),
     };
     const useCase = new ListAssetsUseCase(store as never, placements as never);
 
@@ -58,6 +109,36 @@ describe('Asset query use cases', () => {
       'asset-1',
       'asset-2',
     ]);
+  });
+
+  it('combines Rack, Type, lifecycle, and text filters with cursor pagination', async () => {
+    const store = {
+      list: jest.fn().mockResolvedValue({ items: [], hasMore: false }),
+    };
+    const placements = {
+      listActiveAssetIdsByRack: jest.fn().mockResolvedValue(['asset-1']),
+      listActiveByAssetIds: jest.fn().mockResolvedValue([]),
+    };
+    const useCase = new ListAssetsUseCase(store as never, placements as never);
+
+    await useCase.execute({
+      pageSize: 20,
+      afterAssetId: 'asset-0',
+      assetTypeId: 'type-node',
+      lifecycleState: 'ACTIVE',
+      rackId: 'rack-1',
+      search: 'node',
+    });
+
+    expect(placements.listActiveAssetIdsByRack).toHaveBeenCalledWith('rack-1');
+    expect(store.list).toHaveBeenCalledWith({
+      afterAssetId: 'asset-0',
+      limit: 20,
+      assetTypeId: 'type-node',
+      lifecycleState: 'ACTIVE',
+      assetIds: ['asset-1'],
+      search: 'node',
+    });
   });
 
   it('returns the confirmed active Rack U placement on the Asset reference', async () => {

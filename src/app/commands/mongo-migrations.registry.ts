@@ -1,5 +1,6 @@
 import { IAM_MONGO_MIGRATIONS } from '@modules/iam/migrations';
 import { ASSET_TOPOLOGY_MONGO_MIGRATIONS } from '@modules/asset-topology/migrations';
+import { AGENT_MANAGEMENT_MONGO_MIGRATIONS } from '@modules/agent-management/migrations';
 import type { MongoMigration } from '@platform/database/mongodb/migrations/mongo-migration';
 
 // Export the migrations here. The order of the migrations in this array does not matter; they will be sorted by ID before being run.
@@ -7,4 +8,5 @@ import type { MongoMigration } from '@platform/database/mongodb/migrations/mongo
 export const APPLICATION_MONGO_MIGRATIONS: readonly MongoMigration[] = [
   ...IAM_MONGO_MIGRATIONS,
   ...ASSET_TOPOLOGY_MONGO_MIGRATIONS,
+  ...AGENT_MANAGEMENT_MONGO_MIGRATIONS,
 ];

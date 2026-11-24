@@ -74,7 +74,7 @@ export class TicketWorkflow {
     private readonly tickets: TicketReadPort,
     private readonly journal: TicketJournal,
     private readonly store: TicketJournalStore,
-    private readonly assets: AssetTopologyAssetQueries,
+    private readonly assets: Pick<AssetTopologyAssetQueries, 'getAsset'>,
     private readonly scope: MappingScope,
     private readonly serviceUserId: number,
     private readonly integrations?: TicketWorkflowLinksPort,

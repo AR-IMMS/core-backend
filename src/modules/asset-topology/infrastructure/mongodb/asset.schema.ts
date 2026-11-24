@@ -57,6 +57,9 @@ export class AssetEntry {
   @Prop({ required: true, type: Number, min: 0, default: 0 })
   auditSequence!: number;
 
+  @Prop({ required: true, type: Number, min: 0, default: 0 })
+  agentBindingRevision!: number;
+
   createdAt!: Date;
   updatedAt!: Date;
 }
