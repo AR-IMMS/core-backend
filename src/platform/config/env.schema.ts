@@ -42,6 +42,9 @@ export const envSchema = z
     FLEET_CLIENT_CERTIFICATE: z.string().min(1).optional(),
     FLEET_CLIENT_KEY: z.string().min(1).optional(),
     FLEET_CA_CERTIFICATE: z.string().min(1).optional(),
+    FLEET_CLIENT_CERTIFICATE_FILE: z.string().min(1).optional(),
+    FLEET_CLIENT_KEY_FILE: z.string().min(1).optional(),
+    FLEET_CA_CERTIFICATE_FILE: z.string().min(1).optional(),
     FLEET_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(3_000),
     FLEET_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
     FLEET_MAX_RETRY_DELAY_MS: z.coerce
@@ -142,9 +145,14 @@ export const envSchema = z
     ),
   })
   .superRefine((env, context) => {
-    if (
-      Boolean(env.FLEET_CLIENT_CERTIFICATE) !== Boolean(env.FLEET_CLIENT_KEY)
-    ) {
+    const inlineCertificate = Boolean(env.FLEET_CLIENT_CERTIFICATE);
+    const inlineKey = Boolean(env.FLEET_CLIENT_KEY);
+    const fileCertificate = Boolean(env.FLEET_CLIENT_CERTIFICATE_FILE);
+    const fileKey = Boolean(env.FLEET_CLIENT_KEY_FILE);
+    const hasInlineCredentials = inlineCertificate || inlineKey;
+    const hasFileCredentials = fileCertificate || fileKey;
+
+    if (inlineCertificate !== inlineKey || fileCertificate !== fileKey) {
       context.addIssue({
         code: 'custom',
         path: ['FLEET_CLIENT_CERTIFICATE'],
@@ -152,9 +160,24 @@ export const envSchema = z
           'FLEET_CLIENT_CERTIFICATE and FLEET_CLIENT_KEY must be configured together',
       });
     }
+    if (hasInlineCredentials && hasFileCredentials) {
+      context.addIssue({
+        code: 'custom',
+        path: ['FLEET_CLIENT_CERTIFICATE'],
+        message:
+          'Configure Fleet client credentials either inline or as files, not both',
+      });
+    }
+    if (env.FLEET_CA_CERTIFICATE && env.FLEET_CA_CERTIFICATE_FILE) {
+      context.addIssue({
+        code: 'custom',
+        path: ['FLEET_CA_CERTIFICATE'],
+        message: 'Configure only one Fleet CA certificate source',
+      });
+    }
     if (
       env.FLEET_MANAGER_BASE_URL &&
-      (!env.FLEET_CLIENT_CERTIFICATE || !env.FLEET_CLIENT_KEY)
+      !((inlineCertificate && inlineKey) || (fileCertificate && fileKey))
     ) {
       context.addIssue({
         code: 'custom',

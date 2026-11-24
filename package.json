@@ -7,7 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
-    "db:migrate:mongo": "node dist/app/commands/migrate-mongodb.js",
+    "db:migrate:mongo": "node -r ts-node/register -r tsconfig-paths/register src/app/commands/migrate-mongodb.ts",
     "start": "nest start",
     "start:dev": "nest start --watch --webpack",
     "start:debug": "nest start --debug --watch",

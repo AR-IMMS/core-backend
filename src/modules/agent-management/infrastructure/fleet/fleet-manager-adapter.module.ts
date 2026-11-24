@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { readFileSync } from 'node:fs';
 import { FLEET_INVITATION_PORT } from '../../application/fleet/ports/fleet-invitation.port';
 import { FLEET_INSTALLATION_PORT } from '../../application/fleet/ports/fleet-installation.port';
 import { FLEET_NODE_ENROLLMENT_GATE_PORT } from '../../application/fleet/ports/fleet-node-enrollment-gate.port';
@@ -23,11 +24,21 @@ const FLEET_HTTP_CLIENT = Symbol('FLEET_HTTP_CLIENT');
         if (!config.get<string>('FLEET_MANAGER_BASE_URL')) return null;
         return new FleetHttpClient({
           baseUrl: config.getOrThrow<string>('FLEET_MANAGER_BASE_URL'),
-          clientCertificate: config.getOrThrow<string>(
+          clientCertificate: readFleetPem(
+            config,
             'FLEET_CLIENT_CERTIFICATE',
+            'FLEET_CLIENT_CERTIFICATE_FILE',
           ),
-          clientKey: config.getOrThrow<string>('FLEET_CLIENT_KEY'),
-          caCertificate: config.get<string>('FLEET_CA_CERTIFICATE'),
+          clientKey: readFleetPem(
+            config,
+            'FLEET_CLIENT_KEY',
+            'FLEET_CLIENT_KEY_FILE',
+          ),
+          caCertificate: readOptionalFleetPem(
+            config,
+            'FLEET_CA_CERTIFICATE',
+            'FLEET_CA_CERTIFICATE_FILE',
+          ),
           timeoutMs: config.getOrThrow<number>('FLEET_REQUEST_TIMEOUT_MS'),
           maxRetries: config.getOrThrow<number>('FLEET_MAX_RETRIES'),
           maxRetryDelayMs: config.getOrThrow<number>(
@@ -70,3 +81,25 @@ const FLEET_HTTP_CLIENT = Symbol('FLEET_HTTP_CLIENT');
   ],
 })
 export class FleetManagerAdapterModule {}
+
+function readFleetPem(
+  config: ConfigService,
+  inlineName: string,
+  fileName: string,
+): string {
+  const filePath = config.get<string>(fileName);
+  return filePath
+    ? readFileSync(filePath, 'utf8')
+    : config.getOrThrow<string>(inlineName);
+}
+
+function readOptionalFleetPem(
+  config: ConfigService,
+  inlineName: string,
+  fileName: string,
+): string | undefined {
+  const filePath = config.get<string>(fileName);
+  return filePath
+    ? readFileSync(filePath, 'utf8')
+    : config.get<string>(inlineName);
+}
