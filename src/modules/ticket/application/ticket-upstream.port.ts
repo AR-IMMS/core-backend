@@ -48,5 +48,8 @@ export interface TicketUpstreamPort {
   articles(ticketId: number): Promise<readonly TicketArticle[]>;
   search(query: SearchExternalTickets): Promise<readonly number[]>;
   states(): Promise<Readonly<Record<TicketState, number>>>;
+  priorities?(): Promise<
+    readonly { id: number; label: string; color: string }[]
+  >;
   priorityAvailable(priorityId: number): Promise<boolean>;
 }

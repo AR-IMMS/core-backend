@@ -19,6 +19,8 @@ services:
       ZAMMAD_TICKET_CUSTOMER_ID: '7'
       ZAMMAD_NON_HUMAN_USER_IDS: '[1,6,7]'
     ports: ['8082:8082']
+    volumes:
+      - ticket-evidence:/var/lib/arimms/ticket-evidence
     networks: [core-edge, core-data, zammad-private]
     depends_on:
       mongodb:
@@ -32,6 +34,9 @@ services:
       start_period: 15s
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
+volumes:
+  ticket-evidence:
+
 networks:
   core-edge:
     name: arimms-p0-core-edge-v1

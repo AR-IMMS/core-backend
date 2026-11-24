@@ -31,6 +31,29 @@ async function server(
 }
 
 describe('Zammad workflow HTTP contract', () => {
+  it('projects only active priority metadata and resolves display color from upstream data rather than IDs', async () => {
+    const fixture = await server((req, res) => {
+      expect(req.url).toBe('/api/v1/ticket_priorities');
+      res.writeHead(200, { 'Content-Type': 'application/json' }).end(
+        JSON.stringify([
+          { id: 41, name: '1 low', active: true, ui_color: 'low-priority' },
+          { id: 4, name: '2 normal', active: true, ui_color: null },
+          { id: 17, name: '3 high', active: true, ui_color: 'high-priority' },
+          { id: 99, name: '4 critical', active: false, ui_color: null },
+        ]),
+      );
+    });
+    try {
+      await expect(fixture.adapter.priorities()).resolves.toEqual([
+        { id: 41, label: 'Low', color: 'green' },
+        { id: 4, label: 'Normal', color: 'cyan' },
+        { id: 17, label: 'High', color: 'amber' },
+      ]);
+    } finally {
+      fixture.close();
+    }
+  });
+
   it.each([401, 403, 503])(
     'fails closed without retry after upstream status %d',
     async (status) => {

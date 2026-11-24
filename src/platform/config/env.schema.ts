@@ -63,6 +63,8 @@ export const envSchema = z
       .default(30),
     IAM_BROWSER_ALLOWED_ORIGINS: z.string().default(''),
     IAM_BROWSER_COOKIE_SAME_SITE: z.enum(['lax', 'none']).default('lax'),
+    TICKET_EVIDENCE_DIRECTORY: z.string().min(1).optional(),
+    TICKET_EVIDENCE_SIGNING_KEY: z.string().min(32).optional(),
     IAM_BROWSER_CSRF_SECRET: z.string().min(32).optional(),
     IAM_BROWSER_CROSS_SITE_COMPATIBILITY_VALIDATED: z
       .enum(['true', 'false'])

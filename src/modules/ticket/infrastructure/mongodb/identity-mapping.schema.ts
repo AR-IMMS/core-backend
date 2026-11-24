@@ -36,3 +36,8 @@ IdentityMappingSchema.index(
   { instanceKey: 1, zammadUserId: 1 },
   { unique: true, name: 'uq_ticket_identity_zammad' },
 );
+
+IdentityMappingSchema.index(
+  { instanceKey: 1, approvedGroupId: 1, status: 1, _id: 1 },
+  { name: 'ix_ticket_identity_directory' },
+);

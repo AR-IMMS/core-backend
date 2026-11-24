@@ -41,6 +41,13 @@ export class GetAuthorizedTicket {
     private readonly external: ExternalUserAccessPort,
     private readonly tickets: TicketReadPort,
     scope: MappingScope,
+    private readonly archive?: {
+      archive(
+        instance: string,
+        group: number,
+        ticketId: number,
+      ): Promise<{ active: boolean } | null>;
+    },
   ) {
     validateMappingScope(scope);
     this.scope = Object.freeze({ ...scope });
@@ -48,6 +55,7 @@ export class GetAuthorizedTicket {
   async execute(
     authenticatedUserId: string,
     ticketId: number,
+    options: { archivedOperator?: boolean } = {},
   ): Promise<TicketAccessResult> {
     try {
       validateCoreUserId(authenticatedUserId);
@@ -65,6 +73,17 @@ export class GetAuthorizedTicket {
         throw new TicketReadError('INVALID_UPSTREAM_RESPONSE');
       if (ticket.groupId !== this.scope.approvedGroupId)
         return { status: 'denied' };
+      if (
+        !(options.archivedOperator && actor.role === 'OPERATOR') &&
+        (
+          await this.archive?.archive(
+            this.scope.instanceKey,
+            this.scope.approvedGroupId,
+            ticketId,
+          )
+        )?.active
+      )
+        return { status: 'not_found' };
       const owner = ticket.businessOwner;
       let ownerStatus: 'valid' | 'missing' | 'invalid' =
         owner.kind === 'missing' ? 'missing' : 'invalid';

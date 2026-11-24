@@ -3,7 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { MongooseModule, getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { PlatformConfigModule } from '@platform/config';
-import { IDENTITY_MAPPING_READ_PORT } from './application/identity-mapping-read.port';
+import {
+  IDENTITY_MAPPING_DIRECTORY,
+  IDENTITY_MAPPING_READ_PORT,
+} from './application/identity-mapping-read.port';
 import type { IdentityMapping } from './domain/identity-mapping';
 import {
   IDENTITY_MAPPING_MODEL,
@@ -37,7 +40,11 @@ import { MongoIdentityMappingStore } from './infrastructure/mongodb/mongo-identi
         return store;
       },
     },
+    {
+      provide: IDENTITY_MAPPING_DIRECTORY,
+      useExisting: IDENTITY_MAPPING_READ_PORT,
+    },
   ],
-  exports: [IDENTITY_MAPPING_READ_PORT],
+  exports: [IDENTITY_MAPPING_READ_PORT, IDENTITY_MAPPING_DIRECTORY],
 })
 export class TicketIdentityModule {}

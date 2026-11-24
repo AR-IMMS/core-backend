@@ -60,6 +60,7 @@ async function run() {
       for (const file of [
         'package.json',
         'pnpm-lock.yaml',
+        'pnpm-workspace.yaml',
         'tsconfig.json',
         'tsconfig.build.json',
         'nest-cli.json',

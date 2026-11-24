@@ -124,7 +124,7 @@ function responseSchema(data: SchemaObject, paginated: boolean): SchemaObject {
   };
 }
 
-function ticketOperation(options: {
+export function ticketOperation(options: {
   summary: string;
   description?: string;
   permission: PermissionCode;
@@ -193,13 +193,13 @@ function ticketOperation(options: {
   );
 }
 
-function operation(actor: TicketActorDto, key: string | undefined) {
+export function operation(actor: TicketActorDto, key: string | undefined) {
   if (typeof key !== 'string' || !/^[A-Za-z0-9_-]{16,128}$/.test(key))
     throw new BadRequestException('A valid Idempotency-Key is required');
   return { actor: actor.userId, key };
 }
 
-function cursor(value: string | undefined) {
+export function cursor(value: string | undefined) {
   if (!value) return 0;
   const decoded = Buffer.from(value, 'base64url').toString();
   if (
@@ -211,7 +211,7 @@ function cursor(value: string | undefined) {
   return Number(decoded);
 }
 
-function nextCursor(next: number | null) {
+export function nextCursor(next: number | null) {
   return next === null ? null : Buffer.from(String(next)).toString('base64url');
 }
 

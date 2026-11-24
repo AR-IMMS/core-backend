@@ -1,5 +1,8 @@
-import type { Model } from 'mongoose';
-import type { IdentityMappingReadPort } from '../../application/identity-mapping-read.port';
+import { Types, type Model } from 'mongoose';
+import type {
+  IdentityMappingDirectory,
+  IdentityMappingReadPort,
+} from '../../application/identity-mapping-read.port';
 import {
   IdentityMappingError,
   validateCoreUserId,
@@ -9,7 +12,9 @@ import {
   type MappingScope,
 } from '../../domain/identity-mapping';
 /** Exact scoped reads, no writes or provisioning authority. */
-export class MongoIdentityMappingStore implements IdentityMappingReadPort {
+export class MongoIdentityMappingStore
+  implements IdentityMappingReadPort, IdentityMappingDirectory
+{
   private readonly scope: MappingScope;
   constructor(
     private readonly model: Model<IdentityMapping>,
@@ -17,6 +22,30 @@ export class MongoIdentityMappingStore implements IdentityMappingReadPort {
   ) {
     validateMappingScope(scope);
     this.scope = Object.freeze({ ...scope });
+  }
+  async listCandidates(after: string | undefined, limit: number) {
+    try {
+      const records = await this.model
+        .find({
+          instanceKey: this.scope.instanceKey,
+          approvedGroupId: this.scope.approvedGroupId,
+          status: 'ACTIVE',
+          ...(after === undefined
+            ? {}
+            : { _id: { $gt: new Types.ObjectId(after) } }),
+        })
+        .sort({ _id: 1 })
+        .select('coreUserId')
+        .limit(limit)
+        .lean()
+        .exec();
+      return records.map((row) => {
+        validateCoreUserId(row.coreUserId);
+        return { id: row.coreUserId, cursor: row._id.toHexString() };
+      });
+    } catch {
+      throw new IdentityMappingError('MAPPING_UNAVAILABLE');
+    }
   }
   async findActiveMappingByExternalId(
     zammadUserId: number,

@@ -62,6 +62,10 @@ import { IAM_BROWSER_AUTH_CONFIG } from './presentation/browser-auth-config.toke
 import { PermissionCatalogModule } from './permission-catalog.module';
 import { IAM_HUMAN_ACCESS_PORT } from './application/ports/human-access.token';
 import { IAM_HUMAN_ACCESS_STORE } from './application/ports/human-access-store.token';
+import {
+  IAM_HUMAN_DIRECTORY_PORT,
+  type HumanDirectoryPort,
+} from './application/ports/human-directory.port';
 import { HumanAccessService } from './application/human-access.service';
 import {
   MongoHumanAccessStore,
@@ -176,6 +180,20 @@ import {
     },
     { provide: IAM_HUMAN_ACCESS_PORT, useExisting: HumanAccessService },
     {
+      provide: IAM_HUMAN_DIRECTORY_PORT,
+      inject: [IAM_USER_ADMINISTRATION_STORE],
+      useFactory: (
+        store: ConstructorParameters<typeof UserAdministrationService>[0],
+      ): HumanDirectoryPort => ({
+        async getIdentity(userId) {
+          const user = await store.findUser(userId);
+          if (!user) return null;
+          const { username, displayName, role, status } = user;
+          return { userId: user.userId, username, displayName, role, status };
+        },
+      }),
+    },
+    {
       provide: IAM_HUMAN_AUTH_STORE,
       useFactory: (
         userModel: MongoHumanAccountModel,
@@ -282,6 +300,7 @@ import {
   exports: [
     IAM_USER_PRESENCE_PORT,
     IAM_HUMAN_ACCESS_PORT,
+    IAM_HUMAN_DIRECTORY_PORT,
     PermissionCatalogModule,
   ],
 })

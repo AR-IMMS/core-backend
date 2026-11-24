@@ -100,6 +100,35 @@ void describe('Ticket identity persistence (dedicated Mongo)', () => {
       );
     });
   }
+  void it('paginates active scoped mapping candidates without using stable Core or Zammad IDs as cursors', async () => {
+    await model.create([
+      row,
+      {
+        ...row,
+        coreUserId: 'synthetic-revoked',
+        zammadUserId: 900002,
+        status: 'REVOKED',
+      },
+      {
+        ...row,
+        coreUserId: 'synthetic-wrong-group',
+        zammadUserId: 900003,
+        approvedGroupId: 43,
+      },
+      { ...row, coreUserId: 'synthetic-b', zammadUserId: 900004 },
+    ]);
+    const first = await store.listCandidates(undefined, 1);
+    assert.deepEqual(
+      first.map(({ id }) => id),
+      [row.coreUserId],
+    );
+    assert.match(first[0].cursor, /^[a-f0-9]{24}$/);
+    const rest = await store.listCandidates(first[0].cursor, 10);
+    assert.deepEqual(
+      rest.map(({ id }) => id),
+      ['synthetic-b'],
+    );
+  });
   void it('denies revoked mappings', async () => {
     await model.create({ ...row, status: 'REVOKED' });
     assert.equal(await store.findActiveMapping(row.coreUserId), null);

@@ -15,6 +15,16 @@ function Invoke-Docker([string[]]$CommandArguments) {
     & docker @CommandArguments
     if ($LASTEXITCODE -ne 0) { throw 'Docker operation failed; stop and inspect before retrying' }
 }
+function Assert-TicketImageCompatibility {
+    $image = 'arimms-core-flow04:local'
+    Invoke-Docker @('image','inspect',$image,'--format','{{.Id}}')
+    if ($env:FLOW04_TICKET_API_ENABLED -ceq 'false') { return }
+    $rawLabels = Invoke-Docker @('image','inspect',$image,'--format','{{json .Config.Labels}}')
+    $labels = if ($rawLabels) { ConvertFrom-Json -InputObject $rawLabels }
+    if ($labels.'org.arimms.ticket.archive-aware' -cne '1') {
+        throw 'The selected image lacks Archive support. Start it with FLOW04_TICKET_API_ENABLED=false or select an Archive-aware image.'
+    }
+}
 function Assert-PrivateEndpoint([string]$Container, [string]$Network, [string]$Alias) {
     $bindings = Invoke-Docker @('inspect','--format','{{json .HostConfig.PortBindings}}',$Container)
     $networks = Invoke-Docker @('inspect','--format','{{json .NetworkSettings.Networks}}',$Container) | ConvertFrom-Json
@@ -38,8 +48,8 @@ if ($Build -and $Action -ne 'Start') { throw '-Build is only valid with -Action 
 switch ($Action) {
     'Start' {
         if ($Build) { & (Join-Path $PSScriptRoot 'build.ps1') }
+        Assert-TicketImageCompatibility
         Invoke-Docker ($adminArgs + @('stop','admin-gateway'))
-        Invoke-Docker @('image','inspect','arimms-core-flow04:local','--format','{{.Id}}')
         Invoke-Docker ($zammadArgs + @('up','-d','--wait','--wait-timeout','180','--no-build') + $zammadServices)
         Start-Core
     }
@@ -49,6 +59,7 @@ switch ($Action) {
         Invoke-Docker ($adminArgs + @('up','-d'))
     }
     'CloseMaintenance' {
+        Assert-TicketImageCompatibility
         Invoke-Docker ($adminArgs + @('stop','admin-gateway'))
         # Caller must finish and verify maintenance before invoking this action.
         Start-Core

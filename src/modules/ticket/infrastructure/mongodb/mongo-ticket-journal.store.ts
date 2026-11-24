@@ -6,7 +6,15 @@ import {
   type TicketJournalStore,
   type TicketLinks,
   type TicketReceipt,
+  type TicketArchiveRecord,
+  type TicketEvidenceRecord,
 } from '../../application/ticket-journal';
+
+import type {
+  TicketNotificationAudience,
+  TicketNotificationCandidate,
+  TicketNotificationStore,
+} from '../../application/ticket-notifications';
 
 interface BusinessContext extends TicketLinks {
   readonly instance: string;
@@ -16,18 +24,58 @@ interface BusinessContext extends TicketLinks {
   readonly auditSequence?: number;
 }
 
-export class MongoTicketJournalStore implements TicketJournalStore {
+export class MongoTicketJournalStore
+  implements TicketJournalStore, TicketNotificationStore
+{
   private readonly receipts;
   private readonly contexts;
+  private readonly archives;
+  private readonly evidence;
 
   constructor(connection: Connection) {
     const db = connection.getClient().db(connection.name);
     this.receipts = db.collection<TicketReceipt>('ticket_operation_receipts');
     this.contexts = db.collection<BusinessContext>('ticket_business_contexts');
+    this.archives = db.collection<TicketArchiveRecord>('ticket_archives');
+    this.evidence = db.collection<TicketEvidenceRecord>('ticket_evidence');
   }
 
   async initialize() {
+    await this.archives.createIndex(
+      { instance: 1, group: 1, ticketId: 1 },
+      { unique: true },
+    );
+    await this.archives.createIndex({
+      instance: 1,
+      group: 1,
+      active: 1,
+      ticketId: 1,
+    });
+    await this.evidence.createIndex(
+      { instance: 1, group: 1, ticketId: 1, id: 1 },
+      { unique: true },
+    );
+    await this.evidence.createIndex(
+      { instance: 1, group: 1, ticketId: 1, sha256: 1 },
+      { unique: true },
+    );
     await this.receipts.createIndex({ id: 1 }, { unique: true });
+    await this.receipts.createIndex(
+      {
+        instance: 1,
+        group: 1,
+        'result.notification.recipients': 1,
+        occurredAt: -1,
+        eventId: -1,
+      },
+      {
+        name: 'ix_ticket_notification_inbox',
+        partialFilterExpression: {
+          stage: 'succeeded',
+          'result.notification.recipients': { $exists: true },
+        },
+      },
+    );
     await this.receipts.createIndex(
       { lock: 1 },
       { unique: true, sparse: true },
@@ -36,6 +84,67 @@ export class MongoTicketJournalStore implements TicketJournalStore {
       { instance: 1, group: 1, ticketId: 1 },
       { unique: true },
     );
+  }
+
+  private notificationFilter(audience: TicketNotificationAudience) {
+    return {
+      instance: audience.instance,
+      group: audience.group,
+      stage: 'succeeded' as const,
+      actor: { $ne: audience.actor },
+      'result.notification.recipients': audience.externalUserId,
+    };
+  }
+
+  async notificationCandidates(
+    audience: TicketNotificationAudience,
+    limit: number,
+    ids?: readonly string[],
+  ): Promise<TicketNotificationCandidate[]> {
+    const rows = await this.receipts
+      .find(
+        {
+          ...this.notificationFilter(audience),
+          ...(ids ? { eventId: { $in: [...ids] } } : {}),
+        },
+        {
+          projection: {
+            _id: 0,
+            eventId: 1,
+            occurredAt: 1,
+            notificationReadBy: 1,
+            'result.ticketId': 1,
+            'result.notification.kind': 1,
+          },
+        },
+      )
+      .sort({ occurredAt: -1, eventId: -1 })
+      .limit(limit)
+      .toArray();
+    return rows.flatMap((row) =>
+      row.result?.notification
+        ? [
+            {
+              id: row.eventId,
+              ticketId: row.result.ticketId,
+              kind: row.result.notification.kind,
+              occurredAt: row.occurredAt,
+              read: row.notificationReadBy?.includes(audience.actor) ?? false,
+            },
+          ]
+        : [],
+    );
+  }
+
+  async markNotificationsRead(
+    audience: TicketNotificationAudience,
+    ids: readonly string[],
+  ) {
+    const result = await this.receipts.updateMany(
+      { ...this.notificationFilter(audience), eventId: { $in: [...ids] } },
+      { $addToSet: { notificationReadBy: audience.actor } },
+    );
+    return result.modifiedCount;
   }
 
   async claim(receipt: TicketReceipt) {
@@ -135,6 +244,70 @@ export class MongoTicketJournalStore implements TicketJournalStore {
           maintenanceIds: row.maintenanceIds,
         }
       : null;
+  }
+
+  archive(instance: string, group: number, ticketId: number) {
+    return this.archives.findOne({ instance, group, ticketId });
+  }
+  archived(instance: string, group: number, after: number, limit: number) {
+    return this.archives
+      .find({ instance, group, active: true, ticketId: { $gt: after } })
+      .sort({ ticketId: 1 })
+      .limit(limit)
+      .toArray();
+  }
+  async putArchive(
+    receipt: TicketReceipt,
+    record: TicketArchiveRecord,
+    context: UnitOfWorkContext,
+  ) {
+    if (record.instance !== receipt.instance || record.group !== receipt.group)
+      throw new TicketOperationError('INVALID');
+    const filter = {
+      instance: record.instance,
+      group: record.group,
+      ticketId: record.ticketId,
+      version: record.version - 1,
+    };
+    const written = await this.archives.replaceOne(filter, record, {
+      session: this.session(context),
+      upsert: record.version === 1,
+    });
+    if (!written.matchedCount && !written.upsertedCount)
+      throw new TicketOperationError('CONFLICT');
+  }
+  evidenceById(instance: string, group: number, ticketId: number, id: string) {
+    return this.evidence.findOne({ instance, group, ticketId, id });
+  }
+  evidenceByHash(
+    instance: string,
+    group: number,
+    ticketId: number,
+    sha256: string,
+  ) {
+    return this.evidence.findOne({ instance, group, ticketId, sha256 });
+  }
+  listEvidence(
+    instance: string,
+    group: number,
+    ticketId: number,
+    after: string,
+    limit: number,
+  ) {
+    return this.evidence
+      .find({ instance, group, ticketId, id: { $gt: after } })
+      .sort({ id: 1 })
+      .limit(limit)
+      .toArray();
+  }
+  async putEvidence(
+    receipt: TicketReceipt,
+    record: TicketEvidenceRecord,
+    context: UnitOfWorkContext,
+  ) {
+    if (record.instance !== receipt.instance || record.group !== receipt.group)
+      throw new TicketOperationError('INVALID');
+    await this.evidence.insertOne(record, { session: this.session(context) });
   }
 
   private session(context: UnitOfWorkContext) {

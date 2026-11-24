@@ -86,3 +86,11 @@ curl -fsS -H "Authorization: Bearer $CORE_TOKEN" \
 - Keep close and reopen separate from generic progress. After reaffirming identity and current state, submit the respective outcome/reason. Read the same canonical ID after reopen to preserve the history and link view.
 - Page Articles and links from Core. Show an unavailable Incident-dependent action until its provider exists. Do not use the absence of links to infer cross-module state.
 - On each actual client, execute create → assign → Technician view/progress/Article → Owner close → authorized reopen, then verify loss of access and the recovery UI. Record the device/environment and case IDs. This handoff does not assert physical Web/Mobile/MR acceptance.
+
+## Ticket notifications
+
+`GET /api/v1/ticket-notifications` returns `data.items` and `data.unread_count`. Core takes the 20 most recent completed operations addressed to the caller and rechecks current Ticket access. The count covers the returned inbox. `POST /api/v1/ticket-notifications/read` accepts `{"ids":["<notification UUID>"]}` for one to 20 unique IDs and returns `data.updated_count`. Repeating a read acknowledgement returns zero. An inaccessible item returns 404 before the batch is acknowledged.
+
+Both routes require an active, mapped Operator or Technician with `ticket:read`. Core addresses notifications to the Business Owner and Assignee captured by a verified operation and excludes the initiating actor. The feed omits archived, missing and currently inaccessible Tickets. It returns current Ticket number and title plus event kind, time and read state. Article text and Evidence content remain on their protected APIs.
+
+Core create, responsibility changes, information changes, progress, closure, reopening, internal Articles and Evidence finalization produce notifications when committed. Receipts without recipient snapshots are skipped. Core initializes the partial index `ix_ticket_notification_inbox` on `ticket_operation_receipts` and stores read state per Core user in the receipt. Web and Mobile refresh on open and poll in the foreground. Read state follows the same Core account across clients.

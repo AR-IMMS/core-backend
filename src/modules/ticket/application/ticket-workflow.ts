@@ -1,4 +1,8 @@
-import type { HumanAccessPort, PermissionCode } from '@modules/iam';
+import type {
+  HumanAccessPort,
+  HumanDirectoryPort,
+  PermissionCode,
+} from '@modules/iam';
 import type {
   AssetId,
   AssetTopologyAssetQueries,
@@ -6,11 +10,16 @@ import type {
 import type { MappingScope } from '../domain/identity-mapping';
 import { GetAuthorizedTicket } from './get-authorized-ticket';
 import {
+  notificationFor,
+  type TicketNotificationKind,
+} from './ticket-notifications';
+import {
   TicketJournal,
   TicketOperationError,
   type JournalResult,
   type TicketJournalStore,
   type TicketLinks,
+  type TicketArchiveRecord,
 } from './ticket-journal';
 import type { ExternalTicket, TicketReadPort } from './ticket-read.port';
 import type {
@@ -19,6 +28,7 @@ import type {
   TicketUpstreamPort,
 } from './ticket-upstream.port';
 import type { TicketWorkflowLinksPort } from './ticket-workflow-links.port';
+import type { IdentityMappingDirectory } from './identity-mapping-read.port';
 
 export interface TicketActorOperation {
   readonly actor: string;
@@ -68,7 +78,192 @@ export class TicketWorkflow {
     private readonly scope: MappingScope,
     private readonly serviceUserId: number,
     private readonly integrations?: TicketWorkflowLinksPort,
+    private readonly directory?: {
+      identities: HumanDirectoryPort;
+      candidates: IdentityMappingDirectory;
+    },
   ) {}
+
+  async priorities(actor: string) {
+    await this.actor(actor);
+    if (!this.upstream.priorities)
+      throw new TicketOperationError('UNAVAILABLE');
+    return this.upstream.priorities();
+  }
+
+  async eligibleUsers(
+    actor: string,
+    search: string,
+    pageSize: number,
+    after?: string,
+  ) {
+    await this.actor(actor, ['ticket:manage'], true);
+    if (!this.directory) throw new TicketOperationError('UNAVAILABLE');
+    const { candidates, identities } = this.directory;
+    // Bound database and upstream work even when most mappings do not match.
+    const rows = await candidates.listCandidates(after, 51);
+    const matches = [];
+    const query = search.toLowerCase().normalize('NFC');
+    for (let offset = 0; offset < Math.min(rows.length, 50); offset += 5) {
+      const batch = rows.slice(offset, offset + 5);
+      const visible = await Promise.all(
+        batch.map(async ({ id }) => {
+          const profile = await identities.getIdentity(id);
+          if (
+            !profile ||
+            profile.userId !== id ||
+            profile.status !== 'ACTIVE' ||
+            (profile.role !== 'OPERATOR' && profile.role !== 'TECHNICIAN') ||
+            ![profile.username, profile.displayName].some((name) =>
+              name?.toLowerCase().normalize('NFC').includes(query),
+            )
+          )
+            return null;
+          const current = await this.authorization.authorizeActor(id);
+          if (!current || current.actor.role !== profile.role) return null;
+          return {
+            id,
+            username: profile.username,
+            display_name: profile.displayName,
+            role: profile.role,
+            status: 'ACTIVE' as const,
+          };
+        }),
+      );
+      for (const [index, item] of visible.entries()) {
+        if (item) matches.push(item);
+        if (matches.length === pageSize) {
+          const position = offset + index;
+          return {
+            items: matches,
+            next: position + 1 < rows.length ? rows[position].cursor : null,
+          };
+        }
+      }
+    }
+    return {
+      items: matches,
+      next: rows.length === 51 ? rows[49].cursor : null,
+    };
+  }
+
+  async archived(actor: string, after: number, pageSize: number) {
+    await this.actor(actor, ['ticket:manage'], true);
+    if (!this.store.archived) throw new TicketOperationError('UNAVAILABLE');
+    const rows = await this.store.archived(
+      this.scope.instanceKey,
+      this.scope.approvedGroupId,
+      after,
+      pageSize + 1,
+    );
+    const items: { ticket: ExternalTicket; record: TicketArchiveRecord }[] = [];
+    for (const record of rows.slice(0, pageSize)) {
+      const result = await this.authorization.execute(actor, record.ticketId, {
+        archivedOperator: true,
+      });
+      if (result.status === 'allowed')
+        items.push({ ticket: result.ticket, record });
+    }
+    return {
+      items,
+      next: rows.length > pageSize ? rows[pageSize - 1].ticketId : null,
+    };
+  }
+
+  async archive(
+    operation: TicketActorOperation,
+    ticketId: number,
+    reason: string,
+    active: boolean,
+  ) {
+    await this.archiveAccess(operation.actor, ticketId);
+    const prepare = async () => {
+      await this.archiveAccess(operation.actor, ticketId);
+      if (!this.store.archive) throw new TicketOperationError('UNAVAILABLE');
+      const existing = await this.store.archive(
+        this.scope.instanceKey,
+        this.scope.approvedGroupId,
+        ticketId,
+      );
+      if (active ? existing?.active : !existing?.active)
+        throw new TicketOperationError('CONFLICT');
+      const now = new Date().toISOString();
+      const version = (existing?.version ?? 0) + 1;
+      const record: TicketArchiveRecord = active
+        ? {
+            instance: this.scope.instanceKey,
+            group: this.scope.approvedGroupId,
+            ticketId,
+            archivedAt: now,
+            archivedByUserId: operation.actor,
+            archiveReason: reason,
+            active,
+            version,
+          }
+        : {
+            ...existing,
+            instance: this.scope.instanceKey,
+            group: this.scope.approvedGroupId,
+            ticketId,
+            archivedAt: existing?.archivedAt ?? now,
+            archivedByUserId: existing?.archivedByUserId ?? operation.actor,
+            archiveReason: existing?.archiveReason ?? reason,
+            active,
+            version,
+            restoredAt: now,
+            restoredByUserId: operation.actor,
+            restoreReason: reason,
+          };
+      return {
+        ticketId,
+        archive: record,
+        changes: [
+          { field: 'archived', before: !active, after: active },
+          { field: 'reason', after: reason },
+        ],
+      };
+    };
+    const result = await this.journal.run(
+      this.intent(
+        operation,
+        active ? 'archived' : 'restored',
+        { reason },
+        ticketId,
+      ),
+      async () => {
+        const snapshot = await prepare();
+        return () => Promise.resolve(snapshot);
+      },
+      prepare,
+    );
+    if (!result.archive) throw new TicketOperationError('UNAVAILABLE');
+    return result.archive;
+  }
+
+  async evidenceAccess(actor: string, ticketId: number, write: boolean) {
+    if (write) await this.actor(actor, ['ticket:work']);
+    const archived = (
+      await this.store.archive?.(
+        this.scope.instanceKey,
+        this.scope.approvedGroupId,
+        ticketId,
+      )
+    )?.active;
+    if (archived && !write) await this.archiveAccess(actor, ticketId);
+    else return (await this.resource(actor, ticketId)).ticket;
+  }
+
+  private async archiveAccess(actor: string, ticketId: number) {
+    await this.actor(actor, ['ticket:manage'], true);
+    if (
+      (
+        await this.authorization.execute(actor, ticketId, {
+          archivedOperator: true,
+        })
+      ).status !== 'allowed'
+    )
+      throw new TicketOperationError('NOT_FOUND');
+  }
 
   create(operation: TicketActorOperation, input: ManualTicketInput) {
     return this.createFrom(operation, input, 'created');
@@ -146,6 +341,7 @@ export class TicketWorkflow {
       return {
         ticketId,
         links,
+        notification: notificationFor('created', ticket),
         changes: [
           { field: 'business_owner', after: owner },
           { field: 'assignee', after: assignee },
@@ -515,8 +711,9 @@ export class TicketWorkflow {
     body: string,
   ) {
     await this.actor(operation.actor, ['ticket:work']);
-    await this.resource(operation.actor, ticketId);
+    const initial = await this.resource(operation.actor, ticketId);
     const finishArticle = async (
+      ticket: ExternalTicket,
       marker: string,
       id?: number,
     ): Promise<JournalResult> => {
@@ -524,6 +721,7 @@ export class TicketWorkflow {
       return {
         ticketId,
         articleId,
+        notification: notificationFor('article_added', ticket),
         changes: [{ field: 'article_id', after: articleId }],
       };
     };
@@ -531,13 +729,13 @@ export class TicketWorkflow {
       this.intent(operation, 'article_added', { body }, ticketId),
       async () => {
         await this.actor(operation.actor, ['ticket:work']);
-        await this.resource(operation.actor, ticketId);
+        const { ticket } = await this.resource(operation.actor, ticketId);
         return async (marker) => {
           const articleId = await this.upstream.append(ticketId, body, marker);
-          return finishArticle(marker, articleId);
+          return finishArticle(ticket, marker, articleId);
         };
       },
-      (marker) => finishArticle(marker),
+      (marker) => finishArticle(initial.ticket, marker),
     );
     await this.resource(operation.actor, ticketId);
     return result;
@@ -692,7 +890,7 @@ export class TicketWorkflow {
   private async change(
     operation: TicketActorOperation,
     ticketId: number,
-    action: string,
+    action: TicketNotificationKind,
     payload: object,
     permissions: readonly PermissionCode[],
     operatorOnly: boolean,
@@ -750,7 +948,15 @@ export class TicketWorkflow {
                 JSON.stringify(latest.ticket.businessOwner))
           )
             throw new TicketOperationError('UNRESOLVED');
-          return { ticketId, changes: prepared.changes };
+          return {
+            ticketId,
+            changes: prepared.changes,
+            ...(prepared.changes.some(
+              (change) => change.before !== change.after,
+            )
+              ? { notification: notificationFor(action, after) }
+              : {}),
+          };
         };
       },
     );

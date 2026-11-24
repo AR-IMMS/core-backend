@@ -126,6 +126,8 @@ export async function ticketRequest<T>(
           'Ticket operation outcome is unresolved. Reuse the same request key',
         ],
         UNAVAILABLE: [503, 'Ticket dependency is unavailable'],
+        TOO_LARGE: [413, 'Evidence exceeds the upload size limit'],
+        INVALID_FILE: [415, 'Evidence content is not supported'],
       } as const;
       const [status, message] = responses[error.code];
       throw new HttpException(

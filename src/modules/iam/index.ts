@@ -1,6 +1,7 @@
 export * from './application/ports/permission-catalog.port';
 export * from './application/ports/permission-catalog.token';
 export * from './application/ports/human-access.port';
+export * from './application/ports/human-directory.port';
 export { IAM_HUMAN_ACCESS_PORT } from './application/ports/human-access.token';
 export {
   AuthenticatedOnly,

@@ -15,7 +15,12 @@ import {
 } from '@platform/events';
 
 import { PlatformConfigModule } from '@platform/config';
-import { IAM_HUMAN_ACCESS_PORT, type HumanAccessPort } from '@modules/iam';
+import {
+  IAM_HUMAN_ACCESS_PORT,
+  IAM_HUMAN_DIRECTORY_PORT,
+  type HumanAccessPort,
+  type HumanDirectoryPort,
+} from '@modules/iam';
 import { IamModule } from '@modules/iam/iam.module';
 import { GetAuthorizedTicket } from './application/get-authorized-ticket';
 import {
@@ -23,7 +28,9 @@ import {
   type TicketReadPort,
 } from './application/ticket-read.port';
 import {
+  IDENTITY_MAPPING_DIRECTORY,
   IDENTITY_MAPPING_READ_PORT,
+  type IdentityMappingDirectory,
   type IdentityMappingReadPort,
 } from './application/identity-mapping-read.port';
 import {
@@ -34,6 +41,11 @@ import { TicketIdentityModule } from './ticket-identity.module';
 import { ZammadUserAccessModule } from './zammad-user-access.module';
 import { TicketController } from './presentation/ticket.controller';
 import { TicketWorkflowController } from './presentation/ticket-workflow.controller';
+import { TicketNotificationsController } from './presentation/ticket-notifications.controller';
+import { TicketNotifications } from './application/ticket-notifications';
+import { TicketExtrasController } from './presentation/ticket-extras.controller';
+import { TicketEvidence } from './application/ticket-evidence';
+import { PrivateTicketEvidenceFiles } from './infrastructure/private-ticket-evidence-files';
 import { TicketJournal } from './application/ticket-journal';
 import { TicketWorkflow } from './application/ticket-workflow';
 import {
@@ -53,8 +65,66 @@ import { ZammadTicketReadAdapter } from './infrastructure/zammad-ticket-read.ada
     ZammadUserAccessModule,
     AssetTopologyModule,
   ],
-  controllers: [TicketController, TicketWorkflowController],
+  controllers: [
+    TicketNotificationsController,
+    TicketExtrasController,
+    TicketController,
+    TicketWorkflowController,
+  ],
   providers: [
+    {
+      provide: TicketNotifications,
+      inject: [GetAuthorizedTicket, MongoTicketJournalStore, ConfigService],
+      useFactory: (
+        access: GetAuthorizedTicket,
+        store: MongoTicketJournalStore,
+        config: ConfigService,
+      ) =>
+        new TicketNotifications(access, store, {
+          instanceKey: config.getOrThrow<string>('ZAMMAD_INSTANCE_KEY'),
+          approvedGroupId: Number(
+            config.getOrThrow<string>('ZAMMAD_EXPECTED_GROUP_ID'),
+          ),
+        }),
+    },
+    {
+      provide: TicketEvidence,
+      inject: [
+        TicketWorkflow,
+        MongoTicketJournalStore,
+        UNIT_OF_WORK_PORT,
+        OUTBOX_WRITER_PORT,
+        ConfigService,
+      ],
+      useFactory: (
+        workflow: TicketWorkflow,
+        store: MongoTicketJournalStore,
+        uow: UnitOfWorkPort,
+        outbox: OutboxWriterPort,
+        config: ConfigService,
+      ) => {
+        const directory = config.get<string>('TICKET_EVIDENCE_DIRECTORY');
+        const secret = config.get<string>('TICKET_EVIDENCE_SIGNING_KEY');
+        if (Boolean(directory) !== Boolean(secret))
+          throw new Error(
+            'Set both Ticket Evidence storage settings or neither',
+          );
+        return new TicketEvidence(
+          workflow,
+          store,
+          new TicketJournal(store, uow, outbox),
+          {
+            instance: config.getOrThrow<string>('ZAMMAD_INSTANCE_KEY'),
+            group: Number(
+              config.getOrThrow<string>('ZAMMAD_EXPECTED_GROUP_ID'),
+            ),
+          },
+          directory && secret
+            ? { files: new PrivateTicketEvidenceFiles(directory), secret }
+            : undefined,
+        );
+      },
+    },
     {
       provide: MongoTicketJournalStore,
       inject: [getConnectionToken()],
@@ -75,6 +145,8 @@ import { ZammadTicketReadAdapter } from './infrastructure/zammad-ticket-read.ada
         UNIT_OF_WORK_PORT,
         OUTBOX_WRITER_PORT,
         ConfigService,
+        IAM_HUMAN_DIRECTORY_PORT,
+        IDENTITY_MAPPING_DIRECTORY,
         { token: TICKET_WORKFLOW_LINKS_PORT, optional: true },
       ],
       useFactory: (
@@ -86,6 +158,8 @@ import { ZammadTicketReadAdapter } from './infrastructure/zammad-ticket-read.ada
         uow: UnitOfWorkPort,
         outbox: OutboxWriterPort,
         config: ConfigService,
+        identities: HumanDirectoryPort,
+        candidates: IdentityMappingDirectory,
         integrations?: TicketWorkflowLinksPort,
       ) =>
         new TicketWorkflow(
@@ -107,6 +181,7 @@ import { ZammadTicketReadAdapter } from './infrastructure/zammad-ticket-read.ada
           },
           Number(config.getOrThrow<string>('ZAMMAD_SERVICE_USER_ID')),
           integrations,
+          { identities, candidates },
         ),
     },
     {
@@ -117,6 +192,7 @@ import { ZammadTicketReadAdapter } from './infrastructure/zammad-ticket-read.ada
         EXTERNAL_USER_ACCESS_PORT,
         TICKET_READ_PORT,
         ConfigService,
+        MongoTicketJournalStore,
       ],
       useFactory: (
         iam: HumanAccessPort,
@@ -124,13 +200,21 @@ import { ZammadTicketReadAdapter } from './infrastructure/zammad-ticket-read.ada
         external: ExternalUserAccessPort,
         tickets: TicketReadPort,
         config: ConfigService,
+        store: MongoTicketJournalStore,
       ) =>
-        new GetAuthorizedTicket(iam, mappings, external, tickets, {
-          instanceKey: config.getOrThrow<string>('ZAMMAD_INSTANCE_KEY'),
-          approvedGroupId: Number(
-            config.getOrThrow<string>('ZAMMAD_EXPECTED_GROUP_ID'),
-          ),
-        }),
+        new GetAuthorizedTicket(
+          iam,
+          mappings,
+          external,
+          tickets,
+          {
+            instanceKey: config.getOrThrow<string>('ZAMMAD_INSTANCE_KEY'),
+            approvedGroupId: Number(
+              config.getOrThrow<string>('ZAMMAD_EXPECTED_GROUP_ID'),
+            ),
+          },
+          store,
+        ),
     },
     {
       provide: TICKET_READ_PORT,

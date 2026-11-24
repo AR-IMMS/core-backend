@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type { TicketNotificationKind } from './ticket-notifications';
 import {
   AUDIT_FACT_EVENT_TYPE,
   AUDIT_FACT_EVENT_VERSION,
@@ -15,10 +16,41 @@ export interface TicketLinks {
   readonly maintenanceIds: readonly string[];
 }
 
+export interface TicketArchiveRecord {
+  readonly instance: string;
+  readonly group: number;
+  readonly ticketId: number;
+  readonly active: boolean;
+  readonly version: number;
+  readonly archivedAt: string;
+  readonly archivedByUserId: string;
+  readonly archiveReason: string;
+  readonly restoredAt?: string;
+  readonly restoredByUserId?: string;
+  readonly restoreReason?: string;
+}
+export interface TicketEvidenceRecord {
+  readonly instance: string;
+  readonly group: number;
+  readonly ticketId: number;
+  readonly id: string;
+  readonly fileName: string;
+  readonly mimeType: string;
+  readonly fileSize: number;
+  readonly uploadedByUserId: string;
+  readonly createdAt: string;
+  readonly sha256: string;
+}
 export interface JournalResult {
   readonly ticketId: number;
   readonly articleId?: number;
   readonly links?: TicketLinks;
+  readonly archive?: TicketArchiveRecord;
+  readonly evidence?: TicketEvidenceRecord;
+  readonly notification?: {
+    readonly kind: TicketNotificationKind;
+    readonly recipients: readonly number[];
+  };
   readonly changes: readonly AuditFactChange[];
 }
 
@@ -33,6 +65,7 @@ export interface TicketReceipt {
   readonly stage: 'dispatching' | 'verified' | 'succeeded' | 'failed';
   readonly occurredAt: string;
   readonly eventId: string;
+  readonly notificationReadBy?: readonly string[];
   readonly result?: JournalResult;
 }
 
@@ -52,6 +85,27 @@ export interface TicketJournalStore {
     result: JournalResult,
     context: UnitOfWorkContext,
   ): Promise<void>;
+  archive?(
+    instance: string,
+    group: number,
+    ticketId: number,
+  ): Promise<TicketArchiveRecord | null>;
+  archived?(
+    instance: string,
+    group: number,
+    after: number,
+    limit: number,
+  ): Promise<TicketArchiveRecord[]>;
+  putArchive?(
+    receipt: TicketReceipt,
+    record: TicketArchiveRecord,
+    context: UnitOfWorkContext,
+  ): Promise<void>;
+  putEvidence?(
+    receipt: TicketReceipt,
+    record: TicketEvidenceRecord,
+    context: UnitOfWorkContext,
+  ): Promise<void>;
   links(
     instance: string,
     group: number,
@@ -67,7 +121,9 @@ export class TicketOperationError extends Error {
       | 'INVALID'
       | 'CONFLICT'
       | 'UNRESOLVED'
-      | 'UNAVAILABLE',
+      | 'UNAVAILABLE'
+      | 'TOO_LARGE'
+      | 'INVALID_FILE',
   ) {
     super(`Ticket operation: ${code}`);
   }
@@ -195,6 +251,16 @@ export class TicketJournal {
       await this.uow.run(async (context) => {
         if (!(await this.store.complete(receipt.id, context))) return;
         if (result.links) await this.store.putLinks(receipt, result, context);
+        if (result.archive) {
+          if (!this.store.putArchive)
+            throw new TicketOperationError('UNAVAILABLE');
+          await this.store.putArchive(receipt, result.archive, context);
+        }
+        if (result.evidence) {
+          if (!this.store.putEvidence)
+            throw new TicketOperationError('UNAVAILABLE');
+          await this.store.putEvidence(receipt, result.evidence, context);
+        }
         const sequence = await this.store.nextSequence(
           receipt,
           result.ticketId,

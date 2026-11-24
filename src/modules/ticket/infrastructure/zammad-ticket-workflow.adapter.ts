@@ -163,13 +163,47 @@ export class ZammadTicketWorkflowAdapter implements TicketUpstreamPort {
     return result;
   }
 
-  async priorityAvailable(priorityId: number) {
-    const result = await this.request(
+  async priorities() {
+    const rows = await this.request(
       'ticket_priorities',
-      z.array(reference.extend({ active: z.boolean() })),
+      z
+        .array(
+          reference.extend({
+            name: z.string().trim().min(1).max(100),
+            active: z.boolean(),
+            ui_color: z.string().nullable().optional(),
+          }),
+        )
+        .max(100),
     );
-    return (
-      result.filter((row) => row.id === priorityId && row.active).length === 1
+    if (new Set(rows.map((row) => row.id)).size !== rows.length)
+      throw new TicketReadError('INVALID_UPSTREAM_RESPONSE');
+    return rows
+      .filter((row) => row.active)
+      .map((row) => {
+        const label = row.name.replace(/^\d+\s+/, '').trim() || row.name;
+        const named = label.toLowerCase();
+        const color =
+          row.ui_color === 'low-priority' && named === 'low'
+            ? 'green'
+            : row.ui_color === 'high-priority' && named === 'high'
+              ? 'amber'
+              : named === 'normal' || named === 'medium'
+                ? 'cyan'
+                : named === 'critical'
+                  ? 'critical'
+                  : 'neutral';
+        return {
+          id: row.id,
+          label: label[0].toUpperCase() + label.slice(1),
+          color,
+        } as const;
+      });
+  }
+
+  async priorityAvailable(priorityId: number) {
+    return (await this.priorities()).some(
+      (priority) => priority.id === priorityId,
     );
   }
 

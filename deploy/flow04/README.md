@@ -65,6 +65,38 @@ work around that error. The image uses pinned Node 22.22.3 and pnpm 11.9.0,
 frozen-lockfile installation, non-root execution, dropped capabilities and no
 new privileges. Dependencies were not changed.
 
+Build without replacing a container or the PoC tag with
+`powershell -NoProfile -ExecutionPolicy Bypass -File deploy/flow04/build.ps1 -ImageTag arimms-core-flow04:ticket-readiness`.
+The build includes `pnpm-workspace.yaml` and removes its temporary context.
+
+### Archive, Evidence and the first start of the updated image
+
+The first approved Ticket-enabled start adds `ticket_archives` and
+`ticket_evidence` and creates `ix_ticket_identity_directory` on
+`ticket_zammad_identity_mappings`. Existing journal, context and mapping indexes
+are retained. There is no backfill or Zammad schema operation. Confirm readiness
+after the indexes build. Treat an index conflict or startup failure as a stop
+condition and preserve the existing records for investigation.
+
+Compose mounts `core-backend_ticket-evidence` only into Core at
+`/var/lib/arimms/ticket-evidence`. The image initializes a newly mounted, empty
+Docker volume from a directory owned by UID/GID 1000 with mode `0700`. Confirm
+that UID 1000 can read and write an existing or restored volume before using it.
+Keep `TICKET_EVIDENCE_DIRECTORY=/var/lib/arimms/ticket-evidence` and a distinct
+random `TICKET_EVIDENCE_SIGNING_KEY` of at least 32 characters in the ignored
+`.env.local`. Preserve the key separately from the backup archives. Leave both
+settings absent only when intentionally disabling new uploads.
+
+After separate rollout approval, `Start -Build` builds and tags
+`arimms-core-flow04:local`, checks the tag and Archive support, closes the admin gateway,
+reconciles the selected private Zammad services, validates the Zammad network,
+reconciles MongoDB and waits for it to be primary, validates MongoDB isolation,
+then reconciles Core and waits for readiness. Core receives the Evidence volume
+and may create the new MongoDB collections/indexes during startup. The script
+ends with Mongo DNS and private authenticated Zammad identity checks. Compose
+may recreate services whose configuration changed. The other port-8080 stack
+is outside these commands.
+
 The existing ignored `.env.local` supplies runtime secrets through Compose.
 Do not print expanded `docker compose config` or `docker inspect` environments.
 `config --quiet` validates safely. The overlay overrides database and Zammad
@@ -124,10 +156,30 @@ Zammad change is a trusted operational exception, not Ticket business authority.
 
 ## Rollback without data loss
 
-Preferred rollback preserves private networks: stop Core and redeploy the last
-reviewed Core image on these same overlays. Tag/save a reviewed image before each
-future update. Restore the previous image tag and run `manage.ps1 -Action Start`.
-Do not expose a backend port merely to repair the application.
+Before the first approved rollout, tag the image currently running on Core
+under a separate rollback tag using its inspected image ID. Stop Core to pause
+Ticket writes and the Audit relay while taking consistent backups. Run a full
+replica-set `mongodump --oplog --gzip --archive=/tmp/flow04-before-rollout.gz`
+inside the selected Mongo container, then use `docker cp` to place the archive
+in a restricted backup location. Save the image ID and backup checksum. Back up
+the Evidence named volume with a network-disabled helper mounting it read-only
+and writing the archive to a separate restricted destination. If the volume has
+not been created yet, record that fact. Rehearse restores only on isolated
+volumes and a disposable replica set. No database or Evidence restore is part of
+an application rollback. The selected Zammad deployment and its existing backups
+stay in place.
+
+If the rollback image predates Archive, stop Core first, restore the saved Core
+image tag, and set `FLOW04_TICKET_API_ENABLED=false` in the shell running
+`manage.ps1 -Action Start` without `-Build`. Verify readiness, the absence of
+Ticket routes from Swagger, and HTTP 404 for the Ticket list and detail before
+reopening client access. Keep that flag disabled across subsequent starts until
+an image that understands the Archive gate is running. `Start` and
+`CloseMaintenance` reject Ticket-enabled images without the Archive label
+before changing services. A compatible image can
+serve Tickets after its archive visibility checks pass. In either case retain
+the MongoDB collections, Evidence volume, signing key, journal, Audit history,
+and private networks.
 
 If reverting the network architecture is explicitly necessary, first stop Core,
 open restricted maintenance, disable attribute 60 without deleting it, apply only

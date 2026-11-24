@@ -13,8 +13,10 @@ import type { IdentityMapping } from '../domain/identity-mapping';
 import { GetAuthorizedTicket } from './get-authorized-ticket';
 import {
   TicketJournal,
+  type JournalResult,
   type TicketJournalStore,
   type TicketLinks,
+  type TicketArchiveRecord,
 } from './ticket-journal';
 import type { ExternalTicket } from './ticket-read.port';
 import type { TicketUpstreamPort } from './ticket-upstream.port';
@@ -97,6 +99,18 @@ function setup(
   const ticketRead = {
     getTicket: jest.fn(async (id: number) => tickets.get(id) ?? null),
   };
+  const archives = new Map<number, TicketArchiveRecord>();
+  const archiveStore = {
+    archive: jest.fn(
+      async (_i: string, _g: number, id: number) => archives.get(id) ?? null,
+    ),
+    archived: jest.fn(
+      async (_i: string, _g: number, after: number, limit: number) =>
+        [...archives.values()]
+          .filter((row) => row.active && row.ticketId > after)
+          .slice(0, limit),
+    ),
+  };
   const auth = new GetAuthorizedTicket(
     iam,
     {
@@ -114,19 +128,24 @@ function setup(
     },
     ticketRead,
     scope,
+    archiveStore,
   );
   let persistedLinks: TicketLinks | null = null;
   const store = {
     links: jest.fn(async () => persistedLinks),
+    ...archiveStore,
   } as unknown as TicketJournalStore;
   const journal = new TicketJournal(
     store,
     {} as UnitOfWorkPort,
     {} as OutboxWriterPort,
   );
+  const completed: JournalResult[] = [];
   jest.spyOn(journal, 'run').mockImplementation(async (_input, prepare) => {
     const result = await (await prepare())('test-marker');
+    completed.push(result);
     if (result.links) persistedLinks = result.links;
+    if (result.archive) archives.set(result.ticketId, result.archive);
     return result;
   });
   const rows: Awaited<ReturnType<TicketUpstreamPort['articles']>>[number][] =
@@ -209,6 +228,28 @@ function setup(
     ),
     getAssetPlacementHistory: jest.fn(async () => null),
   };
+  const listed = [actor, tech, admin].sort();
+  const directory = {
+    candidates: {
+      listCandidates: jest.fn(async (after: string | undefined) =>
+        listed
+          .map((id) => ({ id, cursor: 'position-' + id }))
+          .filter((row) => !after || row.cursor > after),
+      ),
+    },
+    identities: {
+      getIdentity: jest.fn(async (id: string) => {
+        const principal = await iam.getPrincipal(id);
+        return principal
+          ? {
+              ...principal,
+              username: id,
+              displayName: id === tech ? 'Named Technician' : null,
+            }
+          : null;
+      }),
+    },
+  };
   const workflow = new TicketWorkflow(
     auth,
     iam,
@@ -220,11 +261,76 @@ function setup(
     scope,
     6,
     integrations,
+    directory,
   );
-  return { workflow, upstream, tickets, fixture, iam, journal, byCore };
+  return {
+    workflow,
+    upstream,
+    tickets,
+    fixture,
+    iam,
+    journal,
+    completed,
+    byCore,
+    auth,
+    directory,
+  };
 }
 
 describe('Ticket business workflow', () => {
+  it('finds eligible users by authorized name with cursor, omits missing mappings and denies other actors', async () => {
+    const { workflow, byCore, directory } = setup();
+    await expect(workflow.eligibleUsers(tech, '', 10)).rejects.toMatchObject({
+      code: 'DENIED',
+    });
+    await expect(workflow.eligibleUsers(admin, '', 10)).rejects.toMatchObject({
+      code: 'DENIED',
+    });
+    expect(directory.candidates.listCandidates).not.toHaveBeenCalled();
+    await expect(workflow.eligibleUsers(actor, '', 1)).resolves.toEqual({
+      items: [
+        {
+          id: actor,
+          username: actor,
+          display_name: null,
+          role: 'OPERATOR',
+          status: 'ACTIVE',
+        },
+      ],
+      next: 'position-' + actor,
+    });
+    await expect(
+      workflow.eligibleUsers(actor, 'NAMED', 10, 'position-' + actor),
+    ).resolves.toEqual({
+      items: [
+        {
+          id: tech,
+          username: tech,
+          display_name: 'Named Technician',
+          role: 'TECHNICIAN',
+          status: 'ACTIVE',
+        },
+      ],
+      next: null,
+    });
+    const profile = await directory.identities.getIdentity(tech);
+    if (!profile) throw new Error('missing fixture');
+    directory.identities.getIdentity.mockResolvedValueOnce({
+      ...profile,
+      status: 'INACTIVE',
+    });
+    await expect(
+      workflow.eligibleUsers(actor, 'Named', 10, 'position-' + actor),
+    ).resolves.toEqual({ items: [], next: null });
+    byCore.delete(tech);
+    await expect(
+      workflow.eligibleUsers(actor, 'Named', 10, 'position-' + actor),
+    ).resolves.toEqual({ items: [], next: null });
+    await expect(
+      workflow.responsibilities(operation(), 10, { assignee_user_id: tech }),
+    ).rejects.toMatchObject({ code: 'INVALID' });
+  });
+
   it('TC-WF04-03: rejects unauthorized creation before journaling or the upstream call', async () => {
     const { workflow, upstream, journal } = setup(undefined, true);
     const input = {
@@ -390,7 +496,10 @@ describe('Ticket business workflow', () => {
   });
 
   it('lets an assigned Technician start, pause, resume and add an internal note with ticket:work', async () => {
-    const { workflow, upstream, tickets, fixture } = setup(undefined, true);
+    const { workflow, upstream, tickets, fixture, completed } = setup(
+      undefined,
+      true,
+    );
     tickets.set(10, { ...fixture, stateId: 11 });
     await expect(
       workflow.transition(operation(tech), 10, { state: 'OPEN' }),
@@ -408,6 +517,12 @@ describe('Ticket business workflow', () => {
       workflow.appendArticle(operation(tech), 10, 'Scoped field note'),
     ).resolves.toMatchObject({ articleId: 22 });
     expect(upstream.append).toHaveBeenCalledTimes(1);
+    expect(completed.map((result) => result.notification)).toEqual([
+      { kind: 'progressed', recipients: [5, 4] },
+      { kind: 'progressed', recipients: [5, 4] },
+      { kind: 'progressed', recipients: [5, 4] },
+      { kind: 'article_added', recipients: [5, 4] },
+    ]);
   });
 
   it('does not expand Technician scope or grant management with ticket:work', async () => {
@@ -561,5 +676,80 @@ describe('Ticket business workflow', () => {
     ).resolves.toMatchObject({ title: 'Reviewed title', nativeOwnerId: 5 });
     expect(api.confirmedIncident).toHaveBeenCalledWith(actor, 'confirmed-1');
     expect(upstream.create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Core archive visibility', () => {
+  it('archives separately from canonical Ticket, guards every normal path and restores the same Ticket and Articles', async () => {
+    const { workflow, upstream, tickets, fixture, auth } = setup(
+      undefined,
+      true,
+    );
+    await workflow.appendArticle(
+      { ...operation(tech), key: 'seed-article-local' },
+      10,
+      'note retained',
+    );
+    await expect(
+      workflow.archive(operation(), 10, 'wrong request', true),
+    ).resolves.toMatchObject({ ticketId: 10, active: true, version: 1 });
+    const visible = await workflow.list(actor, { after: 0, page_size: 20 });
+    expect(
+      visible.tickets.some(
+        (item) => item.externalTicketId === fixture.externalTicketId,
+      ),
+    ).toBe(false);
+    await expect(auth.execute(tech, 10)).resolves.toEqual({
+      status: 'not_found',
+    });
+    await expect(auth.execute(actor, 10)).resolves.toEqual({
+      status: 'not_found',
+    });
+    await expect(workflow.archived(actor, 0, 20)).resolves.toMatchObject({
+      items: [{ ticket: fixture, record: { active: true } }],
+    });
+    await expect(workflow.archived(tech, 0, 20)).rejects.toMatchObject({
+      code: 'DENIED',
+    });
+    await expect(
+      workflow.evidenceAccess(actor, 10, false),
+    ).resolves.toBeUndefined();
+    await expect(
+      workflow.evidenceAccess(tech, 10, false),
+    ).rejects.toMatchObject({ code: 'DENIED' });
+    await expect(
+      workflow.evidenceAccess(actor, 10, true),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      workflow.transition(operation(tech), 10, { state: 'OPEN' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      workflow.appendArticle(operation(tech), 10, 'blocked'),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      workflow.archive(
+        { ...operation(), key: 'fresh-restore-key' },
+        10,
+        'valid after all',
+        false,
+      ),
+    ).resolves.toMatchObject({ ticketId: 10, active: false, version: 2 });
+    expect(tickets.get(10)).toEqual(fixture);
+    await expect(upstream.articles(10)).resolves.toEqual([
+      expect.objectContaining({ text: 'note retained' }),
+    ]);
+    expect(upstream.update).not.toHaveBeenCalled();
+  });
+  it('denies Technician, IT Admin, and an inaccessible Ticket', async () => {
+    const { workflow } = setup(undefined, true);
+    await expect(
+      workflow.archive(operation(tech), 10, 'reason', true),
+    ).rejects.toMatchObject({ code: 'DENIED' });
+    await expect(
+      workflow.archive(operation(admin), 10, 'reason', true),
+    ).rejects.toMatchObject({ code: 'DENIED' });
+    await expect(
+      workflow.archive(operation(), 999, 'reason', true),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

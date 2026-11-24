@@ -13,7 +13,11 @@ import { getRolePermissions } from '@modules/iam/domain/role-permissions';
 import { GetAuthorizedTicket } from '../application/get-authorized-ticket';
 import { TicketWorkflow } from '../application/ticket-workflow';
 import { TicketOperationError } from '../application/ticket-journal';
+import { TicketExtrasController } from './ticket-extras.controller';
+import { TicketEvidence } from '../application/ticket-evidence';
 import { TicketController } from './ticket.controller';
+import { TicketNotificationsController } from './ticket-notifications.controller';
+import { TicketNotifications } from '../application/ticket-notifications';
 import { TicketWorkflowController } from './ticket-workflow.controller';
 
 const actor = '403678c5-a90b-4a06-9a7d-318f27a3c639';
@@ -37,16 +41,42 @@ describe('Public Ticket HTTP contract', () => {
   const transition = jest.fn();
   const create = jest.fn();
   const reopen = jest.fn();
+  const archived = jest.fn();
+  const priorities = jest.fn();
+  const eligibleUsers = jest.fn();
+  const archive = jest.fn();
+  const writeEvidence = jest.fn();
+  const content = jest.fn();
+  const notifications = { list: jest.fn(), markRead: jest.fn() };
   let app: INestApplication;
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
-      controllers: [TicketController, TicketWorkflowController],
+      controllers: [
+        TicketNotificationsController,
+        TicketExtrasController,
+        TicketController,
+        TicketWorkflowController,
+      ],
       providers: [
+        { provide: TicketNotifications, useValue: notifications },
+        {
+          provide: TicketEvidence,
+          useValue: { write: writeEvidence, content },
+        },
         { provide: GetAuthorizedTicket, useValue: { execute } },
         {
           provide: TicketWorkflow,
-          useValue: { responsibilities, transition, create, reopen },
+          useValue: {
+            responsibilities,
+            transition,
+            create,
+            reopen,
+            archived,
+            priorities,
+            eligibleUsers,
+            archive,
+          },
         },
       ],
     }).compile();
@@ -83,6 +113,188 @@ describe('Public Ticket HTTP contract', () => {
   function api() {
     return request(app.getHttpServer() as Server);
   }
+
+  it('serves the caller inbox and validates acknowledgement IDs', async () => {
+    const path = '/api/v1/ticket-notifications';
+    const id = '55520a7c-aaaa-440a-8bed-2dc60509baa9';
+    notifications.list.mockResolvedValue({ items: [], unread_count: 0 });
+    notifications.markRead.mockResolvedValue({ updated_count: 1 });
+    await api().get(path).expect(403);
+    await api()
+      .get(path)
+      .set('Authorization', 'Bearer technician-fixture')
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+    expect(notifications.list).toHaveBeenCalledWith(actor);
+    for (const body of [
+      { ids: [id, id] },
+      { ids: ['invalid'] },
+      { ids: [id], user_id: actor },
+    ]) {
+      await api()
+        .post(path + '/read')
+        .set('Authorization', 'Bearer technician-fixture')
+        .send(body)
+        .expect(400);
+    }
+    expect(notifications.markRead).not.toHaveBeenCalled();
+    await api()
+      .post(path + '/read')
+      .set('Authorization', 'Bearer technician-fixture')
+      .send({ ids: [id] })
+      .expect(200);
+    expect(notifications.markRead).toHaveBeenCalledWith(actor, [id]);
+    notifications.markRead.mockRejectedValue(
+      new TicketOperationError('NOT_FOUND'),
+    );
+    await api()
+      .post(path + '/read')
+      .set('Authorization', 'Bearer technician-fixture')
+      .send({ ids: [id] })
+      .expect(404);
+  });
+  it('routes static archive and priority endpoints before canonical detail and applies guard policy', async () => {
+    archived.mockResolvedValue({ items: [], next: null });
+    priorities.mockResolvedValue([{ id: 27, label: 'High', color: 'amber' }]);
+    await api()
+      .get('/api/v1/tickets/archived')
+      .set('Authorization', 'Bearer fixture')
+      .expect(200);
+    expect(archived).toHaveBeenCalledWith(actor, 0, 20);
+    await api()
+      .get('/api/v1/tickets/metadata/priorities')
+      .set('Authorization', 'Bearer technician-fixture')
+      .expect(200);
+    expect(priorities).toHaveBeenCalledWith(actor);
+    await api()
+      .post('/api/v1/tickets/10/archive')
+      .set('Authorization', 'Bearer technician-fixture')
+      .send({ reason: 'fixture' })
+      .expect(403);
+    expect(archive).not.toHaveBeenCalled();
+    await api()
+      .post('/api/v1/tickets/10/archive')
+      .set('Authorization', 'Bearer fixture')
+      .send({ reason: 'fixture' })
+      .expect(400);
+    expect(archive).not.toHaveBeenCalled();
+  });
+  it('requires a Ticket Operator permission, parses search and pages, and keeps failures private', async () => {
+    const path = '/api/v1/tickets/eligible-users';
+    const position = '000000000000000000000001';
+    eligibleUsers.mockResolvedValue({
+      items: [
+        {
+          id: actor,
+          username: 'operator',
+          display_name: null,
+          role: 'OPERATOR',
+          status: 'ACTIVE',
+        },
+      ],
+      next: position,
+    });
+    await api().get(path).expect(403); // This fixture only installs the permission guard.
+    await api()
+      .get(path)
+      .set('Authorization', 'Bearer technician-fixture')
+      .expect(403);
+    await api()
+      .get(path + '?page_size=26')
+      .set('Authorization', 'Bearer fixture')
+      .expect(400);
+    await api()
+      .get(path + '?cursor=bad')
+      .set('Authorization', 'Bearer fixture')
+      .expect(400);
+    expect(eligibleUsers).not.toHaveBeenCalled();
+    await api()
+      .get(path)
+      .query({ cursor: position, search: 'Operator', page_size: 1 })
+      .set('Authorization', 'Bearer fixture')
+      .expect(200);
+    expect(eligibleUsers).toHaveBeenCalledWith(actor, 'Operator', 1, position);
+    eligibleUsers.mockRejectedValue(new Error('internal information'));
+    await api().get(path).set('Authorization', 'Bearer fixture').expect(503);
+  });
+  it('reads the binary upload only inside the authorized application callback and routes raw protected content', async () => {
+    const bytes = Buffer.from([0, 1, 3, 255]);
+    writeEvidence.mockImplementation(
+      async (
+        _actor: string,
+        _ticket: number,
+        _grant: string,
+        read: () => Promise<Buffer>,
+      ) => {
+        expect(await read()).toEqual(bytes);
+        return { upload_id: 'fixture' };
+      },
+    );
+    await api()
+      .put('/api/v1/tickets/10/evidence/uploads')
+      .set('Authorization', 'Bearer fixture')
+      .set('Content-Type', 'application/octet-stream')
+      .set('X-Evidence-Grant', 'fixture')
+      .send(bytes)
+      .expect(200);
+    content.mockResolvedValue({
+      row: { mimeType: 'application/pdf', fileName: 'fixture.pdf' },
+      bytes,
+      disposition: 'attachment',
+    });
+    await api()
+      .post(
+        '/api/v1/tickets/10/evidence/55555555-5555-4555-8555-555555555555/content',
+      )
+      .set('Authorization', 'Bearer fixture')
+      .send({ grant: 'fixture' })
+      .expect('X-Content-Type-Options', 'nosniff')
+      .expect('Content-Type', 'application/pdf')
+      .expect(200);
+  });
+  it('publishes the notification inbox and read constraints in runtime Swagger', () => {
+    const swagger = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().build(),
+    );
+    expect(swagger.paths['/api/v1/ticket-notifications'].get).toMatchObject({
+      'x-required-permissions': ['ticket:read'],
+      responses: {
+        200: {
+          content: {
+            'application/json': {
+              schema: {
+                properties: {
+                  data: {
+                    properties: {
+                      items: { maxItems: 20 },
+                      unread_count: { minimum: 0 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(
+      swagger.paths['/api/v1/ticket-notifications/read'].post,
+    ).toMatchObject({
+      'x-required-permissions': ['ticket:read'],
+      requestBody: {
+        content: {
+          'application/json': {
+            schema: {
+              properties: {
+                ids: { uniqueItems: true, minItems: 1, maxItems: 20 },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
 
   it('uses the work permission only for progress and internal Articles in guards and Swagger', () => {
     const swagger = SwaggerModule.createDocument(

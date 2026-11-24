@@ -69,6 +69,7 @@ export function createPinoHttpOptions(
         'req.headers.cookie',
         'req.headers.set-cookie',
         'req.headers.x-api-key',
+        'req.headers.x-evidence-grant',
         'res.headers.set-cookie',
       ],
       censor: '[REDACTED]',

@@ -38,6 +38,7 @@ async function bootstrap(): Promise<void> {
       'Authorization',
       'X-CSRF-Token',
       'Idempotency-Key',
+      'X-Evidence-Grant',
     ],
   });
 
