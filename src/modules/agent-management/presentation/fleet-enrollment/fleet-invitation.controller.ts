@@ -20,6 +20,7 @@ import { z } from 'zod';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
+  ApiHeader,
   ApiNotFoundResponse,
   ApiOperation,
   ApiParam,
@@ -59,6 +60,18 @@ export class FleetInvitationController {
   @RequirePermissions('agent:manage')
   @ApiOperation({ summary: 'Request a Fleet enrollment invitation for a Node' })
   @ApiParam({ name: 'nodeId', format: 'uuid' })
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: true,
+    description:
+      'Unique key for this request. Reuse it only when retrying the same request.',
+    schema: {
+      type: 'string',
+      minLength: 16,
+      maxLength: 128,
+      pattern: '^[A-Za-z0-9._:-]+$',
+    },
+  })
   @ApiCreatedResponse({ description: 'Fleet invitation operation accepted.' })
   @ApiNotFoundResponse({ description: 'Node does not exist.' })
   async create(

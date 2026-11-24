@@ -63,6 +63,36 @@ describe('validated IAM runtime configuration', () => {
     ).toBe(true);
   });
 
+  test('accepts mounted Fleet client credentials and a mounted server CA', () => {
+    expect(
+      envSchema.safeParse({
+        ...validAgentConfiguration,
+        FLEET_MANAGER_BASE_URL: 'https://fleet-manager:18081/internal/v1/',
+        FLEET_CLIENT_CERTIFICATE_FILE: '/run/fleet/tls/core-client.crt',
+        FLEET_CLIENT_KEY_FILE: '/run/fleet/tls/core-client.key',
+        FLEET_CA_CERTIFICATE_FILE: '/run/fleet/tls/fleet-server.crt',
+      }).success,
+    ).toBe(true);
+  });
+
+  test('rejects incomplete or mixed Fleet file credential configuration', () => {
+    expect(
+      envSchema.safeParse({
+        ...validAgentConfiguration,
+        FLEET_MANAGER_BASE_URL: 'https://fleet-manager:18081/internal/v1/',
+        FLEET_CLIENT_CERTIFICATE_FILE: '/run/fleet/tls/core-client.crt',
+      }).success,
+    ).toBe(false);
+    expect(
+      envSchema.safeParse({
+        ...validAgentConfiguration,
+        FLEET_MANAGER_BASE_URL: 'https://fleet-manager:18081/internal/v1/',
+        FLEET_CLIENT_CERTIFICATE: 'cert',
+        FLEET_CLIENT_KEY_FILE: '/run/fleet/tls/core-client.key',
+      }).success,
+    ).toBe(false);
+  });
+
   const userInfoUrl = new URL('https://fleet.example.test');
   userInfoUrl.username = 'user';
   userInfoUrl.password = 'password';

@@ -247,3 +247,29 @@ Check readiness at `http://127.0.0.1:18080/health/ready` and follow logs with
 `docker compose logs -f core-backend`. Stop the stack with `docker compose down`;
 the database volume is retained. Use `docker compose down -v` only when you
 intend to delete the local MongoDB data.
+
+### Local Fleet Manager integration
+
+The optional Fleet overlay connects Core to the Fleet Manager repository at
+`../../fleet-manager` over the shared Docker network. It uses mTLS for Core’s
+Fleet requests and enables Fleet invitation routes plus the local TLS OpAMP
+listener. Generate the ignored local certificates from the Fleet server
+certificate once:
+
+```powershell
+go run scripts/generate-local-fleet-mtls.go ..\..\fleet-manager\certs\fleet-server.crt
+```
+
+Fleet Manager also needs `FLEET_ENROLLMENT_ENCRYPTION_KEY` in its ignored
+`.env.local`, set to a private base64-encoded 32-byte key. Then start both
+services with their integration overlays:
+
+```powershell
+docker compose -f ..\..\fleet-manager\compose.yaml -f ..\..\fleet-manager\compose.core-integration.yaml up --build -d fleet-manager
+docker compose -f compose.yaml -f compose.fleet.yaml up --build -d core-backend
+```
+
+The Core-side certificates and private keys live under the ignored
+`.temp/fleet-mtls` directory. Fleet publishes HTTPS on `127.0.0.1:18081` and
+WSS OpAMP on `127.0.0.1:18082`; Core reaches Fleet at
+`https://fleet-manager:18081/internal/v1/` from inside Docker.

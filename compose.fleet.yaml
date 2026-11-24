@@ -1,0 +1,26 @@
+services:
+  core-backend:
+    environment:
+      FLEET_MANAGER_BASE_URL: https://fleet-manager:18081/internal/v1/
+      FLEET_CLIENT_CERTIFICATE_FILE: /run/fleet/tls/core-client.crt
+      FLEET_CLIENT_KEY_FILE: /run/fleet/tls/core-client.key
+      FLEET_CA_CERTIFICATE_FILE: /run/fleet/tls/fleet-server.crt
+    volumes:
+      - type: bind
+        source: ./.temp/fleet-mtls/core-client.crt
+        target: /run/fleet/tls/core-client.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.temp/fleet-mtls/core-client.key
+        target: /run/fleet/tls/core-client.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.temp/fleet-mtls/fleet-server.crt
+        target: /run/fleet/tls/fleet-server.crt
+        read_only: true
+        bind:
+          create_host_path: false
