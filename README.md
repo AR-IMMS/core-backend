@@ -126,6 +126,16 @@ pnpm build
 pnpm asset-topology:debug-room-map -- <room_id>
 ```
 
+For optional local demonstration data, run `pnpm db:migrate:mongo` against the
+configured MongoDB replica set, then `pnpm asset-topology:seed-example`. The
+seed adds two Sites, three Rooms, 18 placed Racks, and reserved walkway cells
+under the default Data Center. Rack names follow `R-<row>-<position>` within
+each Room (for example `R-E-02`); rack IDs remain globally unique. The command
+is repeatable: a complete existing example is left untouched, while partial
+example data causes an error rather than overwriting existing records. Inspect
+the maps with `pnpm asset-topology:debug-room-map -- example-room-main` (or
+`example-room-network` / `example-room-secondary`).
+
 The Room Map debug command reads the same Room-map query used by the API and prints a text grid, parent location names, and occupancy statistics. It is read-only and requires the configured database to be available.
 
 ### Local MongoDB and Readiness
