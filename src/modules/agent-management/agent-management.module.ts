@@ -12,19 +12,19 @@ import {
   AGENT_NODE_LIFECYCLE_COORDINATION_PORT,
 } from './contracts';
 import type { AgentBindingQueries } from './contracts';
-import { NODE_ELIGIBILITY_PORT } from './application/fleet/ports/node-eligibility.port';
-import type { NodeEligibilityPort } from './application/fleet/ports/node-eligibility.port';
-import { FLEET_INVITATION_PORT } from './application/fleet/ports/fleet-invitation.port';
-import type { FleetInvitationPort } from './application/fleet/ports/fleet-invitation.port';
-import { FLEET_INSTALLATION_PORT } from './application/fleet/ports/fleet-installation.port';
-import type { FleetInstallationPort } from './application/fleet/ports/fleet-installation.port';
-import { FLEET_ENROLLMENT_OPERATION_PORT } from './application/fleet/ports/fleet-enrollment-operation.port';
-import type { FleetEnrollmentOperationPort } from './application/fleet/ports/fleet-enrollment-operation.port';
-import { FLEET_BINDING_PROJECTION_PORT } from './application/fleet/ports/fleet-binding-projection.port';
-import type { FleetBindingProjectionPort } from './application/fleet/ports/fleet-binding-projection.port';
-import { RequestFleetInvitationUseCase } from './application/fleet/use-cases/request-fleet-invitation.use-case';
-import { SynchronizeFleetEnrollmentUseCase } from './application/fleet/use-cases/synchronize-fleet-enrollment.use-case';
-import { CoordinateNodeLifecycleUseCase } from './application/fleet/use-cases/coordinate-node-lifecycle.use-case';
+import { NODE_ELIGIBILITY_PORT } from './application/ports/node-eligibility.port';
+import type { NodeEligibilityPort } from './application/ports/node-eligibility.port';
+import { FLEET_INVITATION_PORT } from './application/ports/fleet/fleet-invitation.port';
+import type { FleetInvitationPort } from './application/ports/fleet/fleet-invitation.port';
+import { FLEET_INSTALLATION_PORT } from './application/ports/fleet/fleet-installation.port';
+import type { FleetInstallationPort } from './application/ports/fleet/fleet-installation.port';
+import { ENROLLMENT_OPERATION_PORT } from './application/enrollment/enrollment-operation.port';
+import type { EnrollmentOperationPort } from './application/enrollment/enrollment-operation.port';
+import { BINDING_PROJECTION_PORT } from './application/binding/binding-projection.port';
+import type { BindingProjectionPort } from './application/binding/binding-projection.port';
+import { RequestFleetInvitationUseCase } from './application/enrollment/request-fleet-invitation.use-case';
+import { SynchronizeFleetEnrollmentUseCase } from './application/enrollment/synchronize-fleet-enrollment.use-case';
+import { CoordinateNodeLifecycleUseCase } from './application/lifecycle/coordinate-node-lifecycle.use-case';
 import { FleetInvitationController } from './presentation/fleet-enrollment/fleet-invitation.controller';
 import { FleetEnrollmentSyncController } from './presentation/fleet-enrollment/fleet-enrollment-sync.controller';
 import { FleetManagerAdapterModule } from './infrastructure/fleet/fleet-manager-adapter.module';
@@ -43,22 +43,22 @@ import { MongoFleetBindingProjectionStore } from './infrastructure/mongodb/mongo
     MongoFleetEnrollmentOperationStore,
     MongoFleetBindingProjectionStore,
     {
-      provide: FLEET_BINDING_PROJECTION_PORT,
+      provide: BINDING_PROJECTION_PORT,
       useExisting: MongoFleetBindingProjectionStore,
     },
     {
-      provide: FLEET_ENROLLMENT_OPERATION_PORT,
+      provide: ENROLLMENT_OPERATION_PORT,
       useExisting: MongoFleetEnrollmentOperationStore,
     },
     {
       provide: AGENT_BINDING_QUERIES_PORT,
       useFactory: (
-        fleetBindings: FleetBindingProjectionPort,
+        fleetBindings: BindingProjectionPort,
       ): AgentBindingQueries => ({
         hasActiveBindingForNode: (nodeId, context) =>
           fleetBindings.hasActiveForNode(nodeId, context),
       }),
-      inject: [FLEET_BINDING_PROJECTION_PORT],
+      inject: [BINDING_PROJECTION_PORT],
     },
     {
       provide: NODE_ELIGIBILITY_PORT,
@@ -72,10 +72,10 @@ import { MongoFleetBindingProjectionStore } from './infrastructure/mongodb/mongo
       provide: RequestFleetInvitationUseCase,
       useFactory: (
         nodes: NodeEligibilityPort,
-        bindings: FleetBindingProjectionPort,
+        bindings: BindingProjectionPort,
         fleetInstallations: FleetInstallationPort,
         fleetInvitations: FleetInvitationPort,
-        operations: FleetEnrollmentOperationPort,
+        operations: EnrollmentOperationPort,
         unitOfWork: UnitOfWorkPort,
         outbox: OutboxWriterPort,
       ) =>
@@ -90,10 +90,10 @@ import { MongoFleetBindingProjectionStore } from './infrastructure/mongodb/mongo
         ),
       inject: [
         NODE_ELIGIBILITY_PORT,
-        FLEET_BINDING_PROJECTION_PORT,
+        BINDING_PROJECTION_PORT,
         FLEET_INSTALLATION_PORT,
         FLEET_INVITATION_PORT,
-        FLEET_ENROLLMENT_OPERATION_PORT,
+        ENROLLMENT_OPERATION_PORT,
         UNIT_OF_WORK_PORT,
         OUTBOX_WRITER_PORT,
       ],
@@ -101,11 +101,11 @@ import { MongoFleetBindingProjectionStore } from './infrastructure/mongodb/mongo
     {
       provide: SynchronizeFleetEnrollmentUseCase,
       useFactory: (
-        operations: FleetEnrollmentOperationPort,
+        operations: EnrollmentOperationPort,
         invitations: FleetInvitationPort,
         installations: FleetInstallationPort,
         nodes: NodeEligibilityPort,
-        bindings: FleetBindingProjectionPort,
+        bindings: BindingProjectionPort,
         unitOfWork: UnitOfWorkPort,
         outbox: OutboxWriterPort,
       ) =>
@@ -119,11 +119,11 @@ import { MongoFleetBindingProjectionStore } from './infrastructure/mongodb/mongo
           outbox,
         ),
       inject: [
-        FLEET_ENROLLMENT_OPERATION_PORT,
+        ENROLLMENT_OPERATION_PORT,
         FLEET_INVITATION_PORT,
         FLEET_INSTALLATION_PORT,
         NODE_ELIGIBILITY_PORT,
-        FLEET_BINDING_PROJECTION_PORT,
+        BINDING_PROJECTION_PORT,
         UNIT_OF_WORK_PORT,
         OUTBOX_WRITER_PORT,
       ],

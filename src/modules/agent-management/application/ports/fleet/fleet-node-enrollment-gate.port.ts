@@ -1,4 +1,4 @@
-import type { FleetActorContext, FleetEnrollmentGate } from '../fleet.types';
+import type { FleetActorContext, FleetEnrollmentGate } from './fleet.types';
 
 export interface FleetNodeEnrollmentGatePort {
   closeEnrollmentGate(input: {

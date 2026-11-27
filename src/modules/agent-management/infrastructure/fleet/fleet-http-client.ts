@@ -1,12 +1,12 @@
 import { Agent, request as httpsRequest } from 'node:https';
 import type { IncomingMessage } from 'node:http';
-import type { FleetActorContext } from '../../application/fleet/fleet.types';
+import type { FleetActorContext } from '../../application/ports/fleet/fleet.types';
 import {
   FleetConflictError,
   FleetNotFoundError,
   FleetProtocolError,
   FleetUnavailableError,
-} from '../../application/fleet/errors/fleet-errors';
+} from '../../application/ports/fleet/fleet-errors';
 
 export interface FleetHttpConfig {
   readonly baseUrl: string;

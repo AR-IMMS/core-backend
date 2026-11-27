@@ -1,5 +1,5 @@
-import type { FleetActorContext } from '../../../application/fleet/fleet.types';
-import { FleetProtocolError } from '../../../application/fleet/errors/fleet-errors';
+import type { FleetActorContext } from '../../../application/ports/fleet/fleet.types';
+import { FleetProtocolError } from '../../../application/ports/fleet/fleet-errors';
 import type {
   FleetHttpConfig,
   FleetHttpExecutor,

@@ -36,13 +36,13 @@ import {
   FleetConflictError,
   FleetProtocolError,
   FleetUnavailableError,
-} from '../../application/fleet/errors/fleet-errors';
-import { FleetOperationPendingError } from '../../application/fleet/errors/fleet-operation-pending.error';
-import { RequestFleetInvitationUseCase } from '../../application/fleet/use-cases/request-fleet-invitation.use-case';
+} from '../../application/ports/fleet/fleet-errors';
+import { FleetOperationPendingError } from '../../application/enrollment/errors/fleet-operation-pending.error';
+import { RequestFleetInvitationUseCase } from '../../application/enrollment/request-fleet-invitation.use-case';
 import {
   AgentNodeNotEligibleError,
   AgentNodeNotFoundError,
-} from '../../application/fleet/errors/node-eligibility.errors';
+} from '../../application/enrollment/errors/node-eligibility.errors';
 
 const nodeParamsSchema = z.object({ nodeId: z.uuid() }).strict();
 class NodeParamsDto extends createZodDto(nodeParamsSchema) {}

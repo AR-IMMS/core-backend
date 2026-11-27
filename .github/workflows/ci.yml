@@ -35,7 +35,7 @@ jobs:
         run: pnpm exec eslint "{src,apps,libs,test}/**/*.ts"
 
       - name: Fleet Core contract fake integration
-        run: pnpm exec jest src/modules/agent-management/application/fleet/__tests__/fleet-core.integration.spec.ts --runInBand
+        run: pnpm exec jest src/modules/agent-management/application/enrollment/__tests__/fleet-core.integration.spec.ts --runInBand
 
       - name: Fleet Node lifecycle gate and recovery
         run: pnpm exec jest src/modules/asset-topology/application/lifecycle/__tests__/node-lifecycle-orchestrator.spec.ts src/modules/asset-topology/infrastructure/mongodb/__tests__/mongo-node-lifecycle-operation.store.spec.ts src/modules/asset-topology/infrastructure/mongodb/migrations/__tests__/node-lifecycle-operations.migration.spec.ts src/modules/asset-topology/presentation/assets/__tests__/node-lifecycle-operation.controller.spec.ts --runInBand

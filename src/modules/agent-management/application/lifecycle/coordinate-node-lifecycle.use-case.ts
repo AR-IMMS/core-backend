@@ -1,8 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { AgentNodeLifecycleCoordination } from '../../../contracts/agent-node-lifecycle.contract';
-import { FLEET_NODE_ENROLLMENT_GATE_PORT } from '../ports/fleet-node-enrollment-gate.port';
-import type { FleetNodeEnrollmentGatePort } from '../ports/fleet-node-enrollment-gate.port';
-import type { FleetActorContext, FleetEnrollmentGate } from '../fleet.types';
+import type { AgentNodeLifecycleCoordination } from '../../contracts/agent-node-lifecycle.contract';
+import { FLEET_NODE_ENROLLMENT_GATE_PORT } from '../ports/fleet/fleet-node-enrollment-gate.port';
+import type { FleetNodeEnrollmentGatePort } from '../ports/fleet/fleet-node-enrollment-gate.port';
+import type {
+  FleetActorContext,
+  FleetEnrollmentGate,
+} from '../ports/fleet/fleet.types';
 
 /** Keeps Fleet gate operations behind the Agent Management public contract. */
 @Injectable()

@@ -1,8 +1,8 @@
 import {
   FleetConflictError,
   FleetProtocolError,
-} from '../../errors/fleet-errors';
-import { FleetOperationPendingError } from '../../errors/fleet-operation-pending.error';
+} from '../../ports/fleet/fleet-errors';
+import { FleetOperationPendingError } from '../errors/fleet-operation-pending.error';
 import { SynchronizeFleetEnrollmentUseCase } from '../synchronize-fleet-enrollment.use-case';
 import type { OutboxWriterPort, UnitOfWorkPort } from '@platform/events';
 

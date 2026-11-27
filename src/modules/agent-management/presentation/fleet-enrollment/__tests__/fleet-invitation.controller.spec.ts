@@ -8,8 +8,8 @@ import {
   HTTP_ROUTE_POLICY_METADATA,
   type HttpRoutePolicy,
 } from '@platform/http/api';
-import { FleetOperationPendingError } from '../../../application/fleet/errors/fleet-operation-pending.error';
-import { RequestFleetInvitationUseCase } from '../../../application/fleet/use-cases/request-fleet-invitation.use-case';
+import { FleetOperationPendingError } from '../../../application/enrollment/errors/fleet-operation-pending.error';
+import { RequestFleetInvitationUseCase } from '../../../application/enrollment/request-fleet-invitation.use-case';
 import { FleetInvitationController } from '../fleet-invitation.controller';
 
 describe('FleetInvitationController', () => {

@@ -1,13 +1,13 @@
 import {
   FleetNotFoundError,
   FleetProtocolError,
-} from '../../application/fleet/errors/fleet-errors';
-import type { FleetInvitationPort } from '../../application/fleet/ports/fleet-invitation.port';
+} from '../../application/ports/fleet/fleet-errors';
+import type { FleetInvitationPort } from '../../application/ports/fleet/fleet-invitation.port';
 import type {
   FleetActorContext,
   FleetInvitationView,
   FleetInvitationState,
-} from '../../application/fleet/fleet.types';
+} from '../../application/ports/fleet/fleet.types';
 import { FleetHttpClient } from './fleet-http-client';
 
 type FleetOperationStatus = 'PENDING' | 'EXCHANGED' | 'CANCELLED' | 'EXPIRED';
