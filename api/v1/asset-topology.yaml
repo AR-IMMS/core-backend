@@ -22,7 +22,7 @@ paths:
           in: query
           required: false
           description: Opaque cursor returned by the previous page.
-          schema: { type: string, minLength: 1 }
+          schema: { type: string, minLength: 1, maxLength: 512 }
         - name: page_size
           in: query
           required: false
@@ -167,18 +167,13 @@ paths:
           schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
       responses:
         '200':
-          description: Pending operations without secrets or caller supplied identity.
+          description: Pending operations without secrets or caller supplied identity, in the standard response envelope.
           content:
             application/json:
-              schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: '#/components/schemas/NodeLifecycleOperation' }
+              schema: { $ref: '#/components/schemas/NodeLifecycleOperationsResponse' }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
+        '409': { $ref: ../baseline.yaml#/components/responses/Problem }
   /api/v1/asset-topology/node-lifecycle-operations/{operation_id}/retry:
     parameters:
       - name: operation_id
@@ -194,10 +189,10 @@ paths:
       x-required-role: IT_ADMIN
       responses:
         '200':
-          description: Current durable operation status.
+          description: Current durable operation status in the standard response envelope.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/NodeLifecycleOperation' }
+              schema: { $ref: '#/components/schemas/NodeLifecycleOperationResponse' }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -623,7 +618,7 @@ paths:
               schema: { type: string }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RoomMapResponse' }
+              schema: { $ref: '#/components/schemas/RoomMapEnvelope' }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -658,7 +653,7 @@ paths:
               schema: { type: string }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RackLayoutMutationResponse' }
+              schema: { $ref: '#/components/schemas/RackLayoutMutationEnvelope' }
         '400': { $ref: ../baseline.yaml#/components/responses/Problem }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -694,9 +689,7 @@ paths:
           description: Racks in stable Rack ID order.
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/RackResponse' }
+              schema: { $ref: '#/components/schemas/RackListResponse' }
         '400': { $ref: ../baseline.yaml#/components/responses/Problem }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -718,7 +711,7 @@ paths:
           description: Canonical Rack reference.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RackResponse' }
+              schema: { $ref: '#/components/schemas/RackEnvelope' }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -740,7 +733,7 @@ paths:
           description: Rack updated.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RackResponse' }
+              schema: { $ref: '#/components/schemas/RackEnvelope' }
         '400': { $ref: ../baseline.yaml#/components/responses/Problem }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -788,7 +781,7 @@ paths:
               schema: { type: string }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RackLayoutMutationResponse' }
+              schema: { $ref: '#/components/schemas/RackLayoutMutationEnvelope' }
         '400': { $ref: ../baseline.yaml#/components/responses/Problem }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -828,7 +821,7 @@ paths:
               schema: { type: string }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RackLayoutMutationResponse' }
+              schema: { $ref: '#/components/schemas/RackLayoutMutationEnvelope' }
         '400': { $ref: ../baseline.yaml#/components/responses/Problem }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -858,7 +851,7 @@ paths:
           content:
             application/json:
               schema:
-                { $ref: '#/components/schemas/RackLocationHistoryResponse' }
+                { $ref: '#/components/schemas/RackLocationHistoryEnvelope' }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -880,15 +873,10 @@ paths:
           description: System-generated QR mapping.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/QrMappingResponse' }
+              schema: { $ref: '#/components/schemas/QrMappingEnvelope' }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
-        '409':
-          description: Source or destination Room layout revision is stale, or the destination Room is retired.
-          content:
-            application/problem+json:
-              schema: { $ref: ../baseline.yaml#/components/schemas/Problem }
     delete:
       operationId: deactivateAssetQr
       summary: Deactivate the active Asset QR mapping
@@ -896,7 +884,11 @@ paths:
       x-required-permissions: [asset:manage]
       x-required-role: IT_ADMIN
       responses:
-        '200': { description: Active mapping deactivated. }
+        '200':
+          description: Active mapping deactivated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QrDeactivationEnvelope' }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -918,7 +910,7 @@ paths:
           description: System-generated QR mapping.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/QrMappingResponse' }
+              schema: { $ref: '#/components/schemas/QrMappingEnvelope' }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -930,7 +922,11 @@ paths:
       x-required-permissions: [asset:manage]
       x-required-role: IT_ADMIN
       responses:
-        '200': { description: Active mapping deactivated. }
+        '200':
+          description: Active mapping deactivated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QrDeactivationEnvelope' }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -951,7 +947,7 @@ paths:
           description: Current Asset or Rack data for the active mapping.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/QrResolutionResponse' }
+              schema: { $ref: '#/components/schemas/QrResolutionEnvelope' }
         '401': { $ref: ../baseline.yaml#/components/responses/Problem }
         '403': { $ref: ../baseline.yaml#/components/responses/Problem }
         '404': { $ref: ../baseline.yaml#/components/responses/Problem }
@@ -1071,7 +1067,7 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 128 }
         asset_type: { type: string, enum: [NODE] }
-        model_id: { type: string }
+        model_id: { type: string, minLength: 1, maxLength: 128 }
         manufacturer_serial_number:
           {
             type: string,
@@ -1084,7 +1080,7 @@ components:
       minProperties: 1
       properties:
         name: { type: string, minLength: 1, maxLength: 128 }
-        model_id: { type: string, nullable: true }
+        model_id: { type: string, minLength: 1, maxLength: 128, nullable: true }
         manufacturer_serial_number:
           {
             type: string,
@@ -1283,6 +1279,81 @@ components:
           type: array
           items: {}
         meta: { $ref: '#/components/schemas/Meta' }
+    NodeLifecycleOperationsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: { $ref: '#/components/schemas/NodeLifecycleOperation' }
+    NodeLifecycleOperationResponse:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/NodeLifecycleOperation' }
+    RackEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/RackResponse' }
+    RackListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ListResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/RackResponse' }
+    RackLayoutMutationEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/RackLayoutMutationResponse' }
+    RackLocationHistoryEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/RackLocationHistoryResponse' }
+    RoomMapEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/RoomMapResponse' }
+    QrMappingEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/QrMappingResponse' }
+    QrResolutionEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/QrResolutionResponse' }
+    QrDeactivation:
+      type: object
+      required: [target_type, target_id, active]
+      properties:
+        target_type: { type: string, enum: [asset, rack] }
+        target_id: { type: string }
+        active: { type: boolean, const: false }
+    QrDeactivationEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SingleResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/QrDeactivation' }
     DataCenter:
       type: object
       required: [id, name]
