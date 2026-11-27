@@ -1,0 +1,84 @@
+classDiagram
+direction LR
+
+class AssetTopology {
+  owns Asset and Node lifecycle
+  owns active placements
+  checks business eligibility
+}
+class AssetTopologyAssetQueries {
+  getAgentEnrollmentNodeEligibility()
+}
+class RequestFleetInvitationUseCase {
+  Node exists and active
+  active placement required
+  reject active projection or Fleet binding
+  create idempotent invitation
+}
+class SynchronizeFleetEnrollmentUseCase {
+  read invitation state
+  verify active Fleet installation
+  recheck Node eligibility
+  upsert Core association projection
+}
+class NodeLifecycleOrchestrator {
+  durable Core lifecycle operation
+  request gate close before mutation
+  record outcome and restore gate
+}
+class AgentBindingQueries {
+  active Fleet binding query
+}
+class AgentNodeLifecycleCoordination {
+  lifecycle coordination contract
+}
+class FleetBindingProjectionPort
+class FleetInstallationPort
+class FleetInvitationPort
+class FleetNodeEnrollmentGatePort
+class MongoFleetBindingProjectionStore
+class FleetHttpAdapters {
+  invitation installation and gate adapters
+  shared mTLS FleetHttpClient
+}
+class FleetManager {
+  authoritative technical identity and registry
+  credentials enrollment authorization runtime
+}
+class MongoFleetEnrollmentOperationStore {
+  Core-owned request and recovery status
+}
+class PlatformUnitOfWork
+class PlatformOutboxWriter
+
+AssetTopology --> AssetTopologyAssetQueries : publishes public query
+AssetTopology --> NodeLifecycleOrchestrator : uses for retire and unmap
+AssetTopology --> AgentBindingQueries : blocks invalid lifecycle change
+AssetTopology --> AgentNodeLifecycleCoordination : gate coordination
+AssetTopologyAssetQueries --> RequestFleetInvitationUseCase : eligibility input
+RequestFleetInvitationUseCase --> FleetBindingProjectionPort : check existing association
+RequestFleetInvitationUseCase --> FleetInstallationPort : authoritative active-binding check
+RequestFleetInvitationUseCase --> FleetInvitationPort : create invitation
+RequestFleetInvitationUseCase --> MongoFleetEnrollmentOperationStore : persist idempotency state
+RequestFleetInvitationUseCase --> PlatformUnitOfWork
+RequestFleetInvitationUseCase --> PlatformOutboxWriter : audit fact
+SynchronizeFleetEnrollmentUseCase --> FleetInvitationPort : fetch by operation
+SynchronizeFleetEnrollmentUseCase --> FleetInstallationPort : fetch authoritative installation
+SynchronizeFleetEnrollmentUseCase --> AssetTopologyAssetQueries : recheck business state
+SynchronizeFleetEnrollmentUseCase --> FleetBindingProjectionPort : persist minimal association
+SynchronizeFleetEnrollmentUseCase --> MongoFleetEnrollmentOperationStore : persist operation result
+SynchronizeFleetEnrollmentUseCase --> PlatformUnitOfWork
+SynchronizeFleetEnrollmentUseCase --> PlatformOutboxWriter : audit fact
+AgentBindingQueries --> MongoFleetBindingProjectionStore
+MongoFleetBindingProjectionStore ..|> FleetBindingProjectionPort
+NodeLifecycleOrchestrator --> AgentNodeLifecycleCoordination
+AgentNodeLifecycleCoordination ..> FleetNodeEnrollmentGatePort
+FleetHttpAdapters ..> FleetInvitationPort : implements
+FleetHttpAdapters ..> FleetInstallationPort : implements
+FleetHttpAdapters ..> FleetNodeEnrollmentGatePort : implements
+FleetHttpAdapters --> FleetManager : REST over mTLS
+
+note for AssetTopology "Core business authority: Asset and Node state, placement, and eligibility."
+note for MongoFleetBindingProjectionStore "Core owns this minimal association/history projection. It is not authoritative technical registry state."
+note for FleetManager "Fleet technical authority: Agent installation identity, enrollment, credentials, binding enforcement, and runtime lifecycle."
+note for NodeLifecycleOrchestrator "Core chooses when/why an operation is needed; Fleet closes and restores the technical enrollment gate."

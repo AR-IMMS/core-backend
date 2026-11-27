@@ -1,0 +1,158 @@
+classDiagram
+direction LR
+
+class AgentManagementModule {
+  Nest module composition
+  exports AgentBindingQueries and AgentNodeLifecycleCoordination
+}
+class FleetInvitationController {
+  POST node invitation
+  human principal plus agent:manage
+}
+class FleetEnrollmentSyncController {
+  POST synchronize invitation
+  human principal plus agent:manage
+}
+class RequestFleetInvitationUseCase {
+  check business eligibility
+  check local and Fleet bindings
+  request idempotent Fleet invitation
+}
+class SynchronizeFleetEnrollmentUseCase {
+  read Fleet invitation and installation
+  recheck Node eligibility
+  persist operation and binding projection
+  append Audit Fact
+}
+class CoordinateNodeLifecycleUseCase {
+  closeEnrollmentGate()
+  completeEnrollmentGate()
+}
+class NodeEligibilityPort {
+  getEligibility(nodeId)
+}
+class FleetInvitationPort {
+  create()
+  getByOperation()
+  cancel()
+}
+class FleetInstallationPort {
+  findById()
+  findActiveByNode()
+}
+class FleetNodeEnrollmentGatePort {
+  closeEnrollmentGate()
+  completeEnrollmentGate()
+}
+class FleetEnrollmentOperationPort {
+  begin and find idempotent operation
+  record invitation and bound state
+}
+class FleetBindingProjectionPort {
+  hasActiveForNode()
+  upsert minimal business association
+}
+class AgentBindingQueries {
+  hasActiveBindingForNode()
+}
+class AgentNodeLifecycleCoordination {
+  close and restore Fleet gate
+}
+class FleetManagerAdapterModule {
+  mTLS client and port providers
+}
+class FleetHttpClient
+class FleetInvitationHttpAdapter
+class FleetInstallationHttpAdapter
+class FleetNodeEnrollmentGateHttpAdapter
+class DisabledFleetPorts {
+  unavailable implementations
+}
+class FleetManager {
+  external technical control plane
+  identity credentials registry runtime
+}
+class MongoFleetEnrollmentOperationStore {
+  Core invitation operation journal
+}
+class MongoFleetBindingProjectionStore {
+  Core business association projection
+}
+class FleetOperationDocument
+class FleetBindingDocument
+class AssetTopologyModule {
+  owns Assets Nodes placements and lifecycle
+}
+class AssetTopologyAssetQueries {
+  getAgentEnrollmentNodeEligibility()
+}
+class NodeLifecycleOrchestrator {
+  journal Core lifecycle operation
+  coordinate gate and Core change
+}
+class PlatformUnitOfWork
+class PlatformOutboxWriter {
+  internal Audit Fact outbox
+}
+class IAM {
+  human authentication and permission guard
+}
+
+AgentManagementModule o-- FleetInvitationController : registers
+AgentManagementModule o-- FleetEnrollmentSyncController : registers
+AgentManagementModule o-- CoordinateNodeLifecycleUseCase : provider
+AgentManagementModule o-- FleetManagerAdapterModule : imports
+AgentManagementModule o-- AssetTopologyModule : forward reference
+FleetInvitationController --> RequestFleetInvitationUseCase
+FleetEnrollmentSyncController --> SynchronizeFleetEnrollmentUseCase
+FleetInvitationController --> IAM : decorators
+FleetEnrollmentSyncController --> IAM : decorators
+RequestFleetInvitationUseCase --> NodeEligibilityPort
+RequestFleetInvitationUseCase --> FleetBindingProjectionPort
+RequestFleetInvitationUseCase --> FleetInstallationPort
+RequestFleetInvitationUseCase --> FleetInvitationPort
+RequestFleetInvitationUseCase --> FleetEnrollmentOperationPort
+RequestFleetInvitationUseCase --> PlatformUnitOfWork
+RequestFleetInvitationUseCase --> PlatformOutboxWriter
+SynchronizeFleetEnrollmentUseCase --> NodeEligibilityPort
+SynchronizeFleetEnrollmentUseCase --> FleetBindingProjectionPort
+SynchronizeFleetEnrollmentUseCase --> FleetInstallationPort
+SynchronizeFleetEnrollmentUseCase --> FleetInvitationPort
+SynchronizeFleetEnrollmentUseCase --> FleetEnrollmentOperationPort
+SynchronizeFleetEnrollmentUseCase --> PlatformUnitOfWork
+SynchronizeFleetEnrollmentUseCase --> PlatformOutboxWriter
+CoordinateNodeLifecycleUseCase ..|> AgentNodeLifecycleCoordination
+CoordinateNodeLifecycleUseCase --> FleetNodeEnrollmentGatePort
+FleetInvitationHttpAdapter ..|> FleetInvitationPort
+FleetInstallationHttpAdapter ..|> FleetInstallationPort
+FleetNodeEnrollmentGateHttpAdapter ..|> FleetNodeEnrollmentGatePort
+FleetInvitationHttpAdapter --> FleetHttpClient
+FleetInstallationHttpAdapter --> FleetHttpClient
+FleetNodeEnrollmentGateHttpAdapter --> FleetHttpClient
+FleetHttpClient --> FleetManager : REST over mTLS
+DisabledFleetPorts ..|> FleetInvitationPort
+DisabledFleetPorts ..|> FleetInstallationPort
+DisabledFleetPorts ..|> FleetNodeEnrollmentGatePort
+FleetManagerAdapterModule o-- FleetHttpClient : configured provider
+FleetManagerAdapterModule o-- FleetInvitationHttpAdapter : or disabled port
+FleetManagerAdapterModule o-- FleetInstallationHttpAdapter : or disabled port
+FleetManagerAdapterModule o-- FleetNodeEnrollmentGateHttpAdapter : or disabled port
+MongoFleetEnrollmentOperationStore ..|> FleetEnrollmentOperationPort
+MongoFleetBindingProjectionStore ..|> FleetBindingProjectionPort
+MongoFleetEnrollmentOperationStore --> FleetOperationDocument : MongoDB
+MongoFleetBindingProjectionStore --> FleetBindingDocument : MongoDB
+AgentManagementModule ..> MongoFleetEnrollmentOperationStore : binds port
+AgentManagementModule ..> MongoFleetBindingProjectionStore : binds port
+AgentManagementModule ..> NodeEligibilityPort : factory adapter
+NodeEligibilityPort --> AssetTopologyAssetQueries : public contract
+AgentManagementModule ..> AgentBindingQueries : factory adapter
+AgentBindingQueries --> FleetBindingProjectionPort : query projection
+AgentManagementModule ..> AgentNodeLifecycleCoordination : public contract
+AssetTopologyModule --> AgentBindingQueries : Asset lifecycle checks
+AssetTopologyModule --> AgentNodeLifecycleCoordination : Node lifecycle coordination
+AssetTopologyModule --> NodeLifecycleOrchestrator
+NodeLifecycleOrchestrator --> PlatformUnitOfWork
+
+note for FleetManager "Fleet owns technical Agent identity, credentials, registry, enrollment, authorization, and runtime lifecycle."
+note for MongoFleetBindingProjectionStore "Contains only Core's association projection; it is not a technical registry or credential store."
+note for AgentManagementModule "No Core-owned registration, access lifecycle, registry, or recovery cipher is wired. Historical migration entries for removed collections remain to preserve migration history and ordering."

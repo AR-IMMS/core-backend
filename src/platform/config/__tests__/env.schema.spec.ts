@@ -1,15 +1,9 @@
 import { envSchema } from '../env.schema';
 
-const validAgentConfiguration = {
-  AGENT_CONTROL_PLANE_BASE_URL:
-    'https://core.example.test/api/v1/agent-control',
-  AGENT_ENROLLMENT_RECOVERY_KEY: Buffer.alloc(32).toString('base64'),
-};
-
-describe('validated IAM runtime configuration', () => {
+describe('validated runtime configuration', () => {
   /** It supplies the agreed presence lease defaults without requiring IAM activation. */
   test('defaults presence heartbeat to 30 seconds and lease to 90 seconds', () => {
-    const config = envSchema.parse(validAgentConfiguration);
+    const config = envSchema.parse({});
 
     expect(config.IAM_PRESENCE_HEARTBEAT_INTERVAL_SECONDS).toBe(30);
     expect(config.IAM_PRESENCE_LEASE_TTL_SECONDS).toBe(90);
@@ -19,29 +13,9 @@ describe('validated IAM runtime configuration', () => {
     expect(config.IAM_REFRESH_RATE_LIMIT_PER_MINUTE).toBe(30);
   });
 
-  test('requires an HTTPS Agent Control Plane URL', () => {
-    expect(envSchema.safeParse({}).success).toBe(false);
-    expect(
-      envSchema.safeParse({ AGENT_CONTROL_PLANE_BASE_URL: 'http://core.test' })
-        .success,
-    ).toBe(false);
-    expect(envSchema.safeParse(validAgentConfiguration).success).toBe(true);
-  });
-
-  test('requires a canonical base64-encoded 256-bit enrollment recovery key', () => {
-    expect(
-      envSchema.safeParse({
-        ...validAgentConfiguration,
-        AGENT_ENROLLMENT_RECOVERY_KEY: 'invalid',
-      }).success,
-    ).toBe(false);
-    expect(envSchema.safeParse(validAgentConfiguration).success).toBe(true);
-  });
-
   test('requires Fleet HTTPS and a paired client certificate when Fleet is enabled', () => {
     expect(
       envSchema.safeParse({
-        ...validAgentConfiguration,
         FLEET_MANAGER_BASE_URL: 'http://fleet.example.test',
         FLEET_CLIENT_CERTIFICATE: 'cert',
         FLEET_CLIENT_KEY: 'key',
@@ -49,13 +23,11 @@ describe('validated IAM runtime configuration', () => {
     ).toBe(false);
     expect(
       envSchema.safeParse({
-        ...validAgentConfiguration,
         FLEET_MANAGER_BASE_URL: 'https://fleet.example.test',
       }).success,
     ).toBe(false);
     expect(
       envSchema.safeParse({
-        ...validAgentConfiguration,
         FLEET_MANAGER_BASE_URL: 'https://fleet.example.test',
         FLEET_CLIENT_CERTIFICATE: 'cert',
         FLEET_CLIENT_KEY: 'key',
@@ -66,7 +38,6 @@ describe('validated IAM runtime configuration', () => {
   test('accepts mounted Fleet client credentials and a mounted server CA', () => {
     expect(
       envSchema.safeParse({
-        ...validAgentConfiguration,
         FLEET_MANAGER_BASE_URL: 'https://fleet-manager:18081/internal/v1/',
         FLEET_CLIENT_CERTIFICATE_FILE: '/run/fleet/tls/core-client.crt',
         FLEET_CLIENT_KEY_FILE: '/run/fleet/tls/core-client.key',
@@ -78,14 +49,12 @@ describe('validated IAM runtime configuration', () => {
   test('rejects incomplete or mixed Fleet file credential configuration', () => {
     expect(
       envSchema.safeParse({
-        ...validAgentConfiguration,
         FLEET_MANAGER_BASE_URL: 'https://fleet-manager:18081/internal/v1/',
         FLEET_CLIENT_CERTIFICATE_FILE: '/run/fleet/tls/core-client.crt',
       }).success,
     ).toBe(false);
     expect(
       envSchema.safeParse({
-        ...validAgentConfiguration,
         FLEET_MANAGER_BASE_URL: 'https://fleet-manager:18081/internal/v1/',
         FLEET_CLIENT_CERTIFICATE: 'cert',
         FLEET_CLIENT_KEY_FILE: '/run/fleet/tls/core-client.key',
@@ -106,7 +75,6 @@ describe('validated IAM runtime configuration', () => {
   ])('rejects unsafe Fleet base URL: %s', (url) => {
     expect(
       envSchema.safeParse({
-        ...validAgentConfiguration,
         FLEET_MANAGER_BASE_URL: url,
         FLEET_CLIENT_CERTIFICATE: 'cert',
         FLEET_CLIENT_KEY: 'key',
@@ -115,13 +83,12 @@ describe('validated IAM runtime configuration', () => {
   });
 
   test('leaves the optional Fleet integration disabled without Fleet settings', () => {
-    expect(envSchema.safeParse(validAgentConfiguration).success).toBe(true);
+    expect(envSchema.safeParse({}).success).toBe(true);
   });
 
   /** It rejects lease settings that can expire before the next heartbeat. */
   test('requires presence lease lifetime to exceed heartbeat interval', () => {
     const result = envSchema.safeParse({
-      ...validAgentConfiguration,
       IAM_PRESENCE_HEARTBEAT_INTERVAL_SECONDS: 30,
       IAM_PRESENCE_LEASE_TTL_SECONDS: 30,
     });
@@ -132,7 +99,6 @@ describe('validated IAM runtime configuration', () => {
   /** It requires signing and verification keys to be configured as a pair. */
   test('rejects an incomplete JWT key pair', () => {
     const result = envSchema.safeParse({
-      ...validAgentConfiguration,
       IAM_JWT_PRIVATE_KEY: 'private-key',
     });
 
@@ -143,13 +109,11 @@ describe('validated IAM runtime configuration', () => {
   test('rejects SameSite=None until browser compatibility is validated', () => {
     expect(
       envSchema.safeParse({
-        ...validAgentConfiguration,
         IAM_BROWSER_COOKIE_SAME_SITE: 'none',
       }).success,
     ).toBe(false);
     expect(
       envSchema.safeParse({
-        ...validAgentConfiguration,
         IAM_BROWSER_COOKIE_SAME_SITE: 'none',
         IAM_BROWSER_CROSS_SITE_COMPATIBILITY_VALIDATED: 'true',
       }).success,
@@ -160,19 +124,16 @@ describe('validated IAM runtime configuration', () => {
   test('validates browser authentication origins and CSRF secret', () => {
     expect(
       envSchema.safeParse({
-        ...validAgentConfiguration,
         IAM_BROWSER_ALLOWED_ORIGINS: 'https://dashboard.example.test/path',
       }).success,
     ).toBe(false);
     expect(
       envSchema.safeParse({
-        ...validAgentConfiguration,
         IAM_BROWSER_ALLOWED_ORIGINS: 'https://dashboard.example.test',
       }).success,
     ).toBe(false);
     expect(
       envSchema.safeParse({
-        ...validAgentConfiguration,
         IAM_BROWSER_ALLOWED_ORIGINS: 'https://dashboard.example.test',
         IAM_BROWSER_CSRF_SECRET: 'a-dedicated-secret-at-least-32-characters',
       }).success,

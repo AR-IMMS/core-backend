@@ -1,6 +1,5 @@
 export { ASSET_TOPOLOGY_CONSUMER_PORT } from './asset-topology.contract.token';
 export { ASSET_TOPOLOGY_ASSET_QUERIES_PORT } from './asset-topology.contract.token';
-export { ASSET_TOPOLOGY_AGENT_ENROLLMENT_COMMANDS_PORT } from './asset-topology.contract.token';
 export { ASSET_TOPOLOGY_RACK_QUERIES_PORT } from './asset-topology.contract.token';
 export { ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT } from './asset-topology.contract.token';
 export type {
@@ -11,7 +10,6 @@ export type {
   AssetReference,
   AssetTopologyConsumerContract,
   AssetTopologyAssetQueries,
-  AssetTopologyAgentEnrollmentCommands,
   AssetTopologyRackQueries,
   AssetTopologyMaintenanceCommands,
   AssetTopologyMaintenanceState,

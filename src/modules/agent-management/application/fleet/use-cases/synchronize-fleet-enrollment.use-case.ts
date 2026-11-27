@@ -20,7 +20,7 @@ import type { FleetInvitationPort } from '../ports/fleet-invitation.port';
 import type { FleetInstallationPort } from '../ports/fleet-installation.port';
 import type { FleetEnrollmentOperationPort } from '../ports/fleet-enrollment-operation.port';
 import type { FleetBindingProjectionPort } from '../ports/fleet-binding-projection.port';
-import type { NodeEligibilityPort } from '../../registration/ports/bootstrap-token.port';
+import type { NodeEligibilityPort } from '../ports/node-eligibility.port';
 
 export interface FleetEnrollmentSyncResponse {
   readonly operationId: string;
@@ -29,6 +29,7 @@ export interface FleetEnrollmentSyncResponse {
   readonly status:
     'PENDING' | 'REDEEMED' | 'CANCELLED' | 'EXPIRED' | 'UNKNOWN' | 'BOUND';
   readonly installationId?: string;
+  readonly bindingId?: string;
 }
 
 export class SynchronizeFleetEnrollmentUseCase {
@@ -215,6 +216,9 @@ export class SynchronizeFleetEnrollmentUseCase {
       nodeId: invitation.nodeId,
       status,
       ...(installationId ? { installationId } : {}),
+      ...(status === 'BOUND'
+        ? { bindingId: `fleet:${invitation.invitationId}` }
+        : {}),
     };
   }
 

@@ -4,10 +4,6 @@ import type { Asset } from '../../domain/asset/asset';
 export interface AssetStorePort {
   findById(assetId: string, context?: UnitOfWorkContext): Promise<Asset | null>;
   save(asset: Asset, context: UnitOfWorkContext): Promise<number>;
-  serializeAgentEnrollmentEligibility(
-    assetId: string,
-    context: UnitOfWorkContext,
-  ): Promise<boolean>;
   list(input: {
     readonly afterAssetId?: string;
     readonly limit: number;

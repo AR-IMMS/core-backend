@@ -14,7 +14,6 @@ describe('RetireAssetUseCase', () => {
   let assets: {
     findById: jest.Mock;
     save: jest.Mock;
-    serializeAgentEnrollmentEligibility: jest.Mock;
     list: jest.Mock;
   };
   let placements: {
@@ -80,7 +79,6 @@ describe('RetireAssetUseCase', () => {
     assets = {
       findById: jest.fn().mockResolvedValue(asset),
       save: jest.fn().mockResolvedValue(3),
-      serializeAgentEnrollmentEligibility: jest.fn().mockResolvedValue(true),
       list: jest.fn(),
     };
     placements = {

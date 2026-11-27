@@ -3,7 +3,7 @@ import { FleetConflictError } from '../../errors/fleet-errors';
 import { FleetUnavailableError } from '../../errors/fleet-errors';
 import { FleetOperationPendingError } from '../../errors/fleet-operation-pending.error';
 import { RequestFleetInvitationUseCase } from '../request-fleet-invitation.use-case';
-import { AgentNodeNotEligibleError } from '../../../../domain/errors/registration.errors';
+import { AgentNodeNotEligibleError } from '../../errors/node-eligibility.errors';
 import type { FleetEnrollmentOperationPort } from '../../ports/fleet-enrollment-operation.port';
 import type {
   OutboxWriterPort,
@@ -31,8 +31,9 @@ describe('RequestFleetInvitationUseCase', () => {
     }),
     serializeEnrollmentEligibility: jest.fn().mockResolvedValue(true),
   };
-  const localBindings = {
-    hasActiveBinding: jest.fn().mockResolvedValue(false),
+  const fleetBindings = {
+    hasActiveForNode: jest.fn().mockResolvedValue(false),
+    upsert: jest.fn(),
   };
   const fleetInstallations = {
     findById: jest.fn(),
@@ -85,7 +86,7 @@ describe('RequestFleetInvitationUseCase', () => {
       active: true,
       hasActivePlacement: true,
     });
-    localBindings.hasActiveBinding.mockResolvedValue(false);
+    fleetBindings.hasActiveForNode.mockResolvedValue(false);
     fleetInstallations.findActiveByNode.mockResolvedValue(null);
     operations.findByIdempotencyHash.mockResolvedValue(null);
     operations.begin.mockImplementation(
@@ -105,7 +106,7 @@ describe('RequestFleetInvitationUseCase', () => {
     });
     useCase = new RequestFleetInvitationUseCase(
       eligibleNode,
-      localBindings,
+      fleetBindings,
       fleetInstallations,
       fleetInvitations,
       operations,
@@ -131,6 +132,7 @@ describe('RequestFleetInvitationUseCase', () => {
       nodeId: 'node-1',
       actor,
     });
+    expect(fleetBindings.hasActiveForNode).toHaveBeenCalledWith('node-1');
     expect(fleetInvitations.create).toHaveBeenCalledWith(
       expect.objectContaining({
         operationId: 'op-1',
@@ -169,7 +171,7 @@ describe('RequestFleetInvitationUseCase', () => {
   });
 
   test('does not create a second Fleet invitation when local binding already exists', async () => {
-    localBindings.hasActiveBinding.mockResolvedValue(true);
+    fleetBindings.hasActiveForNode.mockResolvedValue(true);
 
     await expect(
       useCase.execute({

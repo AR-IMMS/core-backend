@@ -11,19 +11,6 @@ export const envSchema = z
       .default('info'),
 
     APP_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
-    AGENT_CONTROL_PLANE_BASE_URL: z
-      .string()
-      .trim()
-      .url()
-      .refine(
-        (value) => new URL(value).protocol === 'https:',
-        'AGENT_CONTROL_PLANE_BASE_URL must use HTTPS',
-      ),
-    AGENT_ENROLLMENT_RECOVERY_KEY: z.string().refine((value) => {
-      const key = Buffer.from(value, 'base64');
-      return key.length === 32 && key.toString('base64') === value;
-    }, 'AGENT_ENROLLMENT_RECOVERY_KEY must be a base64-encoded 32-byte key'),
-
     FLEET_MANAGER_BASE_URL: z
       .string()
       .trim()

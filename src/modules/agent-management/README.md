@@ -1,27 +1,27 @@
 # Agent Management
 
-Agent Management owns Agent registration, installation identity, Node bindings,
-and credential lifecycle. Asset & Topology remains the owner of Node state; this
-module checks eligibility through its public contract.
+Agent Management is Core's business boundary for Fleet enrollment requests, enrollment synchronization, and Node lifecycle coordination. Fleet Manager is authoritative for Agent installation identity, enrollment, credentials, registry, and technical lifecycle. Core keeps only invitation orchestration records and a minimal Fleet binding projection used by business rules.
 
-## Implemented capabilities
+## Responsibilities
 
-- `application/registration/` issues bootstrap tokens, enrolls installations,
-  and recovers matching enrollment attempts.
-- `application/access-lifecycle/` resolves active Agent credentials and revokes
-  bindings. Matching HTTP adapters live in `presentation/`.
-- `application/agent-registry/` provides read-only installation and binding
-  history queries for authorized Admins; `presentation/agent-registry/` exposes
-  the cursor-paginated HTTP APIs. Registry responses omit arbitrary enrollment
-  metadata and all credential, token, and recovery material.
+- `RequestFleetInvitationUseCase` checks Node business eligibility, rejects an existing local projection or Fleet installation binding, and requests an invitation from Fleet with idempotency.
+- `SynchronizeFleetEnrollmentUseCase` reads Fleet invitation and installation state, rechecks Node eligibility, records an active business binding projection and operation outcome, and writes an audit fact.
+- `CoordinateNodeLifecycleUseCase` implements the public lifecycle contract by delegating gate close/restore operations to Fleet.
+- Fleet HTTP adapters use the shared mTLS client. Disabled adapters fail through the same ports when Fleet is not configured.
+- MongoDB stores Core-owned Fleet invitation operation state and the minimal Fleet binding projection. These stores do not own credentials or the technical Agent registry.
+- The module exports only `AgentBindingQueries` and `AgentNodeLifecycleCoordination` for Asset & Topology.
 
-MongoDB and cryptographic adapters remain under `infrastructure/`. Business
-outcome errors are framework-free under `domain/errors/`; operational failures
-remain with their application capability.
+There are no Agent Management domain entities, value objects, or domain policy classes. Eligibility errors and Fleet operation errors are application errors; Fleet and Mongo interfaces are application ports with infrastructure implementations.
 
-## Not implemented
+## HTTP surface
 
-Agent Control APIs are not implemented. No Control Plane, heartbeat, telemetry
-ingestion, Collector activation, or uninstall endpoint is provided by the current
-implementation. A registered installation or active binding does not indicate
-Agent connectivity or telemetry health.
+- `POST /api/v1/nodes/{nodeId}/agent-fleet-invitations` requests an invitation.
+- `POST /api/v1/agent-fleet-invitations/{invitationId}/synchronize` synchronizes Fleet enrollment state.
+
+Both endpoints require a human principal and `agent:manage`. Core bootstrap-token issuance, direct enrollment, local revocation, and Core registry endpoints have been removed. The OpenAPI source is `api/v1/agent-enrollment.yaml`.
+
+## Configuration
+
+Fleet integration is configured through `FLEET_MANAGER_BASE_URL`, client certificate/key (inline PEM or file path), optional CA certificate, and the Fleet request timeout/retry settings. No Core Agent credential, recovery cipher, or control-plane URL configuration remains.
+
+See [As-Is diagrams](../../../docs/local/architecture/agent-management/as-is/README.md) for class diagrams and exact source references.

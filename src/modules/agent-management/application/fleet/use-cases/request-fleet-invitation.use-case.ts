@@ -8,12 +8,12 @@ import {
   AUDIT_FACT_EVENT_TYPE,
   AUDIT_FACT_EVENT_VERSION_V2,
 } from '@platform/events';
-import type { EnrollmentPersistencePort } from '../../registration/ports/enrollment.port';
-import type { NodeEligibilityPort } from '../../registration/ports/bootstrap-token.port';
+import type { NodeEligibilityPort } from '../ports/node-eligibility.port';
+import type { FleetBindingProjectionPort } from '../ports/fleet-binding-projection.port';
 import {
   AgentNodeNotEligibleError,
   AgentNodeNotFoundError,
-} from '../../../domain/errors/registration.errors';
+} from '../errors/node-eligibility.errors';
 import {
   FleetConflictError,
   FleetProtocolError,
@@ -50,10 +50,7 @@ export interface FleetInvitationOperationResponse {
 export class RequestFleetInvitationUseCase {
   constructor(
     private readonly nodes: NodeEligibilityPort,
-    private readonly coreBindings: Pick<
-      EnrollmentPersistencePort,
-      'hasActiveBinding'
-    >,
+    private readonly bindings: FleetBindingProjectionPort,
     private readonly fleetInstallations: FleetInstallationPort,
     private readonly fleetInvitations: FleetInvitationPort,
     private readonly operations: FleetEnrollmentOperationPort,
@@ -127,7 +124,7 @@ export class RequestFleetInvitationUseCase {
     if (!node.active || !node.hasActivePlacement) {
       throw new AgentNodeNotEligibleError();
     }
-    if (await this.coreBindings.hasActiveBinding(nodeId)) {
+    if (await this.bindings.hasActiveForNode(nodeId)) {
       throw new AgentNodeNotEligibleError();
     }
     const fleetBinding = await this.fleetInstallations.findActiveByNode({
