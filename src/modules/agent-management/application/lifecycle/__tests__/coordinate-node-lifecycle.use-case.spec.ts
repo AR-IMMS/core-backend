@@ -1,5 +1,5 @@
 import { CoordinateNodeLifecycleUseCase } from '../coordinate-node-lifecycle.use-case';
-import type { FleetEnrollmentGate } from '../../fleet.types';
+import type { FleetEnrollmentGate } from '../../ports/fleet/fleet.types';
 
 describe('CoordinateNodeLifecycleUseCase', () => {
   const gate: FleetEnrollmentGate = {

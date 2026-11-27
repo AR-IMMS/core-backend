@@ -1,9 +1,9 @@
-import { FleetProtocolError } from '../../application/fleet/errors/fleet-errors';
-import type { FleetNodeEnrollmentGatePort } from '../../application/fleet/ports/fleet-node-enrollment-gate.port';
+import { FleetProtocolError } from '../../application/ports/fleet/fleet-errors';
+import type { FleetNodeEnrollmentGatePort } from '../../application/ports/fleet/fleet-node-enrollment-gate.port';
 import type {
   FleetActorContext,
   FleetEnrollmentGate,
-} from '../../application/fleet/fleet.types';
+} from '../../application/ports/fleet/fleet.types';
 import { FleetHttpClient } from './fleet-http-client';
 
 export class FleetNodeEnrollmentGateHttpAdapter implements FleetNodeEnrollmentGatePort {

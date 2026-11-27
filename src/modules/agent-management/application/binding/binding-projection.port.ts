@@ -1,9 +1,9 @@
 import type { UnitOfWorkContext } from '@platform/events';
 
-export type FleetBindingProjectionResult =
+export type BindingProjectionResult =
   'CREATED' | 'EXISTS' | 'REVOKED' | 'CONFLICT';
 
-export interface FleetBindingProjectionPort {
+export interface BindingProjectionPort {
   hasActiveForNode(
     nodeId: string,
     context?: UnitOfWorkContext,
@@ -17,9 +17,7 @@ export interface FleetBindingProjectionPort {
       readonly createdAt: Date;
     },
     context: UnitOfWorkContext,
-  ): Promise<FleetBindingProjectionResult>;
+  ): Promise<BindingProjectionResult>;
 }
 
-export const FLEET_BINDING_PROJECTION_PORT = Symbol(
-  'FLEET_BINDING_PROJECTION_PORT',
-);
+export const BINDING_PROJECTION_PORT = Symbol('BINDING_PROJECTION_PORT');

@@ -1,12 +1,12 @@
 import {
   FleetNotFoundError,
   FleetProtocolError,
-} from '../../application/fleet/errors/fleet-errors';
-import type { FleetInstallationPort } from '../../application/fleet/ports/fleet-installation.port';
+} from '../../application/ports/fleet/fleet-errors';
+import type { FleetInstallationPort } from '../../application/ports/fleet/fleet-installation.port';
 import type {
   FleetActorContext,
   FleetInstallationView,
-} from '../../application/fleet/fleet.types';
+} from '../../application/ports/fleet/fleet.types';
 import { FleetHttpClient } from './fleet-http-client';
 
 export class FleetInstallationHttpAdapter implements FleetInstallationPort {

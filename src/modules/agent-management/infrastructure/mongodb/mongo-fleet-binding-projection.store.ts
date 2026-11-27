@@ -3,13 +3,13 @@ import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
 import type { UnitOfWorkContext } from '@platform/events';
 import type {
-  FleetBindingProjectionPort,
-  FleetBindingProjectionResult,
-} from '../../application/fleet/ports/fleet-binding-projection.port';
+  BindingProjectionPort,
+  BindingProjectionResult,
+} from '../../application/binding/binding-projection.port';
 import { fleetMongoCollection } from './fleet-mongo.types';
 
 @Injectable()
-export class MongoFleetBindingProjectionStore implements FleetBindingProjectionPort {
+export class MongoFleetBindingProjectionStore implements BindingProjectionPort {
   constructor(@InjectConnection() private readonly connection: Connection) {}
 
   async hasActiveForNode(
@@ -37,7 +37,7 @@ export class MongoFleetBindingProjectionStore implements FleetBindingProjectionP
       readonly createdAt: Date;
     },
     context: UnitOfWorkContext,
-  ): Promise<FleetBindingProjectionResult> {
+  ): Promise<BindingProjectionResult> {
     const session = context;
     const bindings = fleetMongoCollection(
       this.connection,

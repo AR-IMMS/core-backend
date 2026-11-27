@@ -13,13 +13,16 @@ import {
   FleetNotFoundError,
   FleetProtocolError,
   FleetUnavailableError,
-} from '../errors/fleet-errors';
-import { FleetOperationPendingError } from '../errors/fleet-operation-pending.error';
-import type { FleetActorContext, FleetInvitationView } from '../fleet.types';
-import type { FleetInvitationPort } from '../ports/fleet-invitation.port';
-import type { FleetInstallationPort } from '../ports/fleet-installation.port';
-import type { FleetEnrollmentOperationPort } from '../ports/fleet-enrollment-operation.port';
-import type { FleetBindingProjectionPort } from '../ports/fleet-binding-projection.port';
+} from '../ports/fleet/fleet-errors';
+import { FleetOperationPendingError } from './errors/fleet-operation-pending.error';
+import type {
+  FleetActorContext,
+  FleetInvitationView,
+} from '../ports/fleet/fleet.types';
+import type { FleetInvitationPort } from '../ports/fleet/fleet-invitation.port';
+import type { FleetInstallationPort } from '../ports/fleet/fleet-installation.port';
+import type { EnrollmentOperationPort } from './enrollment-operation.port';
+import type { BindingProjectionPort } from '../binding/binding-projection.port';
 import type { NodeEligibilityPort } from '../ports/node-eligibility.port';
 
 export interface FleetEnrollmentSyncResponse {
@@ -34,11 +37,11 @@ export interface FleetEnrollmentSyncResponse {
 
 export class SynchronizeFleetEnrollmentUseCase {
   constructor(
-    private readonly operations: FleetEnrollmentOperationPort,
+    private readonly operations: EnrollmentOperationPort,
     private readonly invitations: FleetInvitationPort,
     private readonly installations: FleetInstallationPort,
     private readonly nodes: NodeEligibilityPort,
-    private readonly bindings: FleetBindingProjectionPort,
+    private readonly bindings: BindingProjectionPort,
     private readonly unitOfWork: UnitOfWorkPort,
     private readonly outbox: OutboxWriterPort,
     private readonly now: () => Date = () => new Date(),

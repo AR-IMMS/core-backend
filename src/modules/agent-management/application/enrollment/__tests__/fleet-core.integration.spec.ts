@@ -3,9 +3,9 @@ import type {
   OutboxWriterPort,
   UnitOfWorkContext,
 } from '@platform/events';
-import { RequestFleetInvitationUseCase } from '../use-cases/request-fleet-invitation.use-case';
-import { SynchronizeFleetEnrollmentUseCase } from '../use-cases/synchronize-fleet-enrollment.use-case';
-import type { FleetEnrollmentOperation } from '../ports/fleet-enrollment-operation.port';
+import { RequestFleetInvitationUseCase } from '../request-fleet-invitation.use-case';
+import { SynchronizeFleetEnrollmentUseCase } from '../synchronize-fleet-enrollment.use-case';
+import type { EnrollmentOperation } from '../enrollment-operation.port';
 
 /**
  * A contract-shaped fake: it exercises Core orchestration and state transitions
@@ -22,8 +22,8 @@ describe('Core Fleet enrollment boundary (fake Fleet)', () => {
     token: 'secret-only-while-pending',
     expiresAt: new Date('2026-11-23T00:00:00Z'),
   };
-  const operationByKey = new Map<string, FleetEnrollmentOperation>();
-  const operationByInvitation = new Map<string, FleetEnrollmentOperation>();
+  const operationByKey = new Map<string, EnrollmentOperation>();
+  const operationByInvitation = new Map<string, EnrollmentOperation>();
   const bindings = new Map<string, string>();
   const auditFacts: AuditFactV2[] = [];
   const context = {} as UnitOfWorkContext;
@@ -127,7 +127,7 @@ describe('Core Fleet enrollment boundary (fake Fleet)', () => {
           ? { installationId: input.installationId }
           : {}),
         expiresAt: input.expiresAt,
-      } as FleetEnrollmentOperation;
+      } as EnrollmentOperation;
       operationByKey.set(operation.idempotencyHash, updated);
       operationByInvitation.set(input.invitationId, updated);
       return Promise.resolve(firstRecording);

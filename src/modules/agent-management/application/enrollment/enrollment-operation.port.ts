@@ -1,7 +1,7 @@
 import type { UnitOfWorkContext } from '@platform/events';
-import type { FleetInvitationState } from '../fleet.types';
+import type { FleetInvitationState } from '../ports/fleet/fleet.types';
 
-export type FleetEnrollmentOperationStatus =
+export type EnrollmentOperationStatus =
   | 'REQUEST_PENDING'
   | 'INVITATION_ISSUED'
   | 'SYNC_PENDING'
@@ -10,25 +10,23 @@ export type FleetEnrollmentOperationStatus =
   | 'EXPIRED'
   | 'REVOKED';
 
-export interface FleetEnrollmentOperation {
+export interface EnrollmentOperation {
   readonly operationId: string;
   readonly idempotencyHash: string;
   readonly fingerprint: string;
   readonly actorId: string;
   readonly nodeId: string;
-  readonly status: FleetEnrollmentOperationStatus;
+  readonly status: EnrollmentOperationStatus;
   readonly invitationId?: string;
   readonly installationId?: string;
   readonly expiresAt?: Date;
 }
 
-export interface FleetEnrollmentOperationPort {
+export interface EnrollmentOperationPort {
   findByIdempotencyHash(
     idempotencyHash: string,
-  ): Promise<FleetEnrollmentOperation | null>;
-  findByInvitationId(
-    invitationId: string,
-  ): Promise<FleetEnrollmentOperation | null>;
+  ): Promise<EnrollmentOperation | null>;
+  findByInvitationId(invitationId: string): Promise<EnrollmentOperation | null>;
   begin(input: {
     readonly operationId: string;
     readonly idempotencyHash: string;
@@ -38,7 +36,7 @@ export interface FleetEnrollmentOperationPort {
     readonly createdAt: Date;
   }): Promise<{
     readonly created: boolean;
-    readonly operation: FleetEnrollmentOperation;
+    readonly operation: EnrollmentOperation;
   }>;
   recordInvitation(
     input: {
@@ -61,6 +59,4 @@ export interface FleetEnrollmentOperationPort {
   ): Promise<void>;
 }
 
-export const FLEET_ENROLLMENT_OPERATION_PORT = Symbol(
-  'FLEET_ENROLLMENT_OPERATION_PORT',
-);
+export const ENROLLMENT_OPERATION_PORT = Symbol('ENROLLMENT_OPERATION_PORT');

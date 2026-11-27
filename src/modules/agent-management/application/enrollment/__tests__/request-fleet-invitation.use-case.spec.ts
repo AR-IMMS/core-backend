@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
-import { FleetConflictError } from '../../errors/fleet-errors';
-import { FleetUnavailableError } from '../../errors/fleet-errors';
-import { FleetOperationPendingError } from '../../errors/fleet-operation-pending.error';
+import { FleetConflictError } from '../../ports/fleet/fleet-errors';
+import { FleetUnavailableError } from '../../ports/fleet/fleet-errors';
+import { FleetOperationPendingError } from '../errors/fleet-operation-pending.error';
 import { RequestFleetInvitationUseCase } from '../request-fleet-invitation.use-case';
-import { AgentNodeNotEligibleError } from '../../errors/node-eligibility.errors';
-import type { FleetEnrollmentOperationPort } from '../../ports/fleet-enrollment-operation.port';
+import { AgentNodeNotEligibleError } from '../errors/node-eligibility.errors';
+import type { EnrollmentOperationPort } from '.././enrollment-operation.port';
 import type {
   OutboxWriterPort,
   UnitOfWorkContext,
@@ -90,7 +90,7 @@ describe('RequestFleetInvitationUseCase', () => {
     fleetInstallations.findActiveByNode.mockResolvedValue(null);
     operations.findByIdempotencyHash.mockResolvedValue(null);
     operations.begin.mockImplementation(
-      (input: Parameters<FleetEnrollmentOperationPort['begin']>[0]) =>
+      (input: Parameters<EnrollmentOperationPort['begin']>[0]) =>
         Promise.resolve({
           created: true,
           operation: { ...input, status: 'REQUEST_PENDING' },

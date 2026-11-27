@@ -9,24 +9,27 @@ import {
   AUDIT_FACT_EVENT_VERSION_V2,
 } from '@platform/events';
 import type { NodeEligibilityPort } from '../ports/node-eligibility.port';
-import type { FleetBindingProjectionPort } from '../ports/fleet-binding-projection.port';
+import type { BindingProjectionPort } from '../binding/binding-projection.port';
 import {
   AgentNodeNotEligibleError,
   AgentNodeNotFoundError,
-} from '../errors/node-eligibility.errors';
+} from './errors/node-eligibility.errors';
 import {
   FleetConflictError,
   FleetProtocolError,
   FleetUnavailableError,
-} from '../errors/fleet-errors';
-import { FleetOperationPendingError } from '../errors/fleet-operation-pending.error';
-import type { FleetActorContext, FleetInvitationView } from '../fleet.types';
-import type { FleetInvitationPort } from '../ports/fleet-invitation.port';
-import type { FleetInstallationPort } from '../ports/fleet-installation.port';
+} from '../ports/fleet/fleet-errors';
+import { FleetOperationPendingError } from './errors/fleet-operation-pending.error';
 import type {
-  FleetEnrollmentOperation,
-  FleetEnrollmentOperationPort,
-} from '../ports/fleet-enrollment-operation.port';
+  FleetActorContext,
+  FleetInvitationView,
+} from '../ports/fleet/fleet.types';
+import type { FleetInvitationPort } from '../ports/fleet/fleet-invitation.port';
+import type { FleetInstallationPort } from '../ports/fleet/fleet-installation.port';
+import type {
+  EnrollmentOperation,
+  EnrollmentOperationPort,
+} from './enrollment-operation.port';
 
 const INVITATION_TTL_SECONDS = 600;
 
@@ -50,10 +53,10 @@ export interface FleetInvitationOperationResponse {
 export class RequestFleetInvitationUseCase {
   constructor(
     private readonly nodes: NodeEligibilityPort,
-    private readonly bindings: FleetBindingProjectionPort,
+    private readonly bindings: BindingProjectionPort,
     private readonly fleetInstallations: FleetInstallationPort,
     private readonly fleetInvitations: FleetInvitationPort,
-    private readonly operations: FleetEnrollmentOperationPort,
+    private readonly operations: EnrollmentOperationPort,
     private readonly unitOfWork: UnitOfWorkPort,
     private readonly outbox: OutboxWriterPort,
     private readonly now: () => Date = () => new Date(),
@@ -137,7 +140,7 @@ export class RequestFleetInvitationUseCase {
   }
 
   private async readReplay(
-    operation: FleetEnrollmentOperation,
+    operation: EnrollmentOperation,
     actor: FleetActorContext,
   ): Promise<FleetInvitationOperationResponse> {
     if (
@@ -216,7 +219,7 @@ export class RequestFleetInvitationUseCase {
   }
 
   private async replayPendingCreate(
-    operation: FleetEnrollmentOperation,
+    operation: EnrollmentOperation,
     actor: FleetActorContext,
   ): Promise<FleetInvitationView> {
     try {
@@ -256,7 +259,7 @@ export class RequestFleetInvitationUseCase {
   }
 
   private async persistInvitation(
-    operation: FleetEnrollmentOperation,
+    operation: EnrollmentOperation,
     invitation: FleetInvitationView,
     actor: FleetActorContext,
   ): Promise<void> {
@@ -321,7 +324,7 @@ export class RequestFleetInvitationUseCase {
   }
 
   private auditFact(
-    operation: FleetEnrollmentOperation,
+    operation: EnrollmentOperation,
     invitation: FleetInvitationView & { readonly expiresAt: Date },
     actor: FleetActorContext,
   ): AuditFactV2 {
@@ -350,7 +353,7 @@ export class RequestFleetInvitationUseCase {
   }
 
   private assertSameRequest(
-    operation: FleetEnrollmentOperation,
+    operation: EnrollmentOperation,
     fingerprint: string,
     actorId: string,
   ): void {

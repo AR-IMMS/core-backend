@@ -1,8 +1,8 @@
-import { FleetUnavailableError } from '../../application/fleet/errors/fleet-errors';
-import type { FleetInvitationPort } from '../../application/fleet/ports/fleet-invitation.port';
-import type { FleetInstallationPort } from '../../application/fleet/ports/fleet-installation.port';
-import type { FleetNodeEnrollmentGatePort } from '../../application/fleet/ports/fleet-node-enrollment-gate.port';
-import type { FleetEnrollmentGate } from '../../application/fleet/fleet.types';
+import { FleetUnavailableError } from '../../application/ports/fleet/fleet-errors';
+import type { FleetInvitationPort } from '../../application/ports/fleet/fleet-invitation.port';
+import type { FleetInstallationPort } from '../../application/ports/fleet/fleet-installation.port';
+import type { FleetNodeEnrollmentGatePort } from '../../application/ports/fleet/fleet-node-enrollment-gate.port';
+import type { FleetEnrollmentGate } from '../../application/ports/fleet/fleet.types';
 
 export class DisabledFleetInvitationPort implements FleetInvitationPort {
   create(): Promise<never> {

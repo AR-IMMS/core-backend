@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFileSync } from 'node:fs';
-import { FLEET_INVITATION_PORT } from '../../application/fleet/ports/fleet-invitation.port';
-import { FLEET_INSTALLATION_PORT } from '../../application/fleet/ports/fleet-installation.port';
-import { FLEET_NODE_ENROLLMENT_GATE_PORT } from '../../application/fleet/ports/fleet-node-enrollment-gate.port';
+import { FLEET_INVITATION_PORT } from '../../application/ports/fleet/fleet-invitation.port';
+import { FLEET_INSTALLATION_PORT } from '../../application/ports/fleet/fleet-installation.port';
+import { FLEET_NODE_ENROLLMENT_GATE_PORT } from '../../application/ports/fleet/fleet-node-enrollment-gate.port';
 import { FleetHttpClient } from './fleet-http-client';
 import { FleetInvitationHttpAdapter } from './fleet-invitation.http-adapter';
 import { FleetInstallationHttpAdapter } from './fleet-installation.http-adapter';

@@ -1,4 +1,4 @@
-import type { FleetActorContext, FleetInvitationView } from '../fleet.types';
+import type { FleetActorContext, FleetInvitationView } from './fleet.types';
 
 export interface FleetInvitationPort {
   create(input: {

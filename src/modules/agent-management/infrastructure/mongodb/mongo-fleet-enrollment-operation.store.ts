@@ -5,22 +5,22 @@ import type { UnitOfWorkContext } from '@platform/events';
 import {
   FleetConflictError,
   FleetUnavailableError,
-} from '../../application/fleet/errors/fleet-errors';
+} from '../../application/ports/fleet/fleet-errors';
 import type {
-  FleetEnrollmentOperation,
-  FleetEnrollmentOperationPort,
-  FleetEnrollmentOperationStatus,
-} from '../../application/fleet/ports/fleet-enrollment-operation.port';
-import type { FleetInvitationState } from '../../application/fleet/fleet.types';
+  EnrollmentOperation,
+  EnrollmentOperationPort,
+  EnrollmentOperationStatus,
+} from '../../application/enrollment/enrollment-operation.port';
+import type { FleetInvitationState } from '../../application/ports/fleet/fleet.types';
 import { fleetMongoCollection } from './fleet-mongo.types';
 
 @Injectable()
-export class MongoFleetEnrollmentOperationStore implements FleetEnrollmentOperationPort {
+export class MongoFleetEnrollmentOperationStore implements EnrollmentOperationPort {
   constructor(@InjectConnection() private readonly connection: Connection) {}
 
   async findByIdempotencyHash(
     idempotencyHash: string,
-  ): Promise<FleetEnrollmentOperation | null> {
+  ): Promise<EnrollmentOperation | null> {
     const document = await fleetMongoCollection(
       this.connection,
       'agent_management_fleet_operations',
@@ -30,7 +30,7 @@ export class MongoFleetEnrollmentOperationStore implements FleetEnrollmentOperat
 
   async findByInvitationId(
     invitationId: string,
-  ): Promise<FleetEnrollmentOperation | null> {
+  ): Promise<EnrollmentOperation | null> {
     const document = await fleetMongoCollection(
       this.connection,
       'agent_management_fleet_operations',
@@ -47,7 +47,7 @@ export class MongoFleetEnrollmentOperationStore implements FleetEnrollmentOperat
     readonly createdAt: Date;
   }): Promise<{
     readonly created: boolean;
-    readonly operation: FleetEnrollmentOperation;
+    readonly operation: EnrollmentOperation;
   }> {
     const operations = fleetMongoCollection(
       this.connection,
@@ -196,7 +196,7 @@ function invitationFields(input: {
 
 function mapStatus(
   status: FleetInvitationState,
-): FleetEnrollmentOperationStatus | undefined {
+): EnrollmentOperationStatus | undefined {
   switch (status) {
     case 'PENDING':
       return 'INVITATION_ISSUED';
@@ -213,8 +213,8 @@ function mapStatus(
 
 function parseOperation(
   document: Record<string, unknown>,
-): FleetEnrollmentOperation {
-  const statuses: readonly FleetEnrollmentOperationStatus[] = [
+): EnrollmentOperation {
+  const statuses: readonly EnrollmentOperationStatus[] = [
     'REQUEST_PENDING',
     'INVITATION_ISSUED',
     'SYNC_PENDING',
@@ -230,7 +230,7 @@ function parseOperation(
     typeof document['actorId'] !== 'string' ||
     typeof document['nodeId'] !== 'string' ||
     typeof document['status'] !== 'string' ||
-    !statuses.includes(document['status'] as FleetEnrollmentOperationStatus)
+    !statuses.includes(document['status'] as EnrollmentOperationStatus)
   ) {
     throw new FleetUnavailableError(false);
   }
@@ -258,7 +258,7 @@ function parseOperation(
     fingerprint: document['fingerprint'],
     actorId: document['actorId'],
     nodeId: document['nodeId'],
-    status: document['status'] as FleetEnrollmentOperationStatus,
+    status: document['status'] as EnrollmentOperationStatus,
     ...(typeof document['invitationId'] === 'string'
       ? { invitationId: document['invitationId'] }
       : {}),

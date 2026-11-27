@@ -10,7 +10,7 @@ import {
 import {
   FleetProtocolError,
   FleetUnavailableError,
-} from '../../../application/fleet/errors/fleet-errors';
+} from '../../../application/ports/fleet/fleet-errors';
 
 const config: FleetHttpConfig = {
   baseUrl: 'https://fleet.example.test/internal/v1/',

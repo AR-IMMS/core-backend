@@ -1,158 +1,117 @@
 classDiagram
 direction LR
 
-class AgentManagementModule {
-  Nest module composition
-  exports AgentBindingQueries and AgentNodeLifecycleCoordination
+namespace AgentManagementApplication {
+  class RequestFleetInvitationUseCase
+  class SynchronizeFleetEnrollmentUseCase
+  class CoordinateNodeLifecycleUseCase
+  class NodeEligibilityPort
+  class BindingProjectionPort
+  class EnrollmentOperationPort
+  class FleetInvitationPort
+  class FleetInstallationPort
+  class FleetNodeEnrollmentGatePort
+  class FleetInvitationView
+  class FleetInstallationView
+  class FleetEnrollmentGate
+  class FleetActorContext
+  class FleetConflictError
+  class FleetNotFoundError
+  class FleetProtocolError
+  class FleetUnavailableError
+  class FleetOperationPendingError
+  class AgentNodeNotFoundError
+  class AgentNodeNotEligibleError
 }
-class FleetInvitationController {
-  POST node invitation
-  human principal plus agent:manage
+namespace AgentManagementPresentation {
+  class FleetInvitationController
+  class FleetEnrollmentSyncController
 }
-class FleetEnrollmentSyncController {
-  POST synchronize invitation
-  human principal plus agent:manage
+namespace AgentManagementInfrastructure {
+  class FleetManagerAdapterModule
+  class FleetHttpClient
+  class FleetInvitationHttpAdapter
+  class FleetInstallationHttpAdapter
+  class FleetNodeEnrollmentGateHttpAdapter
+  class DisabledFleetPorts
+  class MongoFleetEnrollmentOperationStore
+  class MongoFleetBindingProjectionStore
+  class FleetMongoCollection
 }
-class RequestFleetInvitationUseCase {
-  check business eligibility
-  check local and Fleet bindings
-  request idempotent Fleet invitation
+namespace AgentManagementContracts {
+  class AgentBindingQueries
+  class AgentNodeLifecycleCoordination
 }
-class SynchronizeFleetEnrollmentUseCase {
-  read Fleet invitation and installation
-  recheck Node eligibility
-  persist operation and binding projection
-  append Audit Fact
-}
-class CoordinateNodeLifecycleUseCase {
-  closeEnrollmentGate()
-  completeEnrollmentGate()
-}
-class NodeEligibilityPort {
-  getEligibility(nodeId)
-}
-class FleetInvitationPort {
-  create()
-  getByOperation()
-  cancel()
-}
-class FleetInstallationPort {
-  findById()
-  findActiveByNode()
-}
-class FleetNodeEnrollmentGatePort {
-  closeEnrollmentGate()
-  completeEnrollmentGate()
-}
-class FleetEnrollmentOperationPort {
-  begin and find idempotent operation
-  record invitation and bound state
-}
-class FleetBindingProjectionPort {
-  hasActiveForNode()
-  upsert minimal business association
-}
-class AgentBindingQueries {
-  hasActiveBindingForNode()
-}
-class AgentNodeLifecycleCoordination {
-  close and restore Fleet gate
-}
-class FleetManagerAdapterModule {
-  mTLS client and port providers
-}
-class FleetHttpClient
-class FleetInvitationHttpAdapter
-class FleetInstallationHttpAdapter
-class FleetNodeEnrollmentGateHttpAdapter
-class DisabledFleetPorts {
-  unavailable implementations
-}
-class FleetManager {
-  external technical control plane
-  identity credentials registry runtime
-}
-class MongoFleetEnrollmentOperationStore {
-  Core invitation operation journal
-}
-class MongoFleetBindingProjectionStore {
-  Core business association projection
-}
-class FleetOperationDocument
-class FleetBindingDocument
-class AssetTopologyModule {
-  owns Assets Nodes placements and lifecycle
-}
-class AssetTopologyAssetQueries {
-  getAgentEnrollmentNodeEligibility()
-}
-class NodeLifecycleOrchestrator {
-  journal Core lifecycle operation
-  coordinate gate and Core change
-}
+class AgentManagementModule
+class AssetTopologyModule
+class AssetTopologyAssetQueries
+class NodeLifecycleOrchestrator
 class PlatformUnitOfWork
-class PlatformOutboxWriter {
-  internal Audit Fact outbox
-}
-class IAM {
-  human authentication and permission guard
-}
+class PlatformOutboxWriter
+class IAM
+class FleetManager
 
-AgentManagementModule o-- FleetInvitationController : registers
-AgentManagementModule o-- FleetEnrollmentSyncController : registers
+AgentManagementModule o-- FleetInvitationController : controllers
+AgentManagementModule o-- FleetEnrollmentSyncController : controllers
+AgentManagementModule o-- RequestFleetInvitationUseCase : provider
+AgentManagementModule o-- SynchronizeFleetEnrollmentUseCase : provider
 AgentManagementModule o-- CoordinateNodeLifecycleUseCase : provider
 AgentManagementModule o-- FleetManagerAdapterModule : imports
-AgentManagementModule o-- AssetTopologyModule : forward reference
+AgentManagementModule o-- MongoFleetEnrollmentOperationStore : binds port
+AgentManagementModule o-- MongoFleetBindingProjectionStore : binds port
+AgentManagementModule ..> AssetTopologyModule : forwardRef
 FleetInvitationController --> RequestFleetInvitationUseCase
 FleetEnrollmentSyncController --> SynchronizeFleetEnrollmentUseCase
-FleetInvitationController --> IAM : decorators
-FleetEnrollmentSyncController --> IAM : decorators
+FleetInvitationController --> IAM : authenticated human and agent:manage
+FleetEnrollmentSyncController --> IAM : authenticated human and agent:manage
+
 RequestFleetInvitationUseCase --> NodeEligibilityPort
-RequestFleetInvitationUseCase --> FleetBindingProjectionPort
+RequestFleetInvitationUseCase --> BindingProjectionPort
 RequestFleetInvitationUseCase --> FleetInstallationPort
 RequestFleetInvitationUseCase --> FleetInvitationPort
-RequestFleetInvitationUseCase --> FleetEnrollmentOperationPort
+RequestFleetInvitationUseCase --> EnrollmentOperationPort
 RequestFleetInvitationUseCase --> PlatformUnitOfWork
 RequestFleetInvitationUseCase --> PlatformOutboxWriter
 SynchronizeFleetEnrollmentUseCase --> NodeEligibilityPort
-SynchronizeFleetEnrollmentUseCase --> FleetBindingProjectionPort
+SynchronizeFleetEnrollmentUseCase --> BindingProjectionPort
 SynchronizeFleetEnrollmentUseCase --> FleetInstallationPort
 SynchronizeFleetEnrollmentUseCase --> FleetInvitationPort
-SynchronizeFleetEnrollmentUseCase --> FleetEnrollmentOperationPort
+SynchronizeFleetEnrollmentUseCase --> EnrollmentOperationPort
 SynchronizeFleetEnrollmentUseCase --> PlatformUnitOfWork
 SynchronizeFleetEnrollmentUseCase --> PlatformOutboxWriter
 CoordinateNodeLifecycleUseCase ..|> AgentNodeLifecycleCoordination
 CoordinateNodeLifecycleUseCase --> FleetNodeEnrollmentGatePort
+
+NodeEligibilityPort --> AssetTopologyAssetQueries : adapter in module
+AgentManagementModule ..> AgentBindingQueries : factory adapter
+AgentBindingQueries --> BindingProjectionPort
+AgentManagementModule ..> AgentNodeLifecycleCoordination : exports contract
+AssetTopologyModule --> AgentBindingQueries : lifecycle checks
+AssetTopologyModule --> AgentNodeLifecycleCoordination : lifecycle coordination
+AssetTopologyModule --> NodeLifecycleOrchestrator
+NodeLifecycleOrchestrator --> PlatformUnitOfWork
+
 FleetInvitationHttpAdapter ..|> FleetInvitationPort
 FleetInstallationHttpAdapter ..|> FleetInstallationPort
 FleetNodeEnrollmentGateHttpAdapter ..|> FleetNodeEnrollmentGatePort
+DisabledFleetPorts ..|> FleetInvitationPort
+DisabledFleetPorts ..|> FleetInstallationPort
+DisabledFleetPorts ..|> FleetNodeEnrollmentGatePort
 FleetInvitationHttpAdapter --> FleetHttpClient
 FleetInstallationHttpAdapter --> FleetHttpClient
 FleetNodeEnrollmentGateHttpAdapter --> FleetHttpClient
 FleetHttpClient --> FleetManager : REST over mTLS
-DisabledFleetPorts ..|> FleetInvitationPort
-DisabledFleetPorts ..|> FleetInstallationPort
-DisabledFleetPorts ..|> FleetNodeEnrollmentGatePort
-FleetManagerAdapterModule o-- FleetHttpClient : configured provider
-FleetManagerAdapterModule o-- FleetInvitationHttpAdapter : or disabled port
-FleetManagerAdapterModule o-- FleetInstallationHttpAdapter : or disabled port
-FleetManagerAdapterModule o-- FleetNodeEnrollmentGateHttpAdapter : or disabled port
-MongoFleetEnrollmentOperationStore ..|> FleetEnrollmentOperationPort
-MongoFleetBindingProjectionStore ..|> FleetBindingProjectionPort
-MongoFleetEnrollmentOperationStore --> FleetOperationDocument : MongoDB
-MongoFleetBindingProjectionStore --> FleetBindingDocument : MongoDB
-AgentManagementModule ..> MongoFleetEnrollmentOperationStore : binds port
-AgentManagementModule ..> MongoFleetBindingProjectionStore : binds port
-AgentManagementModule ..> NodeEligibilityPort : factory adapter
-NodeEligibilityPort --> AssetTopologyAssetQueries : public contract
-AgentManagementModule ..> AgentBindingQueries : factory adapter
-AgentBindingQueries --> FleetBindingProjectionPort : query projection
-AgentManagementModule ..> AgentNodeLifecycleCoordination : public contract
-AssetTopologyModule --> AgentBindingQueries : Asset lifecycle checks
-AssetTopologyModule --> AgentNodeLifecycleCoordination : Node lifecycle coordination
-AssetTopologyModule --> NodeLifecycleOrchestrator
-NodeLifecycleOrchestrator --> PlatformUnitOfWork
+FleetManagerAdapterModule o-- FleetHttpClient : configured client or null
+FleetManagerAdapterModule o-- FleetInvitationHttpAdapter : chooses adapter
+FleetManagerAdapterModule o-- FleetInstallationHttpAdapter : chooses adapter
+FleetManagerAdapterModule o-- FleetNodeEnrollmentGateHttpAdapter : chooses adapter
 
-note for FleetManager "Fleet owns technical Agent identity, credentials, registry, enrollment, authorization, and runtime lifecycle."
-note for MongoFleetBindingProjectionStore "Contains only Core's association projection; it is not a technical registry or credential store."
-note for AgentManagementModule "No Core-owned registration, access lifecycle, registry, or recovery cipher is wired. Historical migration entries for removed collections remain to preserve migration history and ordering."
+MongoFleetEnrollmentOperationStore ..|> EnrollmentOperationPort
+MongoFleetBindingProjectionStore ..|> BindingProjectionPort
+MongoFleetEnrollmentOperationStore --> FleetMongoCollection : agent_management_fleet_operations
+MongoFleetBindingProjectionStore --> FleetMongoCollection : agent_management_fleet_bindings
+
+note for FleetManager "Fleet owns technical installation identity, enrollment, credentials, registry, authorization, and runtime lifecycle."
+note for BindingProjectionPort "Core-owned minimal Asset/Node to Fleet installation association; not Fleet technical registry state."
+note for EnrollmentOperationPort "Core-owned invitation orchestration and recovery status."
+note for AgentManagementApplication "No Agent Management domain entity, value object, or policy class is implemented. Fleet DTOs and adapter errors are external contracts under application/ports/fleet; enrollment and eligibility errors are application errors."

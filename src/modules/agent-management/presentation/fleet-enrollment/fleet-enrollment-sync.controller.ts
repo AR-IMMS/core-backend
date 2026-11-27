@@ -28,9 +28,9 @@ import {
   FleetNotFoundError,
   FleetProtocolError,
   FleetUnavailableError,
-} from '../../application/fleet/errors/fleet-errors';
-import { FleetOperationPendingError } from '../../application/fleet/errors/fleet-operation-pending.error';
-import { SynchronizeFleetEnrollmentUseCase } from '../../application/fleet/use-cases/synchronize-fleet-enrollment.use-case';
+} from '../../application/ports/fleet/fleet-errors';
+import { FleetOperationPendingError } from '../../application/enrollment/errors/fleet-operation-pending.error';
+import { SynchronizeFleetEnrollmentUseCase } from '../../application/enrollment/synchronize-fleet-enrollment.use-case';
 
 const invitationParamsSchema = z
   .object({ invitationId: z.string().min(1).max(128) })

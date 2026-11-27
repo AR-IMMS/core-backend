@@ -1,4 +1,4 @@
-import type { FleetActorContext, FleetInstallationView } from '../fleet.types';
+import type { FleetActorContext, FleetInstallationView } from './fleet.types';
 
 export interface FleetInstallationPort {
   findById(input: {
