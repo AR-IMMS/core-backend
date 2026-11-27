@@ -42,7 +42,6 @@ import {
 } from './application/assets/asset-query.use-case';
 import {
   ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
-  ASSET_TOPOLOGY_AGENT_ENROLLMENT_COMMANDS_PORT,
   ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT,
   ASSET_TOPOLOGY_RACK_QUERIES_PORT,
 } from './contracts';
@@ -80,7 +79,6 @@ import {
 } from './application/racks/rack-runtime.token';
 import { AgentManagementModule } from '@modules/agent-management/agent-management.module';
 import { RetireAssetUseCase } from './application/assets/retire-asset.use-case';
-import { AgentEnrollmentEligibilityUseCase } from './application/assets/agent-enrollment-eligibility.use-case';
 import { NODE_LIFECYCLE_OPERATION_PORT } from './application/lifecycle/node-lifecycle-operation.port';
 import { MongoNodeLifecycleOperationStore } from './infrastructure/mongodb/mongo-node-lifecycle-operation.store';
 import { NodeLifecycleOrchestrator } from './application/lifecycle/node-lifecycle-orchestrator';
@@ -146,7 +144,6 @@ import { NodeLifecycleOperationController } from './presentation/assets/node-lif
     { provide: ASSET_ID_GENERATOR, useValue: randomUUID },
     RegisterAssetUseCase,
     RetireAssetUseCase,
-    AgentEnrollmentEligibilityUseCase,
     QrMappingUseCases,
     ExportAssetLabelsUseCase,
     LabelDocumentRenderer,
@@ -158,10 +155,6 @@ import { NodeLifecycleOperationController } from './presentation/assets/node-lif
     {
       provide: ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
       useExisting: GetAssetUseCase,
-    },
-    {
-      provide: ASSET_TOPOLOGY_AGENT_ENROLLMENT_COMMANDS_PORT,
-      useExisting: AgentEnrollmentEligibilityUseCase,
     },
     {
       provide: ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT,
@@ -176,7 +169,6 @@ import { NodeLifecycleOperationController } from './presentation/assets/node-lif
   exports: [
     ASSET_TOPOLOGY_MAINTENANCE_COMMANDS_PORT,
     ASSET_TOPOLOGY_ASSET_QUERIES_PORT,
-    ASSET_TOPOLOGY_AGENT_ENROLLMENT_COMMANDS_PORT,
   ],
 })
 export class AssetTopologyModule {}

@@ -129,21 +129,6 @@ export class MongoAssetStore implements AssetStorePort, AssetCatalogStorePort {
     return result.auditSequence;
   }
 
-  async serializeAgentEnrollmentEligibility(
-    assetId: string,
-    context: UnitOfWorkContext,
-  ): Promise<boolean> {
-    const result = await this.assets
-      .findOneAndUpdate(
-        { id: assetId, lifecycleState: 'ACTIVE' },
-        { $inc: { agentBindingRevision: 1 } },
-        { new: true, session: context },
-      )
-      .lean()
-      .exec();
-    return result !== null;
-  }
-
   async list(input: {
     readonly afterAssetId?: string;
     readonly limit: number;

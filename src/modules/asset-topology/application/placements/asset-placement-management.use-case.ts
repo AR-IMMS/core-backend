@@ -19,7 +19,6 @@ import { AssetReferenceNotFoundError } from '../assets/asset-registration.use-ca
 import type { RackStorePort } from '../racks/rack-store.port';
 import { RACK_STORE } from '../racks/rack-store.token';
 import {
-  AssetPlacementConflictError,
   ActiveAssetPlacementNotFoundError,
   type AssetPlacementStorePort,
 } from './asset-placement-store.port';
@@ -166,17 +165,6 @@ export class AssetPlacementManagementUseCases {
       change: async (context) => {
         const asset = await this.requireAsset(assetId, context);
         AssetPlacementPolicy.assertAssetEligible(asset);
-        // Legacy Core enrollment writes this same Asset document through the
-        // enrollment coordination command. This transaction write serializes
-        // unmap with enrollment, so neither can pass on a stale placement.
-        if (
-          !(await this.assets.serializeAgentEnrollmentEligibility(
-            assetId,
-            context,
-          ))
-        ) {
-          throw new AssetPlacementConflictError();
-        }
         const current = await this.placements.findActiveByAsset(
           assetId,
           context,

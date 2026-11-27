@@ -42,7 +42,7 @@ import { RequestFleetInvitationUseCase } from '../../application/fleet/use-cases
 import {
   AgentNodeNotEligibleError,
   AgentNodeNotFoundError,
-} from '../../domain/errors/registration.errors';
+} from '../../application/fleet/errors/node-eligibility.errors';
 
 const nodeParamsSchema = z.object({ nodeId: z.uuid() }).strict();
 class NodeParamsDto extends createZodDto(nodeParamsSchema) {}

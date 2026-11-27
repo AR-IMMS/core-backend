@@ -12,7 +12,6 @@ describe('AssetPlacementManagementUseCases', () => {
   let assets: {
     findById: jest.Mock;
     save: jest.Mock;
-    serializeAgentEnrollmentEligibility: jest.Mock;
   };
   let racks: { getRack: jest.Mock };
   let placements: {
@@ -47,7 +46,6 @@ describe('AssetPlacementManagementUseCases', () => {
     assets = {
       findById: jest.fn().mockResolvedValue(asset),
       save: jest.fn().mockResolvedValue(1),
-      serializeAgentEnrollmentEligibility: jest.fn().mockResolvedValue(true),
     };
     racks = { getRack: jest.fn().mockResolvedValue(rack) };
     placements = {
@@ -202,10 +200,6 @@ describe('AssetPlacementManagementUseCases', () => {
     expect(placements.closeActive).toHaveBeenCalledWith(
       'asset-1',
       currentTime,
-      context,
-    );
-    expect(assets.serializeAgentEnrollmentEligibility).toHaveBeenCalledWith(
-      'asset-1',
       context,
     );
     expect(outbox.append).toHaveBeenCalledWith(

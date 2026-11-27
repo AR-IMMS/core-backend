@@ -46,7 +46,10 @@ describe('Core Fleet enrollment boundary (fake Fleet)', () => {
       }),
     serializeEnrollmentEligibility: () => Promise.resolve(true),
   };
-  const coreBindings = { hasActiveBinding: () => Promise.resolve(false) };
+  const fleetBindings = {
+    hasActiveForNode: () => Promise.resolve(false),
+    upsert: () => Promise.resolve('CREATED' as const),
+  };
   const fakeFleet = {
     invitations: {
       create: (input: { operationId: string; nodeId: string }) =>
@@ -158,7 +161,7 @@ describe('Core Fleet enrollment boundary (fake Fleet)', () => {
   test('creates a pending invitation, then binds once after Fleet reports redemption', async () => {
     const request = new RequestFleetInvitationUseCase(
       nodePort,
-      coreBindings,
+      fleetBindings,
       fakeFleet.installations,
       fakeFleet.invitations,
       operations,

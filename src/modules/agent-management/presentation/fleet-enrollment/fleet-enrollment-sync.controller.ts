@@ -70,6 +70,7 @@ export class FleetEnrollmentSyncController {
         ...(result.installationId
           ? { installation_id: result.installationId }
           : {}),
+        ...(result.bindingId ? { binding_id: result.bindingId } : {}),
       };
     } catch (error) {
       if (error instanceof FleetNotFoundError) throw new NotFoundException();

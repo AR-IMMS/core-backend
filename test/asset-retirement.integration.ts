@@ -1,31 +1,25 @@
 import assert from 'node:assert/strict';
-import { createHash as sha256, randomUUID } from 'node:crypto';
 import { createConnection } from 'mongoose';
-import { AgentEnrollmentEligibilityUseCase } from '@modules/asset-topology/application/assets/agent-enrollment-eligibility.use-case';
-import { GetAssetUseCase } from '@modules/asset-topology/application/assets/asset-query.use-case';
 import { RetireAssetUseCase } from '@modules/asset-topology/application/assets/retire-asset.use-case';
-import { AssetPlacementManagementUseCases } from '@modules/asset-topology/application/placements/asset-placement-management.use-case';
+import { AssetRetirementConflictError } from '@modules/asset-topology/application/assets/asset-retirement.errors';
 import { NodeLifecycleOrchestrator } from '@modules/asset-topology/application/lifecycle/node-lifecycle-orchestrator';
 import { NodeLifecyclePendingError } from '@modules/asset-topology/application/lifecycle/node-lifecycle-orchestrator';
 import { MongoNodeLifecycleOperationStore } from '@modules/asset-topology/infrastructure/mongodb/mongo-node-lifecycle-operation.store';
-import { ASSET_PLACEMENT_MIGRATION } from '@modules/asset-topology/infrastructure/mongodb/migrations/asset-placement.migration';
 import { NODE_LIFECYCLE_OPERATIONS_MIGRATION } from '@modules/asset-topology/infrastructure/mongodb/migrations/node-lifecycle-operations.migration';
+import { ASSET_PLACEMENT_MIGRATION } from '@modules/asset-topology/infrastructure/mongodb/migrations/asset-placement.migration';
 import {
   AssetSchema,
   ASSET_MODEL,
 } from '@modules/asset-topology/infrastructure/mongodb/asset.schema';
+import { MongoAssetStore } from '@modules/asset-topology/infrastructure/mongodb/mongo-asset.store';
+import { MongoAssetPlacementStore } from '@modules/asset-topology/infrastructure/mongodb/mongo-asset-placement.store';
 import {
   AssetLocationSchema,
   ASSET_TOPOLOGY_ASSET_LOCATION_MODEL,
 } from '@modules/asset-topology/infrastructure/mongodb/asset-placement.schema';
-import { MongoAssetStore } from '@modules/asset-topology/infrastructure/mongodb/mongo-asset.store';
-import { MongoAssetPlacementStore } from '@modules/asset-topology/infrastructure/mongodb/mongo-asset-placement.store';
-import { AgentNodeNotEligibleError } from '@modules/agent-management/domain/errors/registration.errors';
-import { EnrollAgentUseCase } from '@modules/agent-management/application/registration/use-cases/enroll-agent.use-case';
-import { MongoEnrollmentStore } from '@modules/agent-management/infrastructure/mongodb/mongo-enrollment.store';
-import { EnrollmentRecoveryCipher } from '@modules/agent-management/infrastructure/security/enrollment-recovery-cipher';
-import { BOOTSTRAP_TOKEN_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/bootstrap-token-indexes.migration';
-import { ENROLLMENT_INDEXES_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/enrollment-indexes.migration';
+import { MongoFleetBindingProjectionStore } from '@modules/agent-management/infrastructure/mongodb/mongo-fleet-binding-projection.store';
+import { FLEET_BINDING_PROJECTION_MIGRATION } from '@modules/agent-management/infrastructure/mongodb/migrations/fleet-binding-projection.migration';
+import type { AgentNodeLifecycleCoordination } from '@modules/agent-management/contracts/agent-node-lifecycle.contract';
 import { MongoOutboxStore } from '@platform/events/infrastructure/mongodb/mongo-outbox.store';
 import type { MongoOutboxModel } from '@platform/events/infrastructure/mongodb/mongo-outbox.store';
 import { MongoUnitOfWork } from '@platform/events/infrastructure/mongodb/mongo-unit-of-work';
@@ -36,15 +30,7 @@ import {
 import { resolveMongoTestConfig } from './mongodb-test-config';
 
 const assetId = 'asset-retirement-integration';
-const token = 'arimms_bt_asset-retirement-integration';
-const actor = { type: 'user', id: 'admin-1' };
-
-interface MongoTestDatabase {
-  collection(name: string): {
-    insertOne(document: Record<string, unknown>): Promise<unknown>;
-    countDocuments(filter?: Record<string, unknown>): Promise<number>;
-  };
-}
+const actor = { type: 'user', id: 'admin-1' } as const;
 
 async function main(): Promise<void> {
   const { uri, dbName } = resolveMongoTestConfig();
@@ -56,98 +42,52 @@ async function main(): Promise<void> {
   try {
     if (!connection.db)
       throw new Error('MongoDB connection has no selected database');
-    const db = connection.db as unknown as MongoTestDatabase;
     const assets = connection.model(ASSET_MODEL, AssetSchema);
     const locations = connection.model(
       ASSET_TOPOLOGY_ASSET_LOCATION_MODEL,
       AssetLocationSchema,
     );
     const outboxModel = connection.model(OUTBOX_ENTRY_MODEL, OutboxEntrySchema);
-    await Promise.all([assets.init(), locations.init(), outboxModel.init()]);
-    await ASSET_PLACEMENT_MIGRATION.up(connection);
-    await BOOTSTRAP_TOKEN_INDEXES_MIGRATION.up(connection);
-    await ENROLLMENT_INDEXES_MIGRATION.up(connection);
-
     const assetStore = new MongoAssetStore(
       assets as never,
       {} as never,
       {} as never,
     );
     const placementStore = new MongoAssetPlacementStore(locations as never);
-    const enrollmentStore = new MongoEnrollmentStore(connection);
+    const fleetBindings = new MongoFleetBindingProjectionStore(connection);
+    const unitOfWork = new MongoUnitOfWork(connection);
     const outbox = new MongoOutboxStore(
       outboxModel as unknown as MongoOutboxModel,
     );
-    const unitOfWork = new MongoUnitOfWork(connection);
     const operationStore = new MongoNodeLifecycleOperationStore(connection);
-    const gateByNode = new Map<string, 'OPEN' | 'CLOSED'>();
-    const gateByOperation = new Map<
-      string,
-      {
+    const gate: AgentNodeLifecycleCoordination = {
+      closeEnrollmentGate: ({
+        nodeId,
+        operationId,
+      }: {
         nodeId: string;
         operationId: string;
-        version: number;
-        previousState: 'OPEN' | 'CLOSED';
-      }
-    >();
-    const fakeFleetGate = {
-      closeEnrollmentGate: (input: { nodeId: string; operationId: string }) => {
-        const existing = gateByOperation.get(input.operationId);
-        if (existing) return Promise.resolve(existing);
-        const gate = {
-          ...input,
+      }) =>
+        Promise.resolve({
+          nodeId,
+          operationId,
           version: 1,
-          previousState: gateByNode.get(input.nodeId) ?? 'OPEN',
+          previousState: 'OPEN' as const,
           activeBinding: null,
-        };
-        gateByNode.set(input.nodeId, 'CLOSED');
-        gateByOperation.set(input.operationId, gate);
-        return Promise.resolve(gate);
-      },
-      completeEnrollmentGate: (input: {
-        gate: {
-          nodeId: string;
-          operationId: string;
-          version: number;
-          previousState: 'OPEN' | 'CLOSED';
-        };
-        outcome: 'COMMIT' | 'ABORT';
-      }) => {
-        const owner = gateByOperation.get(input.gate.operationId);
-        if (!owner || owner.version !== input.gate.version)
-          return Promise.reject(new Error('stale gate owner'));
-        gateByNode.set(
-          input.gate.nodeId,
-          input.outcome === 'COMMIT' ? 'CLOSED' : input.gate.previousState,
-        );
-        return Promise.resolve();
-      },
+        }),
+      completeEnrollmentGate: () => Promise.resolve(),
     };
     const lifecycle = new NodeLifecycleOrchestrator(
       operationStore,
-      fakeFleetGate as never,
+      gate,
       unitOfWork,
     );
-    const getAsset = new GetAssetUseCase(assetStore, placementStore);
-    const enrollmentEligibility = new AgentEnrollmentEligibilityUseCase(
-      assetStore,
-      placementStore,
-    );
-    const nodeEligibility = {
-      getEligibility: (id: string) =>
-        getAsset.getAgentEnrollmentNodeEligibility(id as never),
-      serializeEnrollmentEligibility: (id: string, context: never) =>
-        enrollmentEligibility.serializeAgentEnrollment(id as never, context),
-    };
-
-    async function reset(placed: boolean): Promise<void> {
+    const reset = async (): Promise<void> => {
       await connection.dropDatabase();
+      await Promise.all([assets.init(), locations.init(), outboxModel.init()]);
       await ASSET_PLACEMENT_MIGRATION.up(connection);
       await NODE_LIFECYCLE_OPERATIONS_MIGRATION.up(connection);
-      gateByNode.clear();
-      gateByOperation.clear();
-      await BOOTSTRAP_TOKEN_INDEXES_MIGRATION.up(connection);
-      await ENROLLMENT_INDEXES_MIGRATION.up(connection);
+      await FLEET_BINDING_PROJECTION_MIGRATION.up(connection);
       await assets.create({
         id: assetId,
         name: 'Node 01',
@@ -155,142 +95,53 @@ async function main(): Promise<void> {
         lifecycleState: 'ACTIVE',
         auditSequence: 0,
       });
-      if (placed) {
-        await db.collection('asset_topology_asset_locations').insertOne({
-          id: 'location-1',
-          assetId,
-          rackId: 'rack-1',
-          uPosition: 1,
-          validFrom: new Date(),
-        });
-      }
-      await db.collection('agent_management_bootstrap_tokens').insertOne({
-        tokenId: 'bt-1',
-        nodeId: assetId,
-        tokenHash: createHash(token),
-        status: 'active',
-        expiresAt: new Date(Date.now() + 60_000),
-      });
-    }
+    };
 
+    await Promise.all([assets.init(), locations.init(), outboxModel.init()]);
+    await reset();
     const retire = () =>
       new RetireAssetUseCase(
         assetStore,
         placementStore,
         {
           hasActiveBindingForNode: (nodeId, context) =>
-            enrollmentStore.hasActiveBinding(nodeId, context),
+            fleetBindings.hasActiveForNode(nodeId, context),
         },
         outbox,
         undefined,
         undefined,
         lifecycle,
       ).execute(assetId, actor);
-    const enroll = () =>
-      new EnrollAgentUseCase(
-        enrollmentStore,
-        nodeEligibility,
-        unitOfWork,
-        outbox,
-        'https://core.example.test/api/v1/agent-control',
-        new EnrollmentRecoveryCipher(
-          Buffer.from('01234567890123456789012345678901').toString('base64'),
-        ),
-        () => new Date(),
-        () => Buffer.from('01234567890123456789012345678901'),
-        () => randomUUID(),
-      ).execute({
-        bootstrapToken: token,
-        attemptId: `attempt-${randomUUID()}`,
-        installation: { id: `installation-${randomUUID()}` },
-        agent: { version: '0.1.0' },
-        environment: { os: 'linux', architecture: 'amd64' },
+
+    await connection.db
+      .collection('agent_management_fleet_bindings')
+      .insertOne({
+        bindingId: 'fleet:invitation-1',
+        invitationId: 'invitation-1',
+        installationId: 'installation-1',
+        nodeId: assetId,
+        status: 'active',
+        source: 'fleet',
+        createdAt: new Date(),
       });
-
-    await reset(true);
-    const assignedRace = await Promise.allSettled([enroll(), retire()]);
+    await assert.rejects(retire(), AssetRetirementConflictError);
     assert.equal(
-      assignedRace.filter((result) => result.status === 'fulfilled').length,
-      1,
-    );
-    assert.equal(
-      await db
-        .collection('asset_topology_assets')
-        .countDocuments({ id: assetId, lifecycleState: 'RETIRED' }),
-      0,
-    );
-    assert.equal(
-      await db
-        .collection('agent_management_bindings')
-        .countDocuments({ nodeId: assetId, status: 'active' }),
+      await assets.countDocuments({ id: assetId, lifecycleState: 'ACTIVE' }),
       1,
     );
 
-    await reset(false);
-    const unassignedRace = await Promise.allSettled([enroll(), retire()]);
-    assert.equal(
-      unassignedRace.filter((result) => result.status === 'fulfilled').length,
-      1,
-    );
-    assert.ok(
-      unassignedRace.some(
-        (result) =>
-          result.status === 'rejected' &&
-          result.reason instanceof AgentNodeNotEligibleError,
-      ),
-    );
-    assert.equal(
-      await db
-        .collection('asset_topology_assets')
-        .countDocuments({ id: assetId, lifecycleState: 'RETIRED' }),
-      1,
-    );
-    assert.equal(
-      await db
-        .collection('agent_management_bindings')
-        .countDocuments({ nodeId: assetId, status: 'active' }),
-      0,
-    );
-
-    await reset(true);
-    const unmap = () =>
-      new AssetPlacementManagementUseCases(
-        assetStore,
-        {} as never,
-        placementStore,
-        unitOfWork,
-        outbox,
-        undefined,
-        undefined,
-        lifecycle,
-      ).unmap(assetId, actor);
-    const unmapRace = await Promise.allSettled([enroll(), unmap()]);
-    assert.equal(unmapRace[1]?.status, 'fulfilled');
-    assert.equal(
-      await db
-        .collection('asset_topology_asset_locations')
-        .countDocuments({ assetId, validTo: null }),
-      0,
-    );
-    const activeBindings = await db
-      .collection('agent_management_bindings')
-      .countDocuments({ nodeId: assetId, status: 'active' });
-    assert.ok(activeBindings === 0 || activeBindings === 1);
-    if (unmapRace[0]?.status === 'fulfilled') assert.equal(activeBindings, 1);
-
-    await reset(false);
-    const failingOutbox = {
-      append: () => Promise.reject(new Error('outbox unavailable')),
-    };
+    await reset();
     await assert.rejects(
       new RetireAssetUseCase(
         assetStore,
         placementStore,
         {
           hasActiveBindingForNode: (nodeId, context) =>
-            enrollmentStore.hasActiveBinding(nodeId, context),
+            fleetBindings.hasActiveForNode(nodeId, context),
         },
-        failingOutbox as never,
+        {
+          append: () => Promise.reject(new Error('outbox unavailable')),
+        } as never,
         undefined,
         undefined,
         lifecycle,
@@ -298,22 +149,12 @@ async function main(): Promise<void> {
       NodeLifecyclePendingError,
     );
     assert.equal(
-      await db
-        .collection('asset_topology_assets')
-        .countDocuments({ id: assetId, lifecycleState: 'ACTIVE' }),
+      await assets.countDocuments({ id: assetId, lifecycleState: 'ACTIVE' }),
       1,
-    );
-    assert.equal(
-      await db.collection('platform_event_outbox').countDocuments(),
-      0,
     );
   } finally {
     await connection.close();
   }
-}
-
-function createHash(value: string): string {
-  return sha256('sha256').update(value).digest('hex');
 }
 
 void main().catch((error: unknown) => {

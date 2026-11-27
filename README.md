@@ -103,18 +103,11 @@ pnpm install
 pnpm start:dev
 ```
 
-Before starting the API, configure these required Agent enrollment settings in
-`.env.local` or the process environment. The application does not load
-`.env.example` automatically:
-
-- `AGENT_CONTROL_PLANE_BASE_URL` must be an HTTPS URL. For local development,
-  `https://localhost:8080/api/v1/agent-control` is a configuration placeholder;
-  no Control Plane endpoint is implemented yet.
-- `AGENT_ENROLLMENT_RECOVERY_KEY` must be a base64-encoded 32-byte AES-256 key.
-  Generate a private local value with `openssl rand -base64 32`. In deployments,
-  supply it through the secret manager. All Core instances must share the same
-  key and keep it unchanged until recovery records have expired (24 hours);
-  rotating it earlier makes still-live recovery records unreadable.
+The Fleet integration is optional. To enable it, configure the Fleet HTTPS URL
+and paired client certificate/key settings described under [Local Fleet Manager
+integration](#local-fleet-manager-integration). Core validates business
+eligibility and stores operation and Asset–Agent association state; Fleet owns
+Agent enrollment, technical identity, credentials, and registry.
 
 Common verification commands:
 

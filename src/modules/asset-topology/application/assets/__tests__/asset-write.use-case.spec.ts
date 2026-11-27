@@ -10,7 +10,6 @@ describe('Asset registry write use cases', () => {
     save: jest.Mock;
     findById: jest.Mock;
     list: jest.Mock;
-    serializeAgentEnrollmentEligibility: jest.Mock;
   };
   let catalog: { findType: jest.Mock; findModel: jest.Mock };
   let outbox: { append: jest.Mock };
@@ -23,7 +22,6 @@ describe('Asset registry write use cases', () => {
       save: jest.fn().mockResolvedValue(1),
       findById: jest.fn(),
       list: jest.fn(),
-      serializeAgentEnrollmentEligibility: jest.fn().mockResolvedValue(true),
     };
     catalog = {
       findType: jest.fn().mockResolvedValue({ id: 'type-node' }),
